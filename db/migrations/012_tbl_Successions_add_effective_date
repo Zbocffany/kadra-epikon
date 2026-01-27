@@ -1,0 +1,20 @@
+-- 1) Add effective_date column
+ALTER TABLE public."tbl_Successions"
+  ADD COLUMN IF NOT EXISTS effective_date date NULL;
+
+-- 2) (Optional but recommended) enforce: date not in the future
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conname = 'chk_tbl_Successions_effective_date_not_future'
+  ) THEN
+    ALTER TABLE public."tbl_Successions"
+      ADD CONSTRAINT "chk_tbl_Successions_effective_date_not_future"
+      CHECK (
+        effective_date IS NULL
+        OR effective_date <= CURRENT_DATE
+      );
+  END IF;
+END $$;
