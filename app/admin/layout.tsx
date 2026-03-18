@@ -15,12 +15,16 @@ export default async function AdminLayout({
       <header className="border-b border-neutral-800 bg-neutral-950/80 px-4 py-3 backdrop-blur sm:px-8">
         <div className="mx-auto flex max-w-7xl items-center justify-between">
           <nav className="flex items-center gap-4 text-sm">
-            <Link href="/admin/matches" className="font-semibold text-neutral-200 hover:text-white">
-              Admin
-            </Link>
-            <span className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-0.5 text-xs text-neutral-400">
-              {access.role}
-            </span>
+                  <span className="font-semibold text-neutral-200">Admin</span>
+                  <Link href="/admin/matches" className="text-neutral-400 hover:text-white">
+                    Mecze
+                  </Link>
+                  <Link href="/admin/clubs" className="text-neutral-400 hover:text-white">
+                    Kluby
+                  </Link>
+                  <span className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-0.5 text-xs text-neutral-400">
+                    {access.role}
+                  </span>
           </nav>
 
           <form action={signOutAction}>
