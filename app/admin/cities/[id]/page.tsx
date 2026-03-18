@@ -1,10 +1,13 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { deleteCity, updateCity } from '../actions'
+import { createCountryInline } from '@/app/admin/countries/actions'
 import {
   getAdminCityDetails,
   getAdminCountriesOptions,
 } from '@/lib/db/cities'
+import { getAdminFederations } from '@/lib/db/countries'
+import CountrySelectField from '@/components/admin/CountrySelectField'
 
 type Params = Promise<{ id: string }>
 type SearchParams = Promise<{ mode?: string; saved?: string; error?: string }>
@@ -19,9 +22,10 @@ export default async function AdminCityDetailsPage({
   const { id } = await params
   const { mode, saved, error } = await searchParams
 
-  const [city, countries] = await Promise.all([
+  const [city, countries, federations] = await Promise.all([
     getAdminCityDetails(id),
     getAdminCountriesOptions(),
+    getAdminFederations(),
   ])
 
   if (!city) {
@@ -104,25 +108,15 @@ export default async function AdminCityDetailsPage({
                   />
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="country_id" className="text-sm font-medium text-neutral-300">
-                    Kraj <span className="text-red-400">*</span>
-                  </label>
-                  <select
-                    id="country_id"
-                    name="country_id"
-                    required
-                    defaultValue={city.current_country_id ?? ''}
-                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-                  >
-                    <option value="">— wybierz —</option>
-                    {countries.map((country) => (
-                      <option key={country.id} value={country.id}>
-                        {country.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <CountrySelectField
+                  name="country_id"
+                  label="Kraj"
+                  required
+                  selectedId={city.current_country_id}
+                  options={countries.map((c) => ({ id: c.id, label: c.name }))}
+                  federationOptions={federations}
+                  createCountryInlineAction={createCountryInline}
+                />
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">

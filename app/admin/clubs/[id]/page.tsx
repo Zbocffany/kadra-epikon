@@ -2,6 +2,9 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { deleteClub, updateClub } from '../actions'
 import { getAdminCities, getAdminClubDetails } from '@/lib/db/clubs'
+import { getAdminCountriesOptions } from '@/lib/db/cities'
+import CitySelectField from '@/components/admin/CitySelectField'
+import { createCityInline } from '@/app/admin/cities/actions'
 
 type Params = Promise<{ id: string }>
 type SearchParams = Promise<{ mode?: string; saved?: string; error?: string }>
@@ -16,9 +19,10 @@ export default async function AdminClubDetailsPage({
   const { id } = await params
   const { mode, saved, error } = await searchParams
 
-  const [club, cities] = await Promise.all([
+  const [club, cities, countries] = await Promise.all([
     getAdminClubDetails(id),
     getAdminCities(),
+    getAdminCountriesOptions(),
   ])
 
   if (!club) {
@@ -94,24 +98,14 @@ export default async function AdminClubDetailsPage({
                   />
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="club_city_id" className="text-sm font-medium text-neutral-300">
-                    Miasto
-                  </label>
-                  <select
-                    id="club_city_id"
-                    name="club_city_id"
-                    defaultValue={club.club_city_id ?? ''}
-                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-                  >
-                    <option value="">— brak —</option>
-                    {cities.map((city) => (
-                      <option key={city.id} value={city.id}>
-                        {city.city_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <CitySelectField
+                  name="club_city_id"
+                  label="Miasto"
+                  selectedId={club.club_city_id}
+                  options={cities.map((c) => ({ id: c.id, label: c.city_name }))}
+                  countryOptions={countries}
+                  createCityInlineAction={createCityInline}
+                />
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">

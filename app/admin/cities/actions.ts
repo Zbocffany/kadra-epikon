@@ -3,6 +3,14 @@
 import { redirect } from 'next/navigation'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 
+type InlineCreateState = {
+  ok: boolean
+  id?: string
+  label?: string
+  error?: string
+  version: number
+}
+
 export async function createCity(formData: FormData): Promise<void> {
   const cityName = (formData.get('city_name') as string | null)?.trim() ?? ''
   const countryId = (formData.get('country_id') as string | null)?.trim() ?? ''
@@ -43,6 +51,71 @@ export async function createCity(formData: FormData): Promise<void> {
   }
 
   redirect('/admin/cities?added=' + encodeURIComponent(cityName))
+}
+
+export async function createCityInline(
+  prevState: InlineCreateState,
+  formData: FormData
+): Promise<InlineCreateState> {
+  const cityName = (formData.get('city_name') as string | null)?.trim() ?? ''
+  const countryId = (formData.get('country_id') as string | null)?.trim() ?? ''
+
+  if (!cityName) {
+    return {
+      ok: false,
+      error: 'Nazwa miasta jest wymagana.',
+      version: prevState.version + 1,
+    }
+  }
+
+  if (!countryId) {
+    return {
+      ok: false,
+      error: 'Kraj jest wymagany.',
+      version: prevState.version + 1,
+    }
+  }
+
+  const supabase = createServiceRoleClient()
+  const cityId = crypto.randomUUID()
+
+  const { error: cityError } = await supabase.from('tbl_Cities').insert({
+    id: cityId,
+    city_name: cityName,
+  })
+
+  if (cityError) {
+    return {
+      ok: false,
+      error: `Blad bazy danych: ${cityError.message}`,
+      version: prevState.version + 1,
+    }
+  }
+
+  const { error: periodError } = await supabase.from('tbl_City_Country_Periods').insert({
+    id: crypto.randomUUID(),
+    city_id: cityId,
+    country_id: countryId,
+    valid_from: null,
+    valid_to: null,
+    description: 'Dodane z panelu admina',
+  })
+
+  if (periodError) {
+    await supabase.from('tbl_Cities').delete().eq('id', cityId)
+    return {
+      ok: false,
+      error: `Blad relacji miasto-kraj: ${periodError.message}`,
+      version: prevState.version + 1,
+    }
+  }
+
+  return {
+    ok: true,
+    id: cityId,
+    label: cityName,
+    version: prevState.version + 1,
+  }
 }
 
 export async function updateCity(formData: FormData): Promise<void> {

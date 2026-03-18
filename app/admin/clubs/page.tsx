@@ -2,15 +2,21 @@ import { getAdminClubs, getAdminCities } from '@/lib/db/clubs'
 import type { AdminClub, AdminCity } from '@/lib/db/clubs'
 import { createClub } from './actions'
 import Link from 'next/link'
+import CitySelectField from '@/components/admin/CitySelectField'
+import { createCityInline } from '@/app/admin/cities/actions'
+import { getAdminCountriesOptions } from '@/lib/db/cities'
+import type { AdminCountryOption } from '@/lib/db/cities'
 
 // ─── Form ─────────────────────────────────────────────────────────────────────
 
 function ClubForm({
   cities,
+  countries,
   error,
   added,
 }: {
   cities: AdminCity[]
+  countries: AdminCountryOption[]
   error?: string
   added?: string
 }) {
@@ -46,24 +52,13 @@ function ClubForm({
           />
         </div>
 
-        {/* City */}
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="club_city_id" className="text-sm font-medium text-neutral-300">
-            Miasto
-          </label>
-          <select
-            id="club_city_id"
-            name="club_city_id"
-            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-          >
-            <option value="">— brak —</option>
-            {cities.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.city_name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <CitySelectField
+          name="club_city_id"
+          label="Miasto"
+          options={cities.map((c) => ({ id: c.id, label: c.city_name }))}
+          countryOptions={countries}
+          createCityInlineAction={createCityInline}
+        />
       </div>
 
       <div className="mt-5 flex justify-end">
@@ -138,10 +133,15 @@ export default async function AdminClubsPage({
 
   let clubs: AdminClub[] = []
   let cities: AdminCity[] = []
+  let countries: AdminCountryOption[] = []
   let fetchError: string | null = null
 
   try {
-    ;[clubs, cities] = await Promise.all([getAdminClubs(), getAdminCities()])
+    ;[clubs, cities, countries] = await Promise.all([
+      getAdminClubs(),
+      getAdminCities(),
+      getAdminCountriesOptions(),
+    ])
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
@@ -173,7 +173,12 @@ export default async function AdminClubsPage({
         {/* Form */}
         {!fetchError && (
           <div className="mb-8">
-            <ClubForm cities={cities} added={added} error={formError} />
+            <ClubForm
+              cities={cities}
+              countries={countries}
+              added={added}
+              error={formError}
+            />
           </div>
         )}
 

@@ -1,19 +1,25 @@
 import Link from 'next/link'
 import { createCity } from './actions'
+import { createCountryInline } from '@/app/admin/countries/actions'
 import {
   getAdminCitiesList,
   getAdminCountriesOptions,
 } from '@/lib/db/cities'
 import type { AdminCityListItem, AdminCountryOption } from '@/lib/db/cities'
+import { getAdminFederations } from '@/lib/db/countries'
+import type { AdminFederation } from '@/lib/db/countries'
+import CountrySelectField from '@/components/admin/CountrySelectField'
 
 type SearchParams = Promise<{ added?: string; error?: string }>
 
 function CityForm({
   countries,
+  federations,
   added,
   error,
 }: {
   countries: AdminCountryOption[]
+  federations: AdminFederation[]
   added?: string
   error?: string
 }) {
@@ -48,24 +54,14 @@ function CityForm({
           />
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="country_id" className="text-sm font-medium text-neutral-300">
-            Kraj <span className="text-red-400">*</span>
-          </label>
-          <select
-            id="country_id"
-            name="country_id"
-            required
-            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-          >
-            <option value="">— wybierz —</option>
-            {countries.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <CountrySelectField
+          name="country_id"
+          label="Kraj"
+          required
+          options={countries.map((c) => ({ id: c.id, label: c.name }))}
+          federationOptions={federations}
+          createCountryInlineAction={createCountryInline}
+        />
       </div>
 
       <div className="mt-5 flex justify-end">
@@ -134,12 +130,14 @@ export default async function AdminCitiesPage({
 
   let cities: AdminCityListItem[] = []
   let countries: AdminCountryOption[] = []
+  let federations: AdminFederation[] = []
   let fetchError: string | null = null
 
   try {
-    ;[cities, countries] = await Promise.all([
+    ;[cities, countries, federations] = await Promise.all([
       getAdminCitiesList(),
       getAdminCountriesOptions(),
+      getAdminFederations(),
     ])
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
@@ -168,7 +166,12 @@ export default async function AdminCitiesPage({
 
         {!fetchError && (
           <div className="mb-8">
-            <CityForm countries={countries} added={added} error={formError} />
+            <CityForm
+              countries={countries}
+              federations={federations}
+              added={added}
+              error={formError}
+            />
           </div>
         )}
 

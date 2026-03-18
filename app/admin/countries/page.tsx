@@ -1,10 +1,11 @@
-import { createCountry } from './actions'
+import { createCountry, createFederationInline } from './actions'
 import Link from 'next/link'
 import {
   getAdminCountries,
   getAdminFederations,
 } from '@/lib/db/countries'
 import type { AdminCountry, AdminFederation } from '@/lib/db/countries'
+import FederationSelectField from '@/components/admin/FederationSelectField'
 
 function CountryForm({
   federations,
@@ -62,22 +63,13 @@ function CountryForm({
         </div>
       </div>
 
-      <div className="mt-4 flex flex-col gap-1.5">
-        <label htmlFor="federation_id" className="text-sm font-medium text-neutral-300">
-          Federacja
-        </label>
-        <select
-          id="federation_id"
+      <div className="mt-4">
+        <FederationSelectField
           name="federation_id"
-          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-        >
-          <option value="">— brak —</option>
-          {federations.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.short_name}
-            </option>
-          ))}
-        </select>
+          label="Federacja"
+          options={federations}
+          createFederationInlineAction={createFederationInline}
+        />
       </div>
 
       <div className="mt-5 flex justify-end">

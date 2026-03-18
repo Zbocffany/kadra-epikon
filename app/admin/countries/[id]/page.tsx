@@ -1,10 +1,15 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { deleteCountry, updateCountry } from '../actions'
+import {
+  createFederationInline,
+  deleteCountry,
+  updateCountry,
+} from '../actions'
 import {
   getAdminCountryDetails,
   getAdminFederations,
 } from '@/lib/db/countries'
+import FederationSelectField from '@/components/admin/FederationSelectField'
 
 type Params = Promise<{ id: string }>
 type SearchParams = Promise<{ mode?: string; saved?: string; error?: string }>
@@ -111,24 +116,13 @@ export default async function AdminCountryDetailsPage({
                   />
                 </div>
 
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="federation_id" className="text-sm font-medium text-neutral-300">
-                    Federacja
-                  </label>
-                  <select
-                    id="federation_id"
-                    name="federation_id"
-                    defaultValue={country.federation_id ?? ''}
-                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-                  >
-                    <option value="">— brak —</option>
-                    {federations.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.short_name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <FederationSelectField
+                  name="federation_id"
+                  label="Federacja"
+                  selectedId={country.federation_id}
+                  options={federations}
+                  createFederationInlineAction={createFederationInline}
+                />
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">
