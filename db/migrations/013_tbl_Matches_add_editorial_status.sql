@@ -3,7 +3,7 @@
 -- GOAL: Add editorial workflow status to tbl_Matches.
 --
 -- DESIGN NOTES:
---   Sporting status  → match_status (existing): ZAPLANOWANY / ZAKONCZONY / PRZERWANY / ANULOWANY
+--   Sporting status  → match_status (existing): SCHEDULED / FINISHED / ABANDONED / CANCELLED
 --   Editorial status → editorial_status (new):  DRAFT / PARTIAL / COMPLETE / VERIFIED
 --
 --   These two dimensions are independent.  A match can be ZAKONCZONY (sports) while
@@ -17,11 +17,11 @@
 --   PARTIAL  – Editorial work in progress.  Some events or participants entered but incomplete.
 --   COMPLETE – The responsible editor considers all known data entered and ready for review.
 --   VERIFIED – A senior editor / data steward has reviewed and approved the record.
---              Constraint: only reachable when match_status != 'ZAPLANOWANY'
+--              Constraint: only reachable when match_status != 'SCHEDULED'
 --              (cannot fully verify a planned/future match's sporting data).
 --
 -- BUSINESS RULE ENFORCED BY CHECK CONSTRAINT:
---   editorial_status = 'VERIFIED'  →  match_status IN ('ZAKONCZONY','PRZERWANY','ANULOWANY')
+--   editorial_status = 'VERIFIED'  →  match_status IN ('FINISHED','ABANDONED','CANCELLED')
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -90,9 +90,9 @@ BEGIN
       CHECK (
         editorial_status <> 'VERIFIED'::public.editorial_status_enum
         OR match_status IN (
-          'ZAKONCZONY'::match_status_enum,
-          'PRZERWANY'::match_status_enum,
-          'ANULOWANY'::match_status_enum
+          'FINISHED'::match_status_enum,
+          'ABANDONED'::match_status_enum,
+          'CANCELLED'::match_status_enum
         )
       );
   END IF;
@@ -113,7 +113,7 @@ Values (editorial_status_enum):
   VERIFIED – Senior editor has reviewed and approved the record.
 
 Constraint: VERIFIED is only allowed when match_status is
-ZAKONCZONY, PRZERWANY, or ANULOWANY (not ZAPLANOWANY).
+FINISHED, ABANDONED, or CANCELLED (not SCHEDULED).
 
 Score is never stored here; derive it by aggregating tbl_Match_Events.';
 
