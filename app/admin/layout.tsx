@@ -22,6 +22,12 @@ export default async function AdminLayout({
                   <Link href="/admin/clubs" className="text-neutral-400 hover:text-white">
                     Kluby
                   </Link>
+                  <Link href="/admin/countries" className="text-neutral-400 hover:text-white">
+                    Kraje
+                  </Link>
+                  <Link href="/admin/cities" className="text-neutral-400 hover:text-white">
+                    Miasta
+                  </Link>
                   <span className="rounded-md border border-neutral-700 bg-neutral-900 px-2 py-0.5 text-xs text-neutral-400">
                     {access.role}
                   </span>
