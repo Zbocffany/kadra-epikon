@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { createCityInline } from '@/app/admin/cities/actions'
+import { createCountryInline } from '@/app/admin/countries/actions'
 import { deletePerson, updatePerson } from '../actions'
 import {
   getAdminPersonBirthCityOptions,
@@ -108,6 +109,7 @@ export default async function AdminPersonDetailsPage({
               cities={cities}
               countries={countries}
               createCityAction={createCityInline}
+              createCountryAction={createCountryInline}
               defaultBirthDate={person.birth_date}
               defaultCityId={person.birth_city_id}
               defaultCountryId={person.birth_country_id}

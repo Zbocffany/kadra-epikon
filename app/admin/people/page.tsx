@@ -1,6 +1,7 @@
 ﻿import Link from 'next/link'
 import { createPerson } from './actions'
 import { createCityInline } from '@/app/admin/cities/actions'
+import { createCountryInline } from '@/app/admin/countries/actions'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import { getAdminPeople, getPersonDisplayName, getAdminPersonBirthCityOptions } from '@/lib/db/people'
@@ -57,7 +58,12 @@ function PeopleCreateFields({
       </div>
 
       <div className="mt-4">
-        <PersonBirthplaceFields cities={cities} countries={countries} createCityAction={createCityInline} />
+        <PersonBirthplaceFields
+          cities={cities}
+          countries={countries}
+          createCityAction={createCityInline}
+          createCountryAction={createCountryInline}
+        />
       </div>
 
       <div className="mt-4 flex items-center gap-2">
@@ -161,7 +167,7 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
           href="/admin/people?create=1"
           className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
         >
-          Dodaj osóbe
+          Dodaj osobę
         </Link>
       )}
     >
@@ -169,14 +175,14 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
         <>
           <AdminTable data={people} columns={columns} emptyMessage="Brak osób w bazie danych." />
           {people.length > 0 && (
-            <p className="text-xs text-neutral-500">Kliknij osóbe, aby przejść do strony szczegółów.</p>
+            <p className="text-xs text-neutral-500">Kliknij osobę, aby przejść do strony szczegółów.</p>
           )}
 
           {isCreateModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
               <div className="w-full max-w-2xl rounded-xl border border-neutral-700 bg-neutral-950 p-6 shadow-2xl">
                 <div className="mb-4">
-                  <h2 className="text-lg font-semibold text-neutral-100">Dodaj osóbe</h2>
+                  <h2 className="text-lg font-semibold text-neutral-100">Dodaj osobę</h2>
                 </div>
 
                 <form action={createPerson} className="space-y-4">
@@ -187,7 +193,7 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
                       type="submit"
                       className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
                     >
-                      Dodaj osóbe
+                      Dodaj osobę
                     </button>
                     <Link
                       href="/admin/people"

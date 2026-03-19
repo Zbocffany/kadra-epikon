@@ -11,6 +11,7 @@ type PersonBirthplaceFieldsProps = {
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
   createCityAction: (prevState: InlineCreateState, formData: FormData) => Promise<InlineCreateState>
+  createCountryAction: (prevState: InlineCreateState, formData: FormData) => Promise<InlineCreateState>
   defaultBirthDate?: string | null
   defaultCityId?: string | null
   defaultCountryId?: string | null
@@ -20,6 +21,7 @@ export default function PersonBirthplaceFields({
   cities,
   countries,
   createCityAction,
+  createCountryAction,
   defaultBirthDate,
   defaultCityId,
   defaultCountryId,
@@ -136,23 +138,48 @@ export default function PersonBirthplaceFields({
       />
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="birth_country_id" className="text-sm font-medium text-neutral-300">
-          Kraj urodzenia
-        </label>
-        <select
-          id="birth_country_id"
+        <AdminSelectField
           name="birth_country_id"
-          value={selectedCountryId}
-          onChange={(event) => setSelectedCountryId(event.target.value)}
-          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-        >
-          <option value="">- brak -</option>
-          {countries.map((country) => (
-            <option key={country.id} value={country.id}>
-              {country.name}
-            </option>
-          ))}
-        </select>
+          label="Kraj urodzenia"
+          selectedId={selectedCountryId}
+          options={countries.map((country) => ({ id: country.id, label: country.name }))}
+          displayKey="label"
+          placeholder="Wpisz, aby filtrowac kraje..."
+          addButtonLabel="+ Dodaj kraj"
+          addDialogTitle="Nowy kraj"
+          emptyResultsMessage="Brak wyników - możesz dodać nowy kraj poniżej."
+          createAction={createCountryAction}
+          onSelectedIdChange={setSelectedCountryId}
+          inlineForm={(
+            <div className="space-y-3">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="inline_birth_country_name" className="text-xs text-neutral-400">
+                  Nazwa kraju
+                </label>
+                <input
+                  id="inline_birth_country_name"
+                  name="name"
+                  type="text"
+                  required
+                  className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="inline_birth_country_fifa" className="text-xs text-neutral-400">
+                  Kod FIFA
+                </label>
+                <input
+                  id="inline_birth_country_fifa"
+                  name="fifa_code"
+                  type="text"
+                  maxLength={3}
+                  className="uppercase rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                />
+              </div>
+            </div>
+          )}
+        />
 
         {!selectedCityId && (
           <p className="text-xs text-neutral-500">możesz ustawić sam kraj, jesli miasto urodzenia jest nieznane.</p>
