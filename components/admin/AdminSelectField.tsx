@@ -92,6 +92,9 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   function handleWrapperBlur(e: React.FocusEvent<HTMLDivElement>) {
     if (!wrapperRef.current?.contains(e.relatedTarget as Node)) {
       setIsOpen(false)
+      // Reset query to reflect actual selected value (discard abandoned search text)
+      const selected = allOptions.find((opt) => opt.id === value)
+      setQuery(selected ? getDisplayLabel(selected) : '')
     }
   }
 
