@@ -12,7 +12,7 @@ import {
   getAdminCountries,
   getAdminCountryDetails,
   getAdminFederations,
-  getCountrySuccessionState,
+  getCountrySuccessions,
   getCountryHistory,
   COUNTRY_HISTORY_EVENT_TYPES,
 } from '@/lib/db/countries'
@@ -45,12 +45,12 @@ export default async function AdminCountryDetailsPage({
   const { mode, saved, error, history } =
     (await searchParams) as Awaited<SearchParams> & { history?: string }
 
-  const [country, federations, allCountries, historyEvents, successionState] = await Promise.all([
+  const [country, federations, allCountries, historyEvents, successions] = await Promise.all([
     getAdminCountryDetails(id),
     getAdminFederations(),
     getAdminCountries(),
     getCountryHistory(id),
-    getCountrySuccessionState(id),
+    getCountrySuccessions(id),
   ])
 
   if (!country) {
@@ -65,14 +65,16 @@ export default async function AdminCountryDetailsPage({
   const isHistoryModalOpen = Boolean(history)
   const isNewHistoryEvent = history === 'new'
   const countrySelectOptions = otherCountries.map((c) => ({ id: c.id, label: c.name }))
-  const modalPredecessorValue =
-    selectedHistoryEvent && successionState.predecessor?.source_event_id === selectedHistoryEvent.id
-      ? successionState.predecessor.country_id
-      : ''
-  const modalSuccessorValue =
-    selectedHistoryEvent && successionState.successor?.source_event_id === selectedHistoryEvent.id
-      ? successionState.successor.country_id
-      : ''
+  const modalPredecessorValue = selectedHistoryEvent
+    ? (successions.find(
+        (s) => s.source_event_id === selectedHistoryEvent.id && s.postcountry_id === id
+      )?.precountry_id ?? '')
+    : ''
+  const modalSuccessorValue = selectedHistoryEvent
+    ? (successions.find(
+        (s) => s.source_event_id === selectedHistoryEvent.id && s.precountry_id === id
+      )?.postcountry_id ?? '')
+    : ''
 
   return (
     <DetailsPageContainer>

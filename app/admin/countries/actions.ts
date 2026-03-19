@@ -280,12 +280,13 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
     }
   }
 
-  // Successor relation: current country -> successor
+  // Successor relation: current country -> successor (scoped to this event)
   if (successorId) {
     const { data: existingSuccessor, error: existingSuccessorError } = await supabase
       .from('tbl_Successions')
       .select('id')
       .eq('precountry_id', countryId)
+      .eq('source_event_id', finalEventId)
       .maybeSingle()
 
     if (existingSuccessorError) {
@@ -325,22 +326,25 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
       }
     }
   } else {
+    // Only remove successor linked to THIS event, not all successors for this country
     const { error: deleteSuccessorError } = await supabase
       .from('tbl_Successions')
       .delete()
       .eq('precountry_id', countryId)
+      .eq('source_event_id', finalEventId)
 
     if (deleteSuccessorError) {
       redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${deleteSuccessorError.message}`)
     }
   }
 
-  // Predecessor relation: predecessor -> current country
+  // Predecessor relation: predecessor -> current country (scoped to this event)
   if (predecessorId) {
     const { data: existingPredecessor, error: existingPredecessorError } = await supabase
       .from('tbl_Successions')
       .select('id')
       .eq('postcountry_id', countryId)
+      .eq('source_event_id', finalEventId)
       .maybeSingle()
 
     if (existingPredecessorError) {
@@ -380,10 +384,12 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
       }
     }
   } else {
+    // Only remove predecessor linked to THIS event, not all predecessors for this country
     const { error: deletePredecessorError } = await supabase
       .from('tbl_Successions')
       .delete()
       .eq('postcountry_id', countryId)
+      .eq('source_event_id', finalEventId)
 
     if (deletePredecessorError) {
       redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${deletePredecessorError.message}`)

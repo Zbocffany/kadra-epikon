@@ -153,74 +153,59 @@ export async function getCountryHistory(
   return data ?? []
 }
 
-export type AdminSuccessionStateEntry = {
+export type AdminSuccessionRow = {
   succession_id: string
-  country_id: string
-  country_name: string
+  precountry_id: string
+  precountry_name: string
+  postcountry_id: string
+  postcountry_name: string
   source_event_id: string | null
   effective_date: string | null
 }
 
-export type AdminSuccessionState = {
-  predecessor: AdminSuccessionStateEntry | null
-  successor: AdminSuccessionStateEntry | null
-}
-
-export async function getCountrySuccessionState(
+export async function getCountrySuccessions(
   countryId: string
-): Promise<AdminSuccessionState> {
+): Promise<AdminSuccessionRow[]> {
   const supabase = createServiceRoleClient()
 
-  const { data: successorRow, error: successorError } = await supabase
-    .from('tbl_Successions')
-    .select('id, postcountry_id, source_event_id, effective_date')
-    .eq('precountry_id', countryId)
-    .maybeSingle()
+  const [{ data: asPreRows, error: preError }, { data: asPostRows, error: postError }] =
+    await Promise.all([
+      supabase
+        .from('tbl_Successions')
+        .select('id, precountry_id, postcountry_id, source_event_id, effective_date')
+        .eq('precountry_id', countryId),
+      supabase
+        .from('tbl_Successions')
+        .select('id, precountry_id, postcountry_id, source_event_id, effective_date')
+        .eq('postcountry_id', countryId),
+    ])
 
-  const { data: predecessorRow, error: predecessorError } = await supabase
-    .from('tbl_Successions')
-    .select('id, precountry_id, source_event_id, effective_date')
-    .eq('postcountry_id', countryId)
-    .maybeSingle()
+  if (preError) throw new Error(`tbl_Successions: ${preError.message}`)
+  if (postError) throw new Error(`tbl_Successions: ${postError.message}`)
 
-  if (successorError) throw new Error(`tbl_Successions: ${successorError.message}`)
-  if (predecessorError) throw new Error(`tbl_Successions: ${predecessorError.message}`)
+  const allRows = [...(asPreRows ?? []), ...(asPostRows ?? [])]
+  if (allRows.length === 0) return []
 
   const countryIds = [
-    successorRow?.postcountry_id,
-    predecessorRow?.precountry_id,
-  ].filter(Boolean) as string[]
+    ...new Set(allRows.flatMap((r) => [r.precountry_id, r.postcountry_id]).filter(Boolean)),
+  ] as string[]
 
-  const countryNameMap = new Map<string, string>()
+  const { data: countries, error: countriesError } = await supabase
+    .from('tbl_Countries')
+    .select('id, name')
+    .in('id', countryIds)
 
-  if (countryIds.length > 0) {
-    const { data: countries, error: countriesError } = await supabase
-      .from('tbl_Countries')
-      .select('id, name')
-      .in('id', countryIds)
+  if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
 
-    if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
-    ;(countries ?? []).forEach((c) => countryNameMap.set(c.id, c.name ?? '—'))
-  }
+  const nameMap = new Map((countries ?? []).map((c) => [c.id, c.name ?? '—']))
 
-  return {
-    predecessor: predecessorRow
-      ? {
-          succession_id: predecessorRow.id,
-          country_id: predecessorRow.precountry_id,
-          country_name: countryNameMap.get(predecessorRow.precountry_id) ?? '—',
-          source_event_id: predecessorRow.source_event_id,
-          effective_date: predecessorRow.effective_date,
-        }
-      : null,
-    successor: successorRow
-      ? {
-          succession_id: successorRow.id,
-          country_id: successorRow.postcountry_id,
-          country_name: countryNameMap.get(successorRow.postcountry_id) ?? '—',
-          source_event_id: successorRow.source_event_id,
-          effective_date: successorRow.effective_date,
-        }
-      : null,
-  }
+  return allRows.map((row) => ({
+    succession_id: row.id,
+    precountry_id: row.precountry_id,
+    precountry_name: nameMap.get(row.precountry_id) ?? '—',
+    postcountry_id: row.postcountry_id,
+    postcountry_name: nameMap.get(row.postcountry_id) ?? '—',
+    source_event_id: row.source_event_id,
+    effective_date: row.effective_date,
+  }))
 }
