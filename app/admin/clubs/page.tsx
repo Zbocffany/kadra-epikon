@@ -2,7 +2,7 @@ import { getAdminClubs, getAdminCities } from '@/lib/db/clubs'
 import type { AdminClub, AdminCity } from '@/lib/db/clubs'
 import { createClub } from './actions'
 import Link from 'next/link'
-import CitySelectField from '@/components/admin/CitySelectField'
+import AdminSelectField from '@/components/admin/AdminSelectField'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCountryOption } from '@/lib/db/cities'
@@ -55,12 +55,50 @@ function ClubForm({
           />
         </div>
 
-        <CitySelectField
+        <AdminSelectField
           name="club_city_id"
           label="Miasto"
           options={cities.map((c) => ({ id: c.id, label: c.city_name }))}
-          countryOptions={countries}
-          createCityInlineAction={createCityInline}
+          displayKey="label"
+          addButtonLabel="+ Dodaj miasto"
+          addDialogTitle="Nowe miasto"
+          emptyResultsMessage="Brak wyników — możesz dodać nowe miasto poniżej."
+          createAction={createCityInline}
+          renderInlineForm={(ref) => (
+            <div ref={ref} className="space-y-3">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="inline_city_name" className="text-xs text-neutral-400">
+                  Nazwa miasta
+                </label>
+                <input
+                  id="inline_city_name"
+                  name="city_name"
+                  type="text"
+                  required
+                  className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="inline_city_country" className="text-xs text-neutral-400">
+                  Kraj
+                </label>
+                <select
+                  id="inline_city_country"
+                  name="country_id"
+                  required
+                  className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                >
+                  <option value="">— wybierz —</option>
+                  {countries.map((country) => (
+                    <option key={country.id} value={country.id}>
+                      {country.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
         />
       </div>
 

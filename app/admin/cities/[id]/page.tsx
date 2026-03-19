@@ -7,7 +7,7 @@ import {
   getAdminCountriesOptions,
 } from '@/lib/db/cities'
 import { getAdminFederations } from '@/lib/db/countries'
-import CountrySelectField from '@/components/admin/CountrySelectField'
+import AdminSelectField from '@/components/admin/AdminSelectField'
 import {
   DetailsPageContainer,
   DetailsPageHeader,
@@ -81,14 +81,66 @@ export default async function AdminCityDetailsPage({
                 />
               </div>
 
-              <CountrySelectField
+              <AdminSelectField
                 name="country_id"
                 label="Kraj"
                 required
                 selectedId={city.current_country_id}
                 options={countries.map((c) => ({ id: c.id, label: c.name }))}
-                federationOptions={federations}
-                createCountryInlineAction={createCountryInline}
+                displayKey="label"
+                addButtonLabel="+ Dodaj kraj"
+                addDialogTitle="Nowy kraj"
+                emptyResultsMessage="Brak wyników — możesz dodać nowy kraj poniżej."
+                createAction={createCountryInline}
+                renderInlineForm={(ref) => (
+                  <div ref={ref} className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="flex flex-col gap-1.5">
+                        <label htmlFor="inline_country_name" className="text-xs text-neutral-400">
+                          Nazwa kraju
+                        </label>
+                        <input
+                          id="inline_country_name"
+                          name="name"
+                          type="text"
+                          required
+                          className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label htmlFor="inline_country_fifa" className="text-xs text-neutral-400">
+                          Kod FIFA
+                        </label>
+                        <input
+                          id="inline_country_fifa"
+                          name="fifa_code"
+                          type="text"
+                          maxLength={3}
+                          className="uppercase rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="inline_country_federation" className="text-xs text-neutral-400">
+                        Federacja
+                      </label>
+                      <select
+                        id="inline_country_federation"
+                        name="federation_id"
+                        className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                      >
+                        <option value="">— brak —</option>
+                        {federations.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.short_name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
               />
             </div>
 

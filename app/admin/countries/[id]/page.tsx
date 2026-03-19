@@ -8,7 +8,7 @@ import {
   getAdminCountryDetails,
   getAdminFederations,
 } from '@/lib/db/countries'
-import FederationSelectField from '@/components/admin/FederationSelectField'
+import AdminSelectField from '@/components/admin/AdminSelectField'
 import {
   DetailsPageContainer,
   DetailsPageHeader,
@@ -90,12 +90,61 @@ export default async function AdminCountryDetailsPage({
                 />
               </div>
 
-              <FederationSelectField
+              <AdminSelectField
                 name="federation_id"
                 label="Federacja"
                 selectedId={country.federation_id}
                 options={federations}
-                createFederationInlineAction={createFederationInline}
+                displayKey="short_name"
+                addButtonLabel="+ Dodaj federacje"
+                addDialogTitle="Nowa federacja"
+                emptyResultsMessage="Brak wyników — możesz dodać nową federację poniżej."
+                createAction={createFederationInline}
+                renderInlineForm={(ref) => (
+                  <div ref={ref} className="space-y-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="flex flex-col gap-1.5">
+                        <label htmlFor="inline_fed_short" className="text-xs text-neutral-400">
+                          Skrot
+                        </label>
+                        <input
+                          id="inline_fed_short"
+                          name="short_name"
+                          type="text"
+                          required
+                          className="uppercase rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                        />
+                      </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label htmlFor="inline_fed_year" className="text-xs text-neutral-400">
+                          Rok zalozenia
+                        </label>
+                        <input
+                          id="inline_fed_year"
+                          name="foundation_year"
+                          type="number"
+                          min={1800}
+                          max={new Date().getFullYear()}
+                          className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="inline_fed_full" className="text-xs text-neutral-400">
+                        Pelna nazwa
+                      </label>
+                      <input
+                        id="inline_fed_full"
+                        name="full_name"
+                        type="text"
+                        required
+                        className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                      />
+                    </div>
+                  </div>
+                )}
               />
             </div>
 
