@@ -146,8 +146,8 @@ export async function getCountryHistory(
     .from('tbl_Country_History')
     .select('id, event_date, event_date_precision, title, description, event_type, event_order')
     .eq('country_id', countryId)
-    .order('event_date', { ascending: true, nullsFirst: false })
-    .order('event_order', { ascending: true, nullsFirst: false })
+    .order('event_date', { ascending: false, nullsFirst: false })
+    .order('event_order', { ascending: false, nullsFirst: false })
 
   if (error) throw new Error(`tbl_Country_History: ${error.message}`)
   return data ?? []
