@@ -17,6 +17,7 @@ import {
   COUNTRY_HISTORY_EVENT_TYPES,
 } from '@/lib/db/countries'
 import AdminSelectField from '@/components/admin/AdminSelectField'
+import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
 import {
   DetailsPageContainer,
   DetailsPageHeader,
@@ -279,16 +280,10 @@ export default async function AdminCountryDetailsPage({
       {isHistoryModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
           <div className="w-full max-w-2xl rounded-xl border border-neutral-700 bg-neutral-950 p-6 shadow-2xl">
-            <div className="mb-4 flex items-start justify-between gap-3">
+            <div className="mb-4">
               <h2 className="text-lg font-semibold text-neutral-100">
                 {isNewHistoryEvent ? 'Nowe zdarzenie historyczne' : 'Szczegóły zdarzenia'}
               </h2>
-              <Link
-                href={`/admin/countries/${id}`}
-                className="rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-300 hover:bg-neutral-800"
-              >
-                Zamknij
-              </Link>
             </div>
 
             <form action={saveCountryHistoryEvent} className="space-y-4">
@@ -485,23 +480,34 @@ export default async function AdminCountryDetailsPage({
 
               <div className="flex items-center justify-between pt-2">
                 {!isNewHistoryEvent && selectedHistoryEvent ? (
-                  <button
+                  <ConfirmSubmitButton
                     type="submit"
                     formAction={deleteCountryHistoryEvent}
-                    className="rounded-md border border-red-800 bg-red-950/40 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-900/40"
+                    confirmMessage={selectedHistoryEvent.title
+                      ? `Czy na pewno chcesz usunąć zdarzenie "${selectedHistoryEvent.title}"?`
+                      : 'Czy na pewno chcesz usunąć to zdarzenie historyczne?'}
+                    className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
                   >
-                    Usun zdarzenie
-                  </button>
+                    Usuń zdarzenie
+                  </ConfirmSubmitButton>
                 ) : (
                   <span />
                 )}
 
-                <button
-                  type="submit"
-                  className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
-                >
-                  Zapisz zdarzenie
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="submit"
+                    className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
+                  >
+                    Zapisz zdarzenie
+                  </button>
+                  <Link
+                    href={`/admin/countries/${id}`}
+                    className="rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-300 hover:bg-neutral-800"
+                  >
+                    Zamknij
+                  </Link>
+                </div>
               </div>
             </form>
           </div>

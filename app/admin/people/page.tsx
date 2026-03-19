@@ -181,14 +181,8 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
           {isCreateModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
               <div className="w-full max-w-2xl rounded-xl border border-neutral-700 bg-neutral-950 p-6 shadow-2xl">
-                <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="mb-4">
                   <h2 className="text-lg font-semibold text-neutral-100">Dodaj osóbe</h2>
-                  <Link
-                    href="/admin/people"
-                    className="rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-300 hover:bg-neutral-800"
-                  >
-                    Zamknij
-                  </Link>
                 </div>
 
                 {formError && (
@@ -201,18 +195,18 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
                   <PeopleCreateFields cities={cities} countries={countries} />
 
                   <div className="flex items-center justify-end gap-2 pt-2">
-                    <Link
-                      href="/admin/people"
-                      className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-                    >
-                      Anuluj
-                    </Link>
                     <button
                       type="submit"
                       className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
                     >
                       Dodaj osóbe
                     </button>
+                    <Link
+                      href="/admin/people"
+                      className="rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-300 hover:bg-neutral-800"
+                    >
+                      Zamknij
+                    </Link>
                   </div>
                 </form>
               </div>

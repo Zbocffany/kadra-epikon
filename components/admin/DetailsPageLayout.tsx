@@ -1,5 +1,6 @@
 ﻿import Link from 'next/link'
 import { ReactNode } from 'react'
+import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
 
 type DetailsPageHeaderProps = {
   title: string
@@ -28,6 +29,8 @@ export function DetailsPageHeader({
   deleteAction,
   deleteId,
 }: DetailsPageHeaderProps) {
+  const deleteTargetLabel = title.trim() && title !== '—' ? `"${title}"` : 'ten element'
+
   return (
     <div className="mb-6 flex items-center justify-between gap-3">
       <Link
@@ -46,12 +49,13 @@ export function DetailsPageHeader({
         </Link>
         <form action={deleteAction}>
           <input type="hidden" name="id" value={deleteId} />
-          <button
+          <ConfirmSubmitButton
             type="submit"
-            className="rounded-md border border-red-800 bg-red-950/50 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-900/40"
+            confirmMessage={`Czy na pewno chcesz usunąć ${deleteTargetLabel}?`}
+            className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
           >
-            Usun
-          </button>
+            Usuń
+          </ConfirmSubmitButton>
         </form>
       </div>
     </div>
