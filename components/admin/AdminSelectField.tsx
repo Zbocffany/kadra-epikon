@@ -84,6 +84,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   })
   const [dialogOpen, setDialogOpen] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
+  const [highlightedIndex, setHighlightedIndex] = useState(-1)
   const [createError, setCreateError] = useState<string | undefined>()
   const [isPending, startTransition] = useTransition()
   const wrapperRef = useRef<HTMLDivElement>(null)
@@ -169,6 +170,16 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
     return matches
   }, [allOptions, query])
 
+  useEffect(() => {
+    if (!isOpen || filteredOptions.length === 0) {
+      setHighlightedIndex(-1)
+      return
+    }
+
+    const selectedIndex = filteredOptions.findIndex((opt) => opt.id === value)
+    setHighlightedIndex(selectedIndex >= 0 ? selectedIndex : 0)
+  }, [filteredOptions, isOpen, value])
+
   const defaultPlaceholder =
     placeholder || `Wpisz, aby filtrowac ${label.toLowerCase()}...`
   const selectedLabel = allOptions.find((o) => o.id === value)
@@ -191,6 +202,61 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
             setIsOpen(true)
           }}
           onFocus={() => setIsOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.preventDefault()
+              setIsOpen(false)
+              const selected = allOptions.find((opt) => opt.id === value)
+              setQuery(selected ? getDisplayLabel(selected) : '')
+              return
+            }
+
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') {
+              return
+            }
+
+            if (!isOpen) {
+              setIsOpen(true)
+            }
+
+            if (filteredOptions.length === 0) {
+              return
+            }
+
+            if (e.key === 'Enter') {
+              if (highlightedIndex < 0 || highlightedIndex >= filteredOptions.length) {
+                return
+              }
+
+              e.preventDefault()
+              const option = filteredOptions[highlightedIndex]
+              setValue(option.id)
+              onSelectedIdChange?.(option.id)
+              setQuery(getDisplayLabel(option))
+              setIsOpen(false)
+              return
+            }
+
+            e.preventDefault()
+            const isArrowDown = e.key === 'ArrowDown'
+            const maxIndex = filteredOptions.length - 1
+
+            let nextIndex = highlightedIndex
+            if (nextIndex < 0) {
+              nextIndex = isArrowDown ? 0 : maxIndex
+            } else {
+              nextIndex = isArrowDown
+                ? Math.min(nextIndex + 1, maxIndex)
+                : Math.max(nextIndex - 1, 0)
+            }
+
+            setHighlightedIndex(nextIndex)
+            const option = filteredOptions[nextIndex]
+            if (option) {
+              setValue(option.id)
+              onSelectedIdChange?.(option.id)
+            }
+          }}
           placeholder={defaultPlaceholder}
           className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
         />
@@ -211,8 +277,8 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
           >
             {!required && <option value="">— brak —</option>}
             {required && <option value="">— wybierz —</option>}
-            {filteredOptions.map((opt) => (
-              <option key={opt.id} value={opt.id}>
+            {filteredOptions.map((opt, index) => (
+              <option key={opt.id} value={opt.id} className={index === highlightedIndex ? 'bg-neutral-800' : ''}>
                 {getDisplayLabel(opt)}
               </option>
             ))}

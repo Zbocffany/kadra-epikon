@@ -8,6 +8,7 @@ import {
 } from '@/lib/db/cities'
 import { getAdminFederations } from '@/lib/db/countries'
 import AdminSelectField from '@/components/admin/AdminSelectField'
+import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import {
   DetailsPageContainer,
   DetailsPageHeader,
@@ -17,25 +18,6 @@ import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin
 
 type Params = DetailPageParams
 type SearchParams = DetailPageSearchParams
-
-const VOIVODESHIP_OPTIONS = [
-  'Dolnośląskie',
-  'Kujawsko-pomorskie',
-  'Lubelskie',
-  'Lubuskie',
-  'Łódzkie',
-  'Małopolskie',
-  'Mazowieckie',
-  'Opolskie',
-  'Podkarpackie',
-  'Podlaskie',
-  'Pomorskie',
-  'Śląskie',
-  'Świętokrzyskie',
-  'Warmińsko-mazurskie',
-  'Wielkopolskie',
-  'Zachodniopomorskie',
-] as const
 
 export default async function AdminCityDetailsPage({
   params,
@@ -63,7 +45,7 @@ export default async function AdminCityDetailsPage({
     <DetailsPageContainer>
       <DetailsPageHeader
         title={city.city_name ?? '—'}
-        backLabel="Powrot do listy miast"
+        backLabel="Powrót do listy miast"
         backHref="/admin/cities"
         editHref={`/admin/cities/${city.id}?mode=edit`}
         deleteAction={deleteCity}
@@ -164,7 +146,7 @@ export default async function AdminCityDetailsPage({
 
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="voivodeship" className="text-sm font-medium text-neutral-300">
-                  Wojewodztwo
+                  Województwo
                 </label>
                 <select
                   id="voivodeship"
@@ -174,8 +156,8 @@ export default async function AdminCityDetailsPage({
                 >
                   <option value="">— brak —</option>
                   {VOIVODESHIP_OPTIONS.map((option) => (
-                    <option key={option} value={option}>
-                      {option}
+                    <option key={option.value} value={option.value}>
+                      {option.label}
                     </option>
                   ))}
                 </select>
@@ -208,7 +190,7 @@ export default async function AdminCityDetailsPage({
             </div>
 
             <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Wojewodztwo</p>
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Województwo</p>
               <p className="mt-2 text-lg font-semibold text-neutral-100">
                 {city.voivodeship ?? '—'}
               </p>

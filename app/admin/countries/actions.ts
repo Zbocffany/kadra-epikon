@@ -1,4 +1,4 @@
-'use server'
+﻿'use server'
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import type { InlineCreateState } from '@/lib/types/admin'
@@ -43,12 +43,12 @@ export async function createCountry(formData: FormData): Promise<void> {
   if (error) {
     if (error.code === '23505') {
       if (error.message.includes('fifa_code')) {
-        redirectWithError('/admin/countries', `Kod FIFA ${fifaCode} juz istnieje.`)
+        redirectWithError('/admin/countries', `Kod FIFA ${fifaCode} już istnieje.`)
       }
-      redirectWithError('/admin/countries', 'Rekord z taka wartoscia juz istnieje.')
+      redirectWithError('/admin/countries', 'Rekord z taka wartością już istnieje.')
     }
 
-    redirectWithError('/admin/countries', `Blad bazy danych: ${error.message}`)
+    redirectWithError('/admin/countries', `Błąd bazy danych: ${error.message}`)
   }
 
   redirectWithAdded('/admin/countries', name)
@@ -81,7 +81,7 @@ export async function createCountryInline(
   })
 
   if (error) {
-    return inlineError(prevState, mapDbError(error, 'Rekord z taka wartoscia juz istnieje.'))
+    return inlineError(prevState, mapDbError(error, 'Rekord z taka wartością już istnieje.'))
   }
 
   return inlineSuccess(prevState, id, name)
@@ -98,7 +98,7 @@ export async function createFederationInline(
   if (!shortName) {
     return {
       ok: false,
-      error: 'Skrot federacji jest wymagany.',
+      error: 'Skrót federacji jest wymagany.',
       version: prevState.version + 1,
     }
   }
@@ -106,7 +106,7 @@ export async function createFederationInline(
   if (!fullName) {
     return {
       ok: false,
-      error: 'Pelna nazwa federacji jest wymagana.',
+      error: 'Pełna nazwa federacji jest wymagana.',
       version: prevState.version + 1,
     }
   }
@@ -115,7 +115,7 @@ export async function createFederationInline(
   if (foundationYearRaw && Number.isNaN(foundationYear)) {
     return {
       ok: false,
-      error: 'Rok zalozenia musi byc liczba.',
+      error: 'Rok założenia musi byc liczba.',
       version: prevState.version + 1,
     }
   }
@@ -135,8 +135,8 @@ export async function createFederationInline(
       ok: false,
       error:
         error.code === '23505'
-          ? 'Federacja o tym skrocie juz istnieje.'
-          : `Blad bazy danych: ${error.message}`,
+          ? 'Federacja o tym skrócie już istnieje.'
+          : `Błąd bazy danych: ${error.message}`,
       version: prevState.version + 1,
     }
   }
@@ -180,10 +180,10 @@ export async function updateCountry(formData: FormData): Promise<void> {
 
   if (error) {
     if (error.code === '23505') {
-      redirectWithError(`/admin/countries/${id}`, 'Rekord z taka wartoscia juz istnieje.')
+      redirectWithError(`/admin/countries/${id}`, 'Rekord z taka wartością już istnieje.')
     }
 
-    redirectWithError(`/admin/countries/${id}`, `Blad bazy danych: ${error.message}`)
+    redirectWithError(`/admin/countries/${id}`, `Błąd bazy danych: ${error.message}`)
   }
 
   redirectWithSaved(`/admin/countries/${id}`)
@@ -193,7 +193,7 @@ export async function deleteCountry(formData: FormData): Promise<void> {
   const id = getTrimmedString(formData, 'id')
 
   if (!id) {
-    redirectWithError('/admin/countries', 'Brak ID kraju do usuniecia.')
+    redirectWithError('/admin/countries', 'Brak ID kraju do usunięcia.')
   }
 
   const supabase = createServiceRoleClient()
@@ -209,11 +209,11 @@ export async function deleteCountry(formData: FormData): Promise<void> {
   if (error) {
     redirectWithError(
       `/admin/countries/${id}`,
-      `Nie mozna usunac kraju (prawdopodobnie jest uzywany): ${error.message}`
+      `Nie można usunąć kraju (prawdopodobnie jest używany): ${error.message}`
     )
   }
 
-  redirectWithAdded('/admin/countries', `Usunieto kraj: ${country?.name ?? id}`)
+  redirectWithAdded('/admin/countries', `Usunięto kraj: ${country?.name ?? id}`)
 }
 
 export async function saveCountryHistoryEvent(formData: FormData): Promise<void> {
@@ -229,14 +229,14 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
   const successorId = getTrimmedNullable(formData, 'successor_id')
 
   if (!countryId) redirectWithError('/admin/countries', 'Brak ID kraju.')
-  if (!title) redirectWithError(`/admin/countries/${countryId}`, 'Tytul zdarzenia jest wymagany.')
+  if (!title) redirectWithError(`/admin/countries/${countryId}`, 'Tytuł zdarzenia jest wymagany.')
 
   if (predecessorId && predecessorId === countryId) {
-    redirectWithError(`/admin/countries/${countryId}`, 'Poprzednik nie moze byc tym samym krajem.')
+    redirectWithError(`/admin/countries/${countryId}`, 'Poprzednik nie może być tym samym krajem.')
   }
 
   if (successorId && successorId === countryId) {
-    redirectWithError(`/admin/countries/${countryId}`, 'Nastepnik nie moze byc tym samym krajem.')
+    redirectWithError(`/admin/countries/${countryId}`, 'Następnik nie może być tym samym krajem.')
   }
 
   const eventOrder = eventOrderRaw ? parseInt(eventOrderRaw, 10) : null
@@ -261,7 +261,7 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
       .eq('country_id', countryId)
 
     if (updateError) {
-      redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${updateError.message}`)
+      redirectWithError(`/admin/countries/${countryId}`, `Błąd bazy danych: ${updateError.message}`)
     }
   } else {
     const { error: insertError } = await supabase.from('tbl_Country_History').insert({
@@ -276,7 +276,7 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
     })
 
     if (insertError) {
-      redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${insertError.message}`)
+      redirectWithError(`/admin/countries/${countryId}`, `Błąd bazy danych: ${insertError.message}`)
     }
   }
 
@@ -290,7 +290,7 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
       .maybeSingle()
 
     if (existingSuccessorError) {
-      redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${existingSuccessorError.message}`)
+      redirectWithError(`/admin/countries/${countryId}`, `Błąd bazy danych: ${existingSuccessorError.message}`)
     }
 
     if (existingSuccessor) {
@@ -305,9 +305,9 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
 
       if (updateSuccessorError) {
         if (updateSuccessorError.code === '23505') {
-          redirectWithError(`/admin/countries/${countryId}`, 'Wybrany nastepnik jest juz przypisany do innej sukcesji.')
+          redirectWithError(`/admin/countries/${countryId}`, 'Wybrany następnik jest już przypisany do innej sukcesji.')
         }
-        redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${updateSuccessorError.message}`)
+        redirectWithError(`/admin/countries/${countryId}`, `Błąd bazy danych: ${updateSuccessorError.message}`)
       }
     } else {
       const { error: insertSuccessorError } = await supabase.from('tbl_Successions').insert({
@@ -320,9 +320,9 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
 
       if (insertSuccessorError) {
         if (insertSuccessorError.code === '23505') {
-          redirectWithError(`/admin/countries/${countryId}`, 'Wybrany nastepnik jest juz przypisany do innej sukcesji.')
+          redirectWithError(`/admin/countries/${countryId}`, 'Wybrany następnik jest już przypisany do innej sukcesji.')
         }
-        redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${insertSuccessorError.message}`)
+        redirectWithError(`/admin/countries/${countryId}`, `Błąd bazy danych: ${insertSuccessorError.message}`)
       }
     }
   } else {
@@ -334,7 +334,7 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
       .eq('source_event_id', finalEventId)
 
     if (deleteSuccessorError) {
-      redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${deleteSuccessorError.message}`)
+      redirectWithError(`/admin/countries/${countryId}`, `Błąd bazy danych: ${deleteSuccessorError.message}`)
     }
   }
 
@@ -348,7 +348,7 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
       .maybeSingle()
 
     if (existingPredecessorError) {
-      redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${existingPredecessorError.message}`)
+      redirectWithError(`/admin/countries/${countryId}`, `Błąd bazy danych: ${existingPredecessorError.message}`)
     }
 
     if (existingPredecessor) {
@@ -363,9 +363,9 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
 
       if (updatePredecessorError) {
         if (updatePredecessorError.code === '23505') {
-          redirectWithError(`/admin/countries/${countryId}`, 'Wybrany poprzednik ma juz przypisanego innego sukcesora.')
+          redirectWithError(`/admin/countries/${countryId}`, 'Wybrany poprzednik ma już przypisanego innego sukcesora.')
         }
-        redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${updatePredecessorError.message}`)
+        redirectWithError(`/admin/countries/${countryId}`, `Błąd bazy danych: ${updatePredecessorError.message}`)
       }
     } else {
       const { error: insertPredecessorError } = await supabase.from('tbl_Successions').insert({
@@ -378,9 +378,9 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
 
       if (insertPredecessorError) {
         if (insertPredecessorError.code === '23505') {
-          redirectWithError(`/admin/countries/${countryId}`, 'Wybrany poprzednik ma juz przypisanego innego sukcesora.')
+          redirectWithError(`/admin/countries/${countryId}`, 'Wybrany poprzednik ma już przypisanego innego sukcesora.')
         }
-        redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${insertPredecessorError.message}`)
+        redirectWithError(`/admin/countries/${countryId}`, `Błąd bazy danych: ${insertPredecessorError.message}`)
       }
     }
   } else {
@@ -392,7 +392,7 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
       .eq('source_event_id', finalEventId)
 
     if (deletePredecessorError) {
-      redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${deletePredecessorError.message}`)
+      redirectWithError(`/admin/countries/${countryId}`, `Błąd bazy danych: ${deletePredecessorError.message}`)
     }
   }
 
@@ -412,7 +412,7 @@ export async function deleteCountryHistoryEvent(formData: FormData): Promise<voi
     .eq('source_event_id', eventId)
 
   if (deleteSuccessionsError) {
-    redirectWithError(`/admin/countries/${countryId}`, `Blad usuwania sukcesji: ${deleteSuccessionsError.message}`)
+    redirectWithError(`/admin/countries/${countryId}`, `Błąd usuwania sukcesji: ${deleteSuccessionsError.message}`)
   }
 
   const { error } = await supabase
@@ -422,8 +422,10 @@ export async function deleteCountryHistoryEvent(formData: FormData): Promise<voi
     .eq('country_id', countryId)
 
   if (error) {
-    redirectWithError(`/admin/countries/${countryId}`, `Blad usuwania: ${error.message}`)
+    redirectWithError(`/admin/countries/${countryId}`, `Błąd usuwania: ${error.message}`)
   }
 
   redirectWithSaved(`/admin/countries/${countryId}`)
 }
+
+

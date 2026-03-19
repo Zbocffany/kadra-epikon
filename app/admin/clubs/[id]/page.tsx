@@ -1,7 +1,14 @@
+import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { deleteClub, updateClub } from '../actions'
-import { getAdminCities, getAdminClubDetails } from '@/lib/db/clubs'
+import { deleteClub, deleteClubHistoryEvent, saveClubHistoryEvent, updateClub } from '../actions'
+import {
+  CLUB_HISTORY_EVENT_TYPES,
+  getAdminCities,
+  getAdminClubDetails,
+  getClubHistory,
+} from '@/lib/db/clubs'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
+import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import { getAdminStadiumOptions } from '@/lib/db/stadiums'
 import type { AdminStadiumOption } from '@/lib/db/stadiums'
 import AdminSelectField from '@/components/admin/AdminSelectField'
@@ -16,6 +23,13 @@ import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin
 
 type Params = DetailPageParams
 type SearchParams = DetailPageSearchParams
+
+function formatEventDate(date: string | null, precision: 'YEAR' | 'MONTH' | 'DAY' | null): string {
+  if (!date) return '—'
+  if (precision === 'YEAR') return date.slice(0, 4)
+  if (precision === 'MONTH') return date.slice(0, 7)
+  return date
+}
 
 function StadiumInlineForm({ cities }: { cities: { id: string; city_name: string }[] }) {
   return (
@@ -63,13 +77,15 @@ export default async function AdminClubDetailsPage({
   searchParams: SearchParams
 }) {
   const { id } = await params
-  const { mode, saved, error } = await searchParams
+  const { mode, saved, error, history } =
+    (await searchParams) as Awaited<SearchParams> & { history?: string }
 
-  const [club, cities, countries, stadiums] = await Promise.all([
+  const [club, cities, countries, stadiums, historyEvents] = await Promise.all([
     getAdminClubDetails(id),
     getAdminCities(),
     getAdminCountriesOptions(),
     getAdminStadiumOptions(),
+    getClubHistory(id),
   ])
 
   if (!club) {
@@ -77,12 +93,17 @@ export default async function AdminClubDetailsPage({
   }
 
   const isEdit = mode === 'edit'
+  const selectedHistoryEvent = history && history !== 'new'
+    ? historyEvents.find((event) => event.id === history) ?? null
+    : null
+  const isHistoryModalOpen = Boolean(history)
+  const isNewHistoryEvent = history === 'new'
 
   return (
     <DetailsPageContainer>
       <DetailsPageHeader
         title={club.name}
-        backLabel="Powrot do listy klubow"
+        backLabel="Powrót do listy klubów"
         backHref="/admin/clubs"
         editHref={`/admin/clubs/${club.id}?mode=edit`}
         deleteAction={deleteClub}
@@ -157,6 +178,24 @@ export default async function AdminClubDetailsPage({
                         ))}
                       </select>
                     </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="inline_city_voivodeship" className="text-xs text-neutral-400">
+                        Województwo (tylko Polska)
+                      </label>
+                      <select
+                        id="inline_city_voivodeship"
+                        name="voivodeship"
+                        className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                      >
+                        <option value="">— brak —</option>
+                        {VOIVODESHIP_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                 )}
               />
@@ -170,7 +209,7 @@ export default async function AdminClubDetailsPage({
                 placeholder="Wpisz, aby filtrowac stadiony..."
                 addButtonLabel="+ Dodaj stadion"
                 addDialogTitle="Nowy stadion"
-                emptyResultsMessage="Brak wynikow — mozesz dodac nowy stadion ponizej."
+                emptyResultsMessage="Brak wyników — możesz dodać nowy stadion poniżej."
                 createAction={createStadiumInline}
                 inlineForm={<StadiumInlineForm cities={cities} />}
               />
@@ -193,30 +232,191 @@ export default async function AdminClubDetailsPage({
           </form>
         }
         viewContent={
-          <div className="mt-6 grid gap-4 sm:grid-cols-3">
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Miasto</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {club.city_name ?? '—'}
-              </p>
+          <>
+            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
+                <p className="text-xs uppercase tracking-wide text-neutral-500">Miasto</p>
+                <p className="mt-2 text-lg font-semibold text-neutral-100">
+                  {club.city_name ?? '—'}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
+                <p className="text-xs uppercase tracking-wide text-neutral-500">Kraj</p>
+                <p className="mt-2 text-lg font-semibold text-neutral-100">
+                  {club.country_name ?? '—'}
+                </p>
+              </div>
+
+              <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
+                <p className="text-xs uppercase tracking-wide text-neutral-500">Stadion</p>
+                <p className="mt-2 text-lg font-semibold text-neutral-100">
+                  {club.stadium_name ?? '—'}
+                </p>
+              </div>
             </div>
 
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Kraj</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {club.country_name ?? '—'}
+            <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-6">
+              <p className="mb-5 text-xs font-semibold uppercase tracking-widest text-neutral-500">
+                Historia
               </p>
-            </div>
 
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Stadion</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {club.stadium_name ?? '—'}
-              </p>
+              <div className="mb-4 flex items-center justify-end">
+                <Link
+                  href={`/admin/clubs/${id}?history=new`}
+                  className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
+                >
+                  + Dodaj zdarzenie
+                </Link>
+              </div>
+
+              {historyEvents.length > 0 ? (
+                <div className="overflow-x-auto rounded-lg border border-neutral-800">
+                  <table className="min-w-full divide-y divide-neutral-800 text-sm">
+                    <thead className="bg-neutral-900/80 text-neutral-400">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-medium">Data zdarzenia</th>
+                        <th className="px-4 py-3 text-left font-medium">Nazwa zdarzenia</th>
+                        <th className="px-4 py-3 text-right font-medium">Szczegóły</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-800 bg-neutral-900/40 text-neutral-200">
+                      {historyEvents.map((event) => {
+                        return (
+                          <tr key={event.id}>
+                            <td className="px-4 py-3 font-mono text-xs text-neutral-300">
+                              {formatEventDate(event.event_date, event.event_date_precision)}
+                            </td>
+                            <td className="px-4 py-3">{event.title ?? '—'}</td>
+                            <td className="px-4 py-3 text-right">
+                              <Link
+                                href={`/admin/clubs/${id}?history=${event.id}`}
+                                className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+                              >
+                                Pokaż więcej
+                              </Link>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="mb-5 text-sm text-neutral-500">Brak wpisów w historii.</p>
+              )}
             </div>
-          </div>
+          </>
         }
       />
+
+      {isHistoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
+          <div className="w-full max-w-2xl rounded-xl border border-neutral-700 bg-neutral-950 p-6 shadow-2xl">
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <h2 className="text-lg font-semibold text-neutral-100">
+                {isNewHistoryEvent ? 'Nowe zdarzenie historyczne' : 'Szczegóły zdarzenia'}
+              </h2>
+              <Link
+                href={`/admin/clubs/${id}`}
+                className="rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-300 hover:bg-neutral-800"
+              >
+                Zamknij
+              </Link>
+            </div>
+
+            <form action={saveClubHistoryEvent} className="space-y-4">
+              <input type="hidden" name="club_id" value={id} />
+              {!isNewHistoryEvent && selectedHistoryEvent && (
+                <input type="hidden" name="event_id" value={selectedHistoryEvent.id} />
+              )}
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-neutral-400">Data zdarzenia</label>
+                  <input
+                    name="event_date"
+                    type="date"
+                    defaultValue={selectedHistoryEvent?.event_date ?? ''}
+                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-neutral-400">Precyzja</label>
+                  <select
+                    name="event_date_precision"
+                    defaultValue={selectedHistoryEvent?.event_date_precision ?? 'DAY'}
+                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none"
+                  >
+                    <option value="DAY">Dzień</option>
+                    <option value="MONTH">Miesiąc</option>
+                    <option value="YEAR">Rok</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2 flex flex-col gap-1.5">
+                  <label className="text-xs text-neutral-400">
+                    Nazwa zdarzenia <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    name="title"
+                    type="text"
+                    required
+                    defaultValue={selectedHistoryEvent?.title ?? ''}
+                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 flex flex-col gap-1.5">
+                  <label className="text-xs text-neutral-400">Typ zdarzenia</label>
+                  <select
+                    name="event_type"
+                    defaultValue={selectedHistoryEvent?.event_type ?? ''}
+                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none"
+                  >
+                    <option value="">— brak —</option>
+                    {CLUB_HISTORY_EVENT_TYPES.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2 flex flex-col gap-1.5">
+                  <label className="text-xs text-neutral-400">Opis</label>
+                  <textarea
+                    name="description"
+                    rows={3}
+                    defaultValue={selectedHistoryEvent?.description ?? ''}
+                    className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
+                {!isNewHistoryEvent && selectedHistoryEvent ? (
+                  <button
+                    type="submit"
+                    formAction={deleteClubHistoryEvent}
+                    className="rounded-md border border-red-800 bg-red-950/40 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-900/40"
+                  >
+                    Usun zdarzenie
+                  </button>
+                ) : (
+                  <span />
+                )}
+
+                <button
+                  type="submit"
+                  className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
+                >
+                  Zapisz zdarzenie
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </DetailsPageContainer>
   )
 }

@@ -1,4 +1,4 @@
-import { createServiceRoleClient } from '@/lib/supabase/server'
+﻿import { createServiceRoleClient } from '@/lib/supabase/server'
 
 export type AdminClub = {
   id: string
@@ -19,6 +19,27 @@ export type AdminClubDetails = {
 export type AdminCity = {
   id: string
   city_name: string
+}
+
+export const CLUB_HISTORY_EVENT_TYPES = [
+  { value: 'FOUNDED', label: 'Założenie / Poczatek' },
+  { value: 'DISSOLVED', label: 'Rozwiązanie / Koniec' },
+  { value: 'NAME_CHANGED', label: 'Zmiana nazwy' },
+  { value: 'RELOCATED', label: 'Relokacja' },
+  { value: 'MERGED', label: 'Połączenie' },
+  { value: 'REFORMED', label: 'Reaktywacja' },
+] as const
+
+export type ClubHistoryEventType = typeof CLUB_HISTORY_EVENT_TYPES[number]['value']
+
+export type AdminClubHistoryEvent = {
+  id: string
+  event_date: string | null
+  event_date_precision: 'YEAR' | 'MONTH' | 'DAY' | null
+  title: string | null
+  description: string | null
+  event_type: ClubHistoryEventType | null
+  event_order: number | null
 }
 
 export async function getAdminClubs(): Promise<AdminClub[]> {
@@ -165,3 +186,20 @@ export async function getAdminClubDetails(
     stadium_name: stadium?.name ?? null,
   }
 }
+
+export async function getClubHistory(
+  clubId: string
+): Promise<AdminClubHistoryEvent[]> {
+  const supabase = createServiceRoleClient()
+
+  const { data, error } = await supabase
+    .from('tbl_Club_History')
+    .select('id, event_date, event_date_precision, title, description, event_type, event_order')
+    .eq('club_id', clubId)
+    .order('event_date', { ascending: false, nullsFirst: false })
+    .order('event_order', { ascending: false, nullsFirst: false })
+
+  if (error) throw new Error(`tbl_Club_History: ${error.message}`)
+  return data ?? []
+}
+

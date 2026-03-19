@@ -1,4 +1,4 @@
-'use server'
+﻿'use server'
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import type { InlineCreateState } from '@/lib/types/admin'
@@ -33,10 +33,10 @@ export async function createStadium(formData: FormData): Promise<void> {
 
   if (error) {
     if (error.code === '23505') {
-      redirectWithError('/admin/stadiums', 'Stadion o tej nazwie juz istnieje.')
+      redirectWithError('/admin/stadiums', 'Stadion o tej nazwie już istnieje.')
     }
 
-    redirectWithError('/admin/stadiums', `Blad bazy danych: ${error.message}`)
+    redirectWithError('/admin/stadiums', `Błąd bazy danych: ${error.message}`)
   }
 
   redirectWithAdded('/admin/stadiums', name)
@@ -68,10 +68,10 @@ export async function createStadiumInline(
 
   if (error) {
     if (error.code === '23505') {
-      return inlineError(prevState, 'Stadion o tej nazwie juz istnieje.')
+      return inlineError(prevState, 'Stadion o tej nazwie już istnieje.')
     }
 
-    return inlineError(prevState, `Blad bazy danych: ${error.message}`)
+    return inlineError(prevState, `Błąd bazy danych: ${error.message}`)
   }
 
   return inlineSuccess(prevState, id, name)
@@ -106,10 +106,10 @@ export async function updateStadium(formData: FormData): Promise<void> {
 
   if (error) {
     if (error.code === '23505') {
-      redirectWithError(`/admin/stadiums/${id}`, 'Stadion o tej nazwie juz istnieje.')
+      redirectWithError(`/admin/stadiums/${id}`, 'Stadion o tej nazwie już istnieje.')
     }
 
-    redirectWithError(`/admin/stadiums/${id}`, `Blad bazy danych: ${error.message}`)
+    redirectWithError(`/admin/stadiums/${id}`, `Błąd bazy danych: ${error.message}`)
   }
 
   redirectWithSaved(`/admin/stadiums/${id}`)
@@ -119,7 +119,7 @@ export async function deleteStadium(formData: FormData): Promise<void> {
   const id = getTrimmedString(formData, 'id')
 
   if (!id) {
-    redirectWithError('/admin/stadiums', 'Brak ID stadionu do usuniecia.')
+    redirectWithError('/admin/stadiums', 'Brak ID stadionu do usunięcia.')
   }
 
   const supabase = createServiceRoleClient()
@@ -135,9 +135,11 @@ export async function deleteStadium(formData: FormData): Promise<void> {
   if (error) {
     redirectWithError(
       `/admin/stadiums/${id}`,
-      `Nie mozna usunac stadionu (prawdopodobnie jest uzywany): ${error.message}`
+      `Nie można usunąć stadionu (prawdopodobnie jest używany): ${error.message}`
     )
   }
 
-  redirectWithAdded('/admin/stadiums', `Usunieto stadion: ${stadium?.name ?? id}`)
+  redirectWithAdded('/admin/stadiums', `Usunięto stadion: ${stadium?.name ?? id}`)
 }
+
+

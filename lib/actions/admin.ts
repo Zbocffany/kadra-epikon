@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation'
+﻿import { redirect } from 'next/navigation'
 import type { InlineCreateState } from '@/lib/types/admin'
 
 type DbError = {
@@ -53,5 +53,6 @@ export function mapDbError(error: DbError, duplicateMessage: string): string {
   if (error.code === '23505') {
     return duplicateMessage
   }
-  return `Blad bazy danych: ${error.message}`
+  return `Błąd bazy danych: ${error.message}`
 }
+

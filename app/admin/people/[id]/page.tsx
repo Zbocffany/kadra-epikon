@@ -52,7 +52,7 @@ export default async function AdminPersonDetailsPage({
     <DetailsPageContainer>
       <DetailsPageHeader
         title={displayName}
-        backLabel="Powrot do listy ludzi"
+        backLabel="Powrót do listy ludzi"
         backHref="/admin/people"
         editHref={`/admin/people/${person.id}?mode=edit`}
         deleteAction={deletePerson}
@@ -71,7 +71,7 @@ export default async function AdminPersonDetailsPage({
 
             <div className="grid gap-4 sm:grid-cols-3">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="first_name" className="text-sm font-medium text-neutral-300">Imie</label>
+                <label htmlFor="first_name" className="text-sm font-medium text-neutral-300">Imię</label>
                 <input
                   id="first_name"
                   name="first_name"
@@ -124,7 +124,7 @@ export default async function AdminPersonDetailsPage({
               <label htmlFor="is_active" className="text-sm text-neutral-300">Aktywna osoba</label>
             </div>
 
-            <p className="text-xs text-neutral-500">Wymagane jest przynajmniej jedno pole: imie, nazwisko lub pseudonim.</p>
+            <p className="text-xs text-neutral-500">Wymagane jest przynajmniej jedno pole: imię, nazwisko lub pseudonim.</p>
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <Link
@@ -145,7 +145,7 @@ export default async function AdminPersonDetailsPage({
         viewContent={
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Imie</p>
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Imię</p>
               <p className="mt-2 text-lg font-semibold text-neutral-100">{person.first_name ?? '—'}</p>
             </div>
 

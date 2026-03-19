@@ -80,7 +80,7 @@ export default async function AdminCountryDetailsPage({
     <DetailsPageContainer>
       <DetailsPageHeader
         title={country.name}
-        backLabel="Powrot do listy krajow"
+        backLabel="Powrót do listy krajów"
         backHref="/admin/countries"
         editHref={`/admin/countries/${country.id}?mode=edit`}
         deleteAction={deleteCountry}
@@ -141,7 +141,7 @@ export default async function AdminCountryDetailsPage({
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="flex flex-col gap-1.5">
                         <label htmlFor="inline_fed_short" className="text-xs text-neutral-400">
-                          Skrot
+                          Skrót
                         </label>
                         <input
                           id="inline_fed_short"
@@ -154,7 +154,7 @@ export default async function AdminCountryDetailsPage({
 
                       <div className="flex flex-col gap-1.5">
                         <label htmlFor="inline_fed_year" className="text-xs text-neutral-400">
-                          Rok zalozenia
+                          Rok założenia
                         </label>
                         <input
                           id="inline_fed_year"
@@ -169,7 +169,7 @@ export default async function AdminCountryDetailsPage({
 
                     <div className="flex flex-col gap-1.5">
                       <label htmlFor="inline_fed_full" className="text-xs text-neutral-400">
-                        Pelna nazwa
+                        Pełna nazwa
                       </label>
                       <input
                         id="inline_fed_full"
@@ -241,7 +241,7 @@ export default async function AdminCountryDetailsPage({
                   <th className="px-4 py-3 text-left font-medium">Data zdarzenia</th>
                   <th className="px-4 py-3 text-left font-medium">Nazwa zdarzenia</th>
                   <th className="px-4 py-3 text-left font-medium">Typ zdarzenia</th>
-                  <th className="px-4 py-3 text-right font-medium">Szczegoly</th>
+                  <th className="px-4 py-3 text-right font-medium">Szczegóły</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800 bg-neutral-900/40 text-neutral-200">
@@ -260,9 +260,9 @@ export default async function AdminCountryDetailsPage({
                       <td className="px-4 py-3 text-right">
                         <Link
                           href={`/admin/countries/${id}?history=${event.id}`}
-                          className="text-xs text-neutral-300 underline underline-offset-2 hover:text-white"
+                          className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
                         >
-                          Pokaz wiecej
+                          Pokaż więcej
                         </Link>
                       </td>
                     </tr>
@@ -281,7 +281,7 @@ export default async function AdminCountryDetailsPage({
           <div className="w-full max-w-2xl rounded-xl border border-neutral-700 bg-neutral-950 p-6 shadow-2xl">
             <div className="mb-4 flex items-start justify-between gap-3">
               <h2 className="text-lg font-semibold text-neutral-100">
-                {isNewHistoryEvent ? 'Nowe zdarzenie historyczne' : 'Szczegoly zdarzenia'}
+                {isNewHistoryEvent ? 'Nowe zdarzenie historyczne' : 'Szczegóły zdarzenia'}
               </h2>
               <Link
                 href={`/admin/countries/${id}`}
@@ -315,8 +315,8 @@ export default async function AdminCountryDetailsPage({
                     defaultValue={selectedHistoryEvent?.event_date_precision ?? 'DAY'}
                     className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none"
                   >
-                    <option value="DAY">Dzien</option>
-                    <option value="MONTH">Miesiac</option>
+                    <option value="DAY">Dzień</option>
+                    <option value="MONTH">Miesiąc</option>
                     <option value="YEAR">Rok</option>
                   </select>
                 </div>
@@ -422,7 +422,7 @@ export default async function AdminCountryDetailsPage({
                 <div className="flex flex-col gap-1.5">
                   <AdminSelectField
                     name="successor_id"
-                    label="Nastepnik"
+                    label="Następnik"
                     selectedId={modalSuccessorValue}
                     options={countrySelectOptions}
                     displayKey="label"

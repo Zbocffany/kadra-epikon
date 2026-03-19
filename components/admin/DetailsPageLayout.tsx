@@ -1,4 +1,4 @@
-import Link from 'next/link'
+﻿import Link from 'next/link'
 import { ReactNode } from 'react'
 
 type DetailsPageHeaderProps = {
@@ -32,7 +32,7 @@ export function DetailsPageHeader({
     <div className="mb-6 flex items-center justify-between gap-3">
       <Link
         href={backHref}
-        className="text-sm text-neutral-400 underline decoration-neutral-700 underline-offset-4 hover:text-neutral-200"
+        className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
       >
         {backLabel}
       </Link>
@@ -71,7 +71,7 @@ export function DetailsPageContent({
     <>
       {saved && (
         <div className="mb-4 rounded-lg border border-emerald-800 bg-emerald-950/50 px-4 py-3 text-sm text-emerald-300">
-          Zmiany zostaly zapisane.
+          Zmiany zostały zapisane.
         </div>
       )}
 
@@ -100,3 +100,4 @@ export function DetailsPageContainer({ children }: { children: ReactNode }) {
     </main>
   )
 }
+

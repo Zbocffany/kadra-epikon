@@ -4,6 +4,7 @@ import { createCityInline } from '@/app/admin/cities/actions'
 import { deleteStadium, updateStadium } from '../actions'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCountryOption } from '@/lib/db/cities'
+import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import { getAdminCities } from '@/lib/db/clubs'
 import type { AdminCity } from '@/lib/db/clubs'
 import { getAdminStadiumDetails } from '@/lib/db/stadiums'
@@ -52,6 +53,24 @@ function CityInlineForm({ countries }: { countries: AdminCountryOption[] }) {
           ))}
         </select>
       </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="inline_city_voivodeship" className="text-xs text-neutral-400">
+          Województwo (tylko Polska)
+        </label>
+        <select
+          id="inline_city_voivodeship"
+          name="voivodeship"
+          className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+        >
+          <option value="">- brak -</option>
+          {VOIVODESHIP_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
     </div>
   )
 }
@@ -82,7 +101,7 @@ export default async function AdminStadiumDetailsPage({
     <DetailsPageContainer>
       <DetailsPageHeader
         title={stadium.name ?? '-'}
-        backLabel="Powrot do listy stadionow"
+        backLabel="Powrót do listy stadionów"
         backHref="/admin/stadiums"
         editHref={`/admin/stadiums/${stadium.id}?mode=edit`}
         deleteAction={deleteStadium}
@@ -123,7 +142,7 @@ export default async function AdminStadiumDetailsPage({
                 displayKey="label"
                 addButtonLabel="+ Dodaj miasto"
                 addDialogTitle="Nowe miasto"
-                emptyResultsMessage="Brak wynikow - mozesz dodac nowe miasto ponizej."
+                emptyResultsMessage="Brak wyników - możesz dodać nowe miasto poniżej."
                 createAction={createCityInline}
                 inlineForm={<CityInlineForm countries={countries} />}
               />

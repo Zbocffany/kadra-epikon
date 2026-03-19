@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+﻿import { ReactNode } from 'react'
 
 interface AdminListLayoutProps {
   breadcrumb: string
@@ -6,6 +6,7 @@ interface AdminListLayoutProps {
   recordCount: number
   recordLabel: string // singular (e.g., "kraj") or plural (e.g., "krajów")
   fetchError?: string | null
+  headerActions?: ReactNode
   children: ReactNode // Slot for add form + table (laid out vertically)
 }
 
@@ -36,28 +37,32 @@ export default function AdminListLayout({
   recordCount,
   recordLabel,
   fetchError,
+  headerActions,
   children,
 }: AdminListLayoutProps) {
   return (
     <main className="min-h-screen px-4 py-10 sm:px-8">
       <div className="mx-auto max-w-6xl">
         {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
+        <div className="mb-8 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
               {breadcrumb}
             </p>
             <h1 className="mt-1 text-3xl font-bold tracking-tight">{title}</h1>
           </div>
-          <span className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs text-neutral-400">
-            {recordCount} {recordLabel}
-          </span>
+          <div className="flex items-center gap-2">
+            {headerActions}
+            <span className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs text-neutral-400">
+              {recordCount} {recordLabel}
+            </span>
+          </div>
         </div>
 
         {/* Fetch Error */}
         {fetchError && (
           <div className="mb-6 rounded-lg border border-red-800 bg-red-950/50 px-5 py-4 text-sm text-red-300">
-            <strong className="font-semibold">Blad pobierania danych:</strong> {fetchError}
+            <strong className="font-semibold">Błąd pobierania danych:</strong> {fetchError}
           </div>
         )}
 
@@ -67,3 +72,4 @@ export default function AdminListLayout({
     </main>
   )
 }
+

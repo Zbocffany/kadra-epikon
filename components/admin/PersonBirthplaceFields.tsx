@@ -1,10 +1,11 @@
-'use client'
+﻿'use client'
 
 import { useMemo, useState } from 'react'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import type { AdminPersonBirthCityOption } from '@/lib/db/people'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import type { InlineCreateState } from '@/lib/types/admin'
+import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 
 type PersonBirthplaceFieldsProps = {
   cities: AdminPersonBirthCityOption[]
@@ -76,7 +77,7 @@ export default function PersonBirthplaceFields({
         placeholder="Wpisz, aby filtrowac miasta..."
         addButtonLabel="+ Dodaj miasto"
         addDialogTitle="Nowe miasto"
-        emptyResultsMessage="Brak wynikow - mozesz dodac nowe miasto ponizej."
+        emptyResultsMessage="Brak wyników - możesz dodać nowe miasto poniżej."
         createAction={createCityAction}
         onSelectedIdChange={handleBirthCityChange}
         inlineForm={(
@@ -112,6 +113,24 @@ export default function PersonBirthplaceFields({
                 ))}
               </select>
             </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="inline_birth_city_voivodeship" className="text-xs text-neutral-400">
+                Województwo (tylko Polska)
+              </label>
+              <select
+                id="inline_birth_city_voivodeship"
+                name="voivodeship"
+                className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+              >
+                <option value="">- brak -</option>
+                {VOIVODESHIP_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
       />
@@ -136,7 +155,7 @@ export default function PersonBirthplaceFields({
         </select>
 
         {!selectedCityId && (
-          <p className="text-xs text-neutral-500">Mozesz ustawic sam kraj, jesli miasto urodzenia jest nieznane.</p>
+          <p className="text-xs text-neutral-500">możesz ustawić sam kraj, jesli miasto urodzenia jest nieznane.</p>
         )}
         {selectedCityId && (
           <p className="text-xs text-neutral-500">
@@ -148,3 +167,5 @@ export default function PersonBirthplaceFields({
     </div>
   )
 }
+
+

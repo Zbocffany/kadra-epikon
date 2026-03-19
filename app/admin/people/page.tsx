@@ -1,4 +1,4 @@
-import Link from 'next/link'
+﻿import Link from 'next/link'
 import { createPerson } from './actions'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
@@ -10,37 +10,20 @@ import AdminTable from '@/components/admin/AdminTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import PersonBirthplaceFields from '@/components/admin/PersonBirthplaceFields'
 
-type SearchParams = Promise<{ added?: string; error?: string }>
+type SearchParams = Promise<{ added?: string; error?: string; create?: string }>
 
-function PeopleForm({
+function PeopleCreateFields({
   cities,
   countries,
-  added,
-  error,
 }: {
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
-  added?: string
-  error?: string
 }) {
   return (
-    <form action={createPerson} className="rounded-xl border border-neutral-800 bg-neutral-950 p-6">
-      <h2 className="mb-5 text-lg font-semibold">Dodaj osobe</h2>
-
-      {added && (
-        <div className="mb-5 rounded-lg border border-emerald-800 bg-emerald-950/50 px-4 py-3 text-sm text-emerald-300">
-          Osoba "{added}" zostala dodana.
-        </div>
-      )}
-      {error && (
-        <div className="mb-5 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
-          {error}
-        </div>
-      )}
-
+    <>
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="first_name" className="text-sm font-medium text-neutral-300">Imie</label>
+          <label htmlFor="first_name" className="text-sm font-medium text-neutral-300">Imię</label>
           <input
             id="first_name"
             name="first_name"
@@ -82,17 +65,8 @@ function PeopleForm({
         <label htmlFor="is_active" className="text-sm text-neutral-300">Aktywna osoba</label>
       </div>
 
-      <p className="mt-3 text-xs text-neutral-500">Wymagane jest przynajmniej jedno pole: imie, nazwisko lub pseudonim.</p>
-
-      <div className="mt-5 flex justify-end">
-        <button
-          type="submit"
-          className="rounded-lg bg-neutral-100 px-5 py-2 text-sm font-semibold text-neutral-900 transition hover:bg-white"
-        >
-          Dodaj osobe
-        </button>
-      </div>
-    </form>
+      <p className="mt-3 text-xs text-neutral-500">Wymagane jest przynajmniej jedno pole: imię, nazwisko lub pseudonim.</p>
+    </>
   )
 }
 
@@ -103,7 +77,7 @@ function formatDate(date: string | null): string {
 }
 
 export default async function AdminPeoplePage({ searchParams }: { searchParams: SearchParams }) {
-  const { added, error: formError } = await searchParams
+  const { added, error: formError, create } = await searchParams
 
   let people: AdminPersonListItem[] = []
   let cities: AdminPersonBirthCityOption[] = []
@@ -133,7 +107,7 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
       render: (person) => (
         <Link
           href={`/admin/people/${person.id}`}
-          className="text-neutral-100 underline decoration-neutral-700 underline-offset-4 transition hover:text-white hover:decoration-neutral-300"
+          className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
         >
           {getPersonDisplayName(person)}
         </Link>
@@ -170,8 +144,10 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
     const count = people.length
     if (count === 1) return 'osoba'
     if (count < 5) return 'osoby'
-    return 'osob'
+    return 'osób'
   })()
+
+  const isCreateModalOpen = create === '1' || Boolean(formError)
 
   return (
     <AdminListLayout
@@ -180,16 +156,72 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
       recordCount={people.length}
       recordLabel={pluralLabel}
       fetchError={fetchError}
+      headerActions={(
+        <Link
+          href="/admin/people?create=1"
+          className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
+        >
+          Dodaj osóbe
+        </Link>
+      )}
     >
       {!fetchError && (
         <>
-          <PeopleForm cities={cities} countries={countries} added={added} error={formError} />
-          <AdminTable data={people} columns={columns} emptyMessage="Brak osob w bazie danych." />
+          {added && (
+            <div className="rounded-lg border border-emerald-800 bg-emerald-950/50 px-4 py-3 text-sm text-emerald-300">
+              Osoba "{added}" została dodana.
+            </div>
+          )}
+
+          <AdminTable data={people} columns={columns} emptyMessage="Brak osób w bazie danych." />
           {people.length > 0 && (
-            <p className="text-xs text-neutral-500">Kliknij osobe, aby przejsc do strony szczegolow.</p>
+            <p className="text-xs text-neutral-500">Kliknij osóbe, aby przejść do strony szczegółów.</p>
+          )}
+
+          {isCreateModalOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
+              <div className="w-full max-w-2xl rounded-xl border border-neutral-700 bg-neutral-950 p-6 shadow-2xl">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <h2 className="text-lg font-semibold text-neutral-100">Dodaj osóbe</h2>
+                  <Link
+                    href="/admin/people"
+                    className="rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-300 hover:bg-neutral-800"
+                  >
+                    Zamknij
+                  </Link>
+                </div>
+
+                {formError && (
+                  <div className="mb-5 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
+                    {formError}
+                  </div>
+                )}
+
+                <form action={createPerson} className="space-y-4">
+                  <PeopleCreateFields cities={cities} countries={countries} />
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <Link
+                      href="/admin/people"
+                      className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+                    >
+                      Anuluj
+                    </Link>
+                    <button
+                      type="submit"
+                      className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
+                    >
+                      Dodaj osóbe
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
           )}
         </>
       )}
     </AdminListLayout>
   )
 }
+
+

@@ -1,4 +1,4 @@
-'use server'
+﻿'use server'
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getTrimmedNullable, getTrimmedString, redirectWithAdded, redirectWithError, redirectWithSaved } from '@/lib/actions/admin'
@@ -53,7 +53,7 @@ export async function createPerson(formData: FormData): Promise<void> {
   const isActive = getTrimmedString(formData, 'is_active') === 'on'
 
   if (!ensureAnyName(firstName, lastName, nickname)) {
-    redirectWithError('/admin/people', 'Podaj przynajmniej jedno z pol: imie, nazwisko lub pseudonim.')
+    redirectWithError('/admin/people', 'Podaj przynajmniej jedno z pól: imię, nazwisko lub pseudonim.')
   }
 
   const supabase = createServiceRoleClient()
@@ -78,7 +78,7 @@ export async function createPerson(formData: FormData): Promise<void> {
   })
 
   if (error) {
-    redirectWithError('/admin/people', `Blad bazy danych: ${error.message}`)
+    redirectWithError('/admin/people', `Błąd bazy danych: ${error.message}`)
   }
 
   const label = [firstName, lastName].filter(Boolean).join(' ').trim() || nickname || 'osoba'
@@ -100,7 +100,7 @@ export async function updatePerson(formData: FormData): Promise<void> {
   }
 
   if (!ensureAnyName(firstName, lastName, nickname)) {
-    redirectWithError(`/admin/people/${id}`, 'Podaj przynajmniej jedno z pol: imie, nazwisko lub pseudonim.')
+    redirectWithError(`/admin/people/${id}`, 'Podaj przynajmniej jedno z pól: imię, nazwisko lub pseudonim.')
   }
 
   const supabase = createServiceRoleClient()
@@ -127,7 +127,7 @@ export async function updatePerson(formData: FormData): Promise<void> {
     .eq('id', id)
 
   if (error) {
-    redirectWithError(`/admin/people/${id}`, `Blad bazy danych: ${error.message}`)
+    redirectWithError(`/admin/people/${id}`, `Błąd bazy danych: ${error.message}`)
   }
 
   redirectWithSaved(`/admin/people/${id}`)
@@ -137,7 +137,7 @@ export async function deletePerson(formData: FormData): Promise<void> {
   const id = getTrimmedString(formData, 'id')
 
   if (!id) {
-    redirectWithError('/admin/people', 'Brak ID osoby do usuniecia.')
+    redirectWithError('/admin/people', 'Brak ID osoby do usunięcia.')
   }
 
   const supabase = createServiceRoleClient()
@@ -153,10 +153,12 @@ export async function deletePerson(formData: FormData): Promise<void> {
   if (error) {
     redirectWithError(
       `/admin/people/${id}`,
-      `Nie mozna usunac osoby (prawdopodobnie jest uzywana): ${error.message}`
+      `Nie można usunąć osoby (prawdopodobnie jest używana): ${error.message}`
     )
   }
 
   const label = [person?.first_name, person?.last_name].filter(Boolean).join(' ').trim() || person?.nickname || id
-  redirectWithAdded('/admin/people', `Usunieto osobe: ${label}`)
+  redirectWithAdded('/admin/people', `Usunięto osóbe: ${label}`)
 }
+
+
