@@ -111,6 +111,48 @@ export async function getAdminCountryDetails(
   }
 }
 
+export const COUNTRY_HISTORY_EVENT_TYPES = [
+  { value: 'FOUNDED',      label: 'Założenie / Początek' },
+  { value: 'DISSOLVED',    label: 'Rozwiązanie / Koniec' },
+  { value: 'NAME_CHANGED', label: 'Zmiana nazwy' },
+  { value: 'INDEPENDENCE', label: 'Niepodległość' },
+  { value: 'UNIFICATION',  label: 'Zjednoczenie' },
+  { value: 'PARTITION',    label: 'Podział' },
+  { value: 'FIFA_JOIN',    label: 'Przystąpienie do FIFA' },
+  { value: 'UEFA_JOIN',    label: 'Przystąpienie do UEFA' },
+  { value: 'FIFA_LEAVE',   label: 'Wyjście / wykluczenie z FIFA' },
+  { value: 'UEFA_LEAVE',   label: 'Wyjście / wykluczenie z UEFA' },
+  { value: 'OTHER',        label: 'Inne' },
+] as const
+
+export type CountryHistoryEventType = typeof COUNTRY_HISTORY_EVENT_TYPES[number]['value']
+
+export type AdminCountryHistoryEvent = {
+  id: string
+  event_date: string | null
+  event_date_precision: 'YEAR' | 'MONTH' | 'DAY' | null
+  title: string | null
+  description: string | null
+  event_type: CountryHistoryEventType | null
+  event_order: number | null
+}
+
+export async function getCountryHistory(
+  countryId: string
+): Promise<AdminCountryHistoryEvent[]> {
+  const supabase = createServiceRoleClient()
+
+  const { data, error } = await supabase
+    .from('tbl_Country_History')
+    .select('id, event_date, event_date_precision, title, description, event_type, event_order')
+    .eq('country_id', countryId)
+    .order('event_date', { ascending: true, nullsFirst: false })
+    .order('event_order', { ascending: true, nullsFirst: false })
+
+  if (error) throw new Error(`tbl_Country_History: ${error.message}`)
+  return data ?? []
+}
+
 export type AdminSuccessionEntry = {
   successionId: string
   countryId: string

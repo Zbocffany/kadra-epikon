@@ -289,3 +289,56 @@ export async function clearPredecessor(formData: FormData): Promise<void> {
 
   redirectWithSaved(`/admin/countries/${countryId}`)
 }
+
+export async function addCountryHistoryEvent(formData: FormData): Promise<void> {
+  const countryId = getTrimmedString(formData, 'country_id')
+  const title = getTrimmedNullable(formData, 'title')
+  const description = getTrimmedNullable(formData, 'description')
+  const eventType = getTrimmedNullable(formData, 'event_type')
+  const eventDateRaw = getTrimmedNullable(formData, 'event_date')
+  const eventDatePrecision = getTrimmedNullable(formData, 'event_date_precision')
+  const eventOrderRaw = getTrimmedNullable(formData, 'event_order')
+
+  if (!countryId) redirectWithError('/admin/countries', 'Brak ID kraju.')
+  if (!title) redirectWithError(`/admin/countries/${countryId}`, 'Tytuł zdarzenia jest wymagany.')
+
+  const eventOrder = eventOrderRaw ? parseInt(eventOrderRaw, 10) : null
+
+  const supabase = createServiceRoleClient()
+  const { error } = await supabase.from('tbl_Country_History').insert({
+    id: crypto.randomUUID(),
+    country_id: countryId,
+    title,
+    description,
+    event_type: eventType,
+    event_date: eventDateRaw || null,
+    event_date_precision: eventDateRaw ? (eventDatePrecision || 'DAY') : null,
+    event_order: eventOrder,
+  })
+
+  if (error) {
+    redirectWithError(`/admin/countries/${countryId}`, `Błąd bazy danych: ${error.message}`)
+  }
+
+  redirectWithSaved(`/admin/countries/${countryId}`)
+}
+
+export async function deleteCountryHistoryEvent(formData: FormData): Promise<void> {
+  const countryId = getTrimmedString(formData, 'country_id')
+  const eventId = getTrimmedString(formData, 'event_id')
+
+  if (!countryId || !eventId) redirectWithError('/admin/countries', 'Brak danych.')
+
+  const supabase = createServiceRoleClient()
+  const { error } = await supabase
+    .from('tbl_Country_History')
+    .delete()
+    .eq('id', eventId)
+    .eq('country_id', countryId)
+
+  if (error) {
+    redirectWithError(`/admin/countries/${countryId}`, `Błąd usuwania: ${error.message}`)
+  }
+
+  redirectWithSaved(`/admin/countries/${countryId}`)
+}
