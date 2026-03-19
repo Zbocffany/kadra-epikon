@@ -1,19 +1,26 @@
 'use server'
 
-import { redirect } from 'next/navigation'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import type { InlineCreateState } from '@/lib/types/admin'
+import {
+  getTrimmedString,
+  inlineError,
+  inlineSuccess,
+  redirectWithAdded,
+  redirectWithError,
+  redirectWithSaved,
+} from '@/lib/actions/admin'
 
 export async function createCity(formData: FormData): Promise<void> {
-  const cityName = (formData.get('city_name') as string | null)?.trim() ?? ''
-  const countryId = (formData.get('country_id') as string | null)?.trim() ?? ''
+  const cityName = getTrimmedString(formData, 'city_name')
+  const countryId = getTrimmedString(formData, 'country_id')
 
   if (!cityName) {
-    redirect('/admin/cities?error=' + encodeURIComponent('Nazwa miasta jest wymagana.'))
+    redirectWithError('/admin/cities', 'Nazwa miasta jest wymagana.')
   }
 
   if (!countryId) {
-    redirect('/admin/cities?error=' + encodeURIComponent('Kraj jest wymagany.'))
+    redirectWithError('/admin/cities', 'Kraj jest wymagany.')
   }
 
   const supabase = createServiceRoleClient()
@@ -25,7 +32,7 @@ export async function createCity(formData: FormData): Promise<void> {
   })
 
   if (cityError) {
-    redirect('/admin/cities?error=' + encodeURIComponent(`Blad bazy danych: ${cityError.message}`))
+    redirectWithError('/admin/cities', `Blad bazy danych: ${cityError.message}`)
   }
 
   const { error: periodError } = await supabase.from('tbl_City_Country_Periods').insert({
@@ -40,33 +47,25 @@ export async function createCity(formData: FormData): Promise<void> {
   if (periodError) {
     // Best effort cleanup when linking country fails after city insert.
     await supabase.from('tbl_Cities').delete().eq('id', cityId)
-    redirect('/admin/cities?error=' + encodeURIComponent(`Blad relacji miasto-kraj: ${periodError.message}`))
+    redirectWithError('/admin/cities', `Blad relacji miasto-kraj: ${periodError.message}`)
   }
 
-  redirect('/admin/cities?added=' + encodeURIComponent(cityName))
+  redirectWithAdded('/admin/cities', cityName)
 }
 
 export async function createCityInline(
   prevState: InlineCreateState,
   formData: FormData
 ): Promise<InlineCreateState> {
-  const cityName = (formData.get('city_name') as string | null)?.trim() ?? ''
-  const countryId = (formData.get('country_id') as string | null)?.trim() ?? ''
+  const cityName = getTrimmedString(formData, 'city_name')
+  const countryId = getTrimmedString(formData, 'country_id')
 
   if (!cityName) {
-    return {
-      ok: false,
-      error: 'Nazwa miasta jest wymagana.',
-      version: prevState.version + 1,
-    }
+    return inlineError(prevState, 'Nazwa miasta jest wymagana.')
   }
 
   if (!countryId) {
-    return {
-      ok: false,
-      error: 'Kraj jest wymagany.',
-      version: prevState.version + 1,
-    }
+    return inlineError(prevState, 'Kraj jest wymagany.')
   }
 
   const supabase = createServiceRoleClient()
@@ -78,11 +77,7 @@ export async function createCityInline(
   })
 
   if (cityError) {
-    return {
-      ok: false,
-      error: `Blad bazy danych: ${cityError.message}`,
-      version: prevState.version + 1,
-    }
+    return inlineError(prevState, `Blad bazy danych: ${cityError.message}`)
   }
 
   const { error: periodError } = await supabase.from('tbl_City_Country_Periods').insert({
@@ -96,38 +91,28 @@ export async function createCityInline(
 
   if (periodError) {
     await supabase.from('tbl_Cities').delete().eq('id', cityId)
-    return {
-      ok: false,
-      error: `Blad relacji miasto-kraj: ${periodError.message}`,
-      version: prevState.version + 1,
-    }
+    return inlineError(prevState, `Blad relacji miasto-kraj: ${periodError.message}`)
   }
 
-  return {
-    ok: true,
-    id: cityId,
-    label: cityName,
-    version: prevState.version + 1,
-  }
+  return inlineSuccess(prevState, cityId, cityName)
 }
 
 export async function updateCity(formData: FormData): Promise<void> {
-  const id = (formData.get('id') as string | null)?.trim() ?? ''
-  const cityName = (formData.get('city_name') as string | null)?.trim() ?? ''
-  const countryId = (formData.get('country_id') as string | null)?.trim() ?? ''
-  const currentPeriodId =
-    (formData.get('current_period_id') as string | null)?.trim() ?? ''
+  const id = getTrimmedString(formData, 'id')
+  const cityName = getTrimmedString(formData, 'city_name')
+  const countryId = getTrimmedString(formData, 'country_id')
+  const currentPeriodId = getTrimmedString(formData, 'current_period_id')
 
   if (!id) {
-    redirect('/admin/cities?error=' + encodeURIComponent('Brak ID miasta do edycji.'))
+    redirectWithError('/admin/cities', 'Brak ID miasta do edycji.')
   }
 
   if (!cityName) {
-    redirect(`/admin/cities/${id}?error=` + encodeURIComponent('Nazwa miasta jest wymagana.'))
+    redirectWithError(`/admin/cities/${id}`, 'Nazwa miasta jest wymagana.')
   }
 
   if (!countryId) {
-    redirect(`/admin/cities/${id}?error=` + encodeURIComponent('Kraj jest wymagany.'))
+    redirectWithError(`/admin/cities/${id}`, 'Kraj jest wymagany.')
   }
 
   const supabase = createServiceRoleClient()
@@ -138,10 +123,7 @@ export async function updateCity(formData: FormData): Promise<void> {
     .eq('id', id)
 
   if (cityError) {
-    redirect(
-      `/admin/cities/${id}?error=` +
-        encodeURIComponent(`Blad bazy danych: ${cityError.message}`)
-    )
+    redirectWithError(`/admin/cities/${id}`, `Blad bazy danych: ${cityError.message}`)
   }
 
   if (currentPeriodId) {
@@ -151,12 +133,7 @@ export async function updateCity(formData: FormData): Promise<void> {
       .eq('id', currentPeriodId)
 
     if (updatePeriodError) {
-      redirect(
-        `/admin/cities/${id}?error=` +
-          encodeURIComponent(
-            `Blad relacji miasto-kraj: ${updatePeriodError.message}`
-          )
-      )
+      redirectWithError(`/admin/cities/${id}`, `Blad relacji miasto-kraj: ${updatePeriodError.message}`)
     }
   } else {
     const { error: createPeriodError } = await supabase
@@ -171,23 +148,18 @@ export async function updateCity(formData: FormData): Promise<void> {
       })
 
     if (createPeriodError) {
-      redirect(
-        `/admin/cities/${id}?error=` +
-          encodeURIComponent(
-            `Blad relacji miasto-kraj: ${createPeriodError.message}`
-          )
-      )
+      redirectWithError(`/admin/cities/${id}`, `Blad relacji miasto-kraj: ${createPeriodError.message}`)
     }
   }
 
-  redirect(`/admin/cities/${id}?saved=1`)
+  redirectWithSaved(`/admin/cities/${id}`)
 }
 
 export async function deleteCity(formData: FormData): Promise<void> {
-  const id = (formData.get('id') as string | null)?.trim() ?? ''
+  const id = getTrimmedString(formData, 'id')
 
   if (!id) {
-    redirect('/admin/cities?error=' + encodeURIComponent('Brak ID miasta do usuniecia.'))
+    redirectWithError('/admin/cities', 'Brak ID miasta do usuniecia.')
   }
 
   const supabase = createServiceRoleClient()
@@ -204,22 +176,17 @@ export async function deleteCity(formData: FormData): Promise<void> {
     .eq('city_id', id)
 
   if (periodsError) {
-    redirect(
-      `/admin/cities/${id}?error=` +
-        encodeURIComponent(`Nie mozna usunac relacji miasta: ${periodsError.message}`)
-    )
+    redirectWithError(`/admin/cities/${id}`, `Nie mozna usunac relacji miasta: ${periodsError.message}`)
   }
 
   const { error: cityError } = await supabase.from('tbl_Cities').delete().eq('id', id)
 
   if (cityError) {
-    redirect(
-      `/admin/cities/${id}?error=` +
-        encodeURIComponent(
-          `Nie mozna usunac miasta (prawdopodobnie jest uzywane): ${cityError.message}`
-        )
+    redirectWithError(
+      `/admin/cities/${id}`,
+      `Nie mozna usunac miasta (prawdopodobnie jest uzywane): ${cityError.message}`
     )
   }
 
-  redirect('/admin/cities?added=' + encodeURIComponent(`Usunieto miasto: ${city?.city_name ?? id}`))
+  redirectWithAdded('/admin/cities', `Usunieto miasto: ${city?.city_name ?? id}`)
 }

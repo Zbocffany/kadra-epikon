@@ -1,8 +1,17 @@
 'use server'
 
-import { redirect } from 'next/navigation'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import type { InlineCreateState } from '@/lib/types/admin'
+import {
+  getTrimmedNullable,
+  getTrimmedString,
+  inlineError,
+  inlineSuccess,
+  mapDbError,
+  redirectWithAdded,
+  redirectWithError,
+  redirectWithSaved,
+} from '@/lib/actions/admin'
 
 function normalizeFifaCode(raw: FormDataEntryValue | null): string | null {
   const val = (typeof raw === 'string' ? raw : '').trim().toUpperCase()
@@ -10,16 +19,16 @@ function normalizeFifaCode(raw: FormDataEntryValue | null): string | null {
 }
 
 export async function createCountry(formData: FormData): Promise<void> {
-  const name = (formData.get('name') as string | null)?.trim() ?? ''
+  const name = getTrimmedString(formData, 'name')
   const fifaCode = normalizeFifaCode(formData.get('fifa_code'))
-  const federationId = (formData.get('federation_id') as string | null)?.trim() || null
+  const federationId = getTrimmedNullable(formData, 'federation_id')
 
   if (!name) {
-    redirect('/admin/countries?error=' + encodeURIComponent('Nazwa kraju jest wymagana.'))
+    redirectWithError('/admin/countries', 'Nazwa kraju jest wymagana.')
   }
 
   if (fifaCode && !/^[A-Z]{3}$/.test(fifaCode)) {
-    redirect('/admin/countries?error=' + encodeURIComponent('Kod FIFA musi miec 3 wielkie litery, np. POL.'))
+    redirectWithError('/admin/countries', 'Kod FIFA musi miec 3 wielkie litery, np. POL.')
   }
 
   const supabase = createServiceRoleClient()
@@ -34,39 +43,31 @@ export async function createCountry(formData: FormData): Promise<void> {
   if (error) {
     if (error.code === '23505') {
       if (error.message.includes('fifa_code')) {
-        redirect('/admin/countries?error=' + encodeURIComponent(`Kod FIFA ${fifaCode} juz istnieje.`))
+        redirectWithError('/admin/countries', `Kod FIFA ${fifaCode} juz istnieje.`)
       }
-      redirect('/admin/countries?error=' + encodeURIComponent('Rekord z taka wartoscia juz istnieje.'))
+      redirectWithError('/admin/countries', 'Rekord z taka wartoscia juz istnieje.')
     }
 
-    redirect('/admin/countries?error=' + encodeURIComponent(`Blad bazy danych: ${error.message}`))
+    redirectWithError('/admin/countries', `Blad bazy danych: ${error.message}`)
   }
 
-  redirect('/admin/countries?added=' + encodeURIComponent(name))
+  redirectWithAdded('/admin/countries', name)
 }
 
 export async function createCountryInline(
   prevState: InlineCreateState,
   formData: FormData
 ): Promise<InlineCreateState> {
-  const name = (formData.get('name') as string | null)?.trim() ?? ''
+  const name = getTrimmedString(formData, 'name')
   const fifaCode = normalizeFifaCode(formData.get('fifa_code'))
-  const federationId = (formData.get('federation_id') as string | null)?.trim() || null
+  const federationId = getTrimmedNullable(formData, 'federation_id')
 
   if (!name) {
-    return {
-      ok: false,
-      error: 'Nazwa kraju jest wymagana.',
-      version: prevState.version + 1,
-    }
+    return inlineError(prevState, 'Nazwa kraju jest wymagana.')
   }
 
   if (fifaCode && !/^[A-Z]{3}$/.test(fifaCode)) {
-    return {
-      ok: false,
-      error: 'Kod FIFA musi miec 3 wielkie litery, np. POL.',
-      version: prevState.version + 1,
-    }
+    return inlineError(prevState, 'Kod FIFA musi miec 3 wielkie litery, np. POL.')
   }
 
   const supabase = createServiceRoleClient()
@@ -80,22 +81,10 @@ export async function createCountryInline(
   })
 
   if (error) {
-    return {
-      ok: false,
-      error:
-        error.code === '23505'
-          ? 'Rekord z taka wartoscia juz istnieje.'
-          : `Blad bazy danych: ${error.message}`,
-      version: prevState.version + 1,
-    }
+    return inlineError(prevState, mapDbError(error, 'Rekord z taka wartoscia juz istnieje.'))
   }
 
-  return {
-    ok: true,
-    id,
-    label: name,
-    version: prevState.version + 1,
-  }
+  return inlineSuccess(prevState, id, name)
 }
 
 export async function createFederationInline(
@@ -161,24 +150,21 @@ export async function createFederationInline(
 }
 
 export async function updateCountry(formData: FormData): Promise<void> {
-  const id = (formData.get('id') as string | null)?.trim() ?? ''
-  const name = (formData.get('name') as string | null)?.trim() ?? ''
+  const id = getTrimmedString(formData, 'id')
+  const name = getTrimmedString(formData, 'name')
   const fifaCode = normalizeFifaCode(formData.get('fifa_code'))
-  const federationId = (formData.get('federation_id') as string | null)?.trim() || null
+  const federationId = getTrimmedNullable(formData, 'federation_id')
 
   if (!id) {
-    redirect('/admin/countries?error=' + encodeURIComponent('Brak ID kraju do edycji.'))
+    redirectWithError('/admin/countries', 'Brak ID kraju do edycji.')
   }
 
   if (!name) {
-    redirect(`/admin/countries/${id}?error=` + encodeURIComponent('Nazwa kraju jest wymagana.'))
+    redirectWithError(`/admin/countries/${id}`, 'Nazwa kraju jest wymagana.')
   }
 
   if (fifaCode && !/^[A-Z]{3}$/.test(fifaCode)) {
-    redirect(
-      `/admin/countries/${id}?error=` +
-        encodeURIComponent('Kod FIFA musi miec 3 wielkie litery, np. POL.')
-    )
+    redirectWithError(`/admin/countries/${id}`, 'Kod FIFA musi miec 3 wielkie litery, np. POL.')
   }
 
   const supabase = createServiceRoleClient()
@@ -194,26 +180,20 @@ export async function updateCountry(formData: FormData): Promise<void> {
 
   if (error) {
     if (error.code === '23505') {
-      redirect(
-        `/admin/countries/${id}?error=` +
-          encodeURIComponent('Rekord z taka wartoscia juz istnieje.')
-      )
+      redirectWithError(`/admin/countries/${id}`, 'Rekord z taka wartoscia juz istnieje.')
     }
 
-    redirect(
-      `/admin/countries/${id}?error=` +
-        encodeURIComponent(`Blad bazy danych: ${error.message}`)
-    )
+    redirectWithError(`/admin/countries/${id}`, `Blad bazy danych: ${error.message}`)
   }
 
-  redirect(`/admin/countries/${id}?saved=1`)
+  redirectWithSaved(`/admin/countries/${id}`)
 }
 
 export async function deleteCountry(formData: FormData): Promise<void> {
-  const id = (formData.get('id') as string | null)?.trim() ?? ''
+  const id = getTrimmedString(formData, 'id')
 
   if (!id) {
-    redirect('/admin/countries?error=' + encodeURIComponent('Brak ID kraju do usuniecia.'))
+    redirectWithError('/admin/countries', 'Brak ID kraju do usuniecia.')
   }
 
   const supabase = createServiceRoleClient()
@@ -227,16 +207,11 @@ export async function deleteCountry(formData: FormData): Promise<void> {
   const { error } = await supabase.from('tbl_Countries').delete().eq('id', id)
 
   if (error) {
-    redirect(
-      `/admin/countries/${id}?error=` +
-        encodeURIComponent(
-          `Nie mozna usunac kraju (prawdopodobnie jest uzywany): ${error.message}`
-        )
+    redirectWithError(
+      `/admin/countries/${id}`,
+      `Nie mozna usunac kraju (prawdopodobnie jest uzywany): ${error.message}`
     )
   }
 
-  redirect(
-    '/admin/countries?added=' +
-      encodeURIComponent(`Usunieto kraj: ${country?.name ?? id}`)
-  )
+  redirectWithAdded('/admin/countries', `Usunieto kraj: ${country?.name ?? id}`)
 }

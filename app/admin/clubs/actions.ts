@@ -1,14 +1,20 @@
 'use server'
 
-import { redirect } from 'next/navigation'
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import {
+  getTrimmedNullable,
+  getTrimmedString,
+  redirectWithAdded,
+  redirectWithError,
+  redirectWithSaved,
+} from '@/lib/actions/admin'
 
 export async function createClub(formData: FormData): Promise<void> {
-  const name = (formData.get('name') as string | null)?.trim() ?? ''
-  const club_city_id = (formData.get('club_city_id') as string | null) || null
+  const name = getTrimmedString(formData, 'name')
+  const club_city_id = getTrimmedNullable(formData, 'club_city_id')
 
   if (!name) {
-    redirect('/admin/clubs?error=' + encodeURIComponent('Nazwa klubu jest wymagana.'))
+    redirectWithError('/admin/clubs', 'Nazwa klubu jest wymagana.')
   }
 
   const supabase = createServiceRoleClient()
@@ -21,25 +27,25 @@ export async function createClub(formData: FormData): Promise<void> {
 
   if (error) {
     if (error.code === '23505') {
-      redirect('/admin/clubs?error=' + encodeURIComponent(`Klub o nazwie „${name}" już istnieje.`))
+      redirectWithError('/admin/clubs', `Klub o nazwie „${name}" już istnieje.`)
     }
-    redirect('/admin/clubs?error=' + encodeURIComponent(`Błąd bazy danych: ${error.message}`))
+    redirectWithError('/admin/clubs', `Błąd bazy danych: ${error.message}`)
   }
 
-  redirect('/admin/clubs?added=' + encodeURIComponent(name))
+  redirectWithAdded('/admin/clubs', name)
 }
 
 export async function updateClub(formData: FormData): Promise<void> {
-  const id = (formData.get('id') as string | null)?.trim() ?? ''
-  const name = (formData.get('name') as string | null)?.trim() ?? ''
-  const club_city_id = (formData.get('club_city_id') as string | null)?.trim() || null
+  const id = getTrimmedString(formData, 'id')
+  const name = getTrimmedString(formData, 'name')
+  const club_city_id = getTrimmedNullable(formData, 'club_city_id')
 
   if (!id) {
-    redirect('/admin/clubs?error=' + encodeURIComponent('Brak ID klubu do edycji.'))
+    redirectWithError('/admin/clubs', 'Brak ID klubu do edycji.')
   }
 
   if (!name) {
-    redirect(`/admin/clubs/${id}?error=` + encodeURIComponent('Nazwa klubu jest wymagana.'))
+    redirectWithError(`/admin/clubs/${id}`, 'Nazwa klubu jest wymagana.')
   }
 
   const supabase = createServiceRoleClient()
@@ -54,25 +60,19 @@ export async function updateClub(formData: FormData): Promise<void> {
 
   if (error) {
     if (error.code === '23505') {
-      redirect(
-        `/admin/clubs/${id}?error=` +
-          encodeURIComponent('Klub o tej nazwie juz istnieje.')
-      )
+      redirectWithError(`/admin/clubs/${id}`, 'Klub o tej nazwie juz istnieje.')
     }
-    redirect(
-      `/admin/clubs/${id}?error=` +
-        encodeURIComponent(`Blad bazy danych: ${error.message}`)
-    )
+    redirectWithError(`/admin/clubs/${id}`, `Blad bazy danych: ${error.message}`)
   }
 
-  redirect(`/admin/clubs/${id}?saved=1`)
+  redirectWithSaved(`/admin/clubs/${id}`)
 }
 
 export async function deleteClub(formData: FormData): Promise<void> {
-  const id = (formData.get('id') as string | null)?.trim() ?? ''
+  const id = getTrimmedString(formData, 'id')
 
   if (!id) {
-    redirect('/admin/clubs?error=' + encodeURIComponent('Brak ID klubu do usuniecia.'))
+    redirectWithError('/admin/clubs', 'Brak ID klubu do usuniecia.')
   }
 
   const supabase = createServiceRoleClient()
@@ -86,13 +86,11 @@ export async function deleteClub(formData: FormData): Promise<void> {
   const { error } = await supabase.from('tbl_Clubs').delete().eq('id', id)
 
   if (error) {
-    redirect(
-      `/admin/clubs/${id}?error=` +
-        encodeURIComponent(
-          `Nie mozna usunac klubu (prawdopodobnie jest uzywany): ${error.message}`
-        )
+    redirectWithError(
+      `/admin/clubs/${id}`,
+      `Nie mozna usunac klubu (prawdopodobnie jest uzywany): ${error.message}`
     )
   }
 
-  redirect('/admin/clubs?added=' + encodeURIComponent(`Usunieto klub: ${club?.name ?? id}`))
+  redirectWithAdded('/admin/clubs', `Usunieto klub: ${club?.name ?? id}`)
 }
