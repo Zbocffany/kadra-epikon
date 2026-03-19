@@ -1,14 +1,14 @@
 import Link from 'next/link'
 import { createPerson } from './actions'
-import { getAdminCities } from '@/lib/db/clubs'
-import type { AdminCity } from '@/lib/db/clubs'
+import { createCityInline } from '@/app/admin/cities/actions'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCountryOption } from '@/lib/db/cities'
-import { getAdminPeople, getPersonDisplayName } from '@/lib/db/people'
-import type { AdminPersonListItem } from '@/lib/db/people'
+import { getAdminPeople, getPersonDisplayName, getAdminPersonBirthCityOptions } from '@/lib/db/people'
+import type { AdminPersonBirthCityOption, AdminPersonListItem } from '@/lib/db/people'
 import AdminListLayout from '@/components/admin/AdminListLayout'
 import AdminTable from '@/components/admin/AdminTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
+import PersonBirthplaceFields from '@/components/admin/PersonBirthplaceFields'
 
 type SearchParams = Promise<{ added?: string; error?: string }>
 
@@ -18,7 +18,7 @@ function PeopleForm({
   added,
   error,
 }: {
-  cities: AdminCity[]
+  cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
   added?: string
   error?: string
@@ -73,48 +73,8 @@ function PeopleForm({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="birth_date" className="text-sm font-medium text-neutral-300">Data urodzenia</label>
-          <input
-            id="birth_date"
-            name="birth_date"
-            type="date"
-            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-          />
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="birth_city_id" className="text-sm font-medium text-neutral-300">Miasto urodzenia</label>
-          <select
-            id="birth_city_id"
-            name="birth_city_id"
-            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-          >
-            <option value="">— brak —</option>
-            {cities.map((city) => (
-              <option key={city.id} value={city.id}>
-                {city.city_name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="birth_country_id" className="text-sm font-medium text-neutral-300">Kraj urodzenia</label>
-          <select
-            id="birth_country_id"
-            name="birth_country_id"
-            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-          >
-            <option value="">— brak —</option>
-            {countries.map((country) => (
-              <option key={country.id} value={country.id}>
-                {country.name}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="mt-4">
+        <PersonBirthplaceFields cities={cities} countries={countries} createCityAction={createCityInline} />
       </div>
 
       <div className="mt-4 flex items-center gap-2">
@@ -146,14 +106,14 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
   const { added, error: formError } = await searchParams
 
   let people: AdminPersonListItem[] = []
-  let cities: AdminCity[] = []
+  let cities: AdminPersonBirthCityOption[] = []
   let countries: AdminCountryOption[] = []
   let fetchError: string | null = null
 
   try {
     ;[people, cities, countries] = await Promise.all([
       getAdminPeople(),
-      getAdminCities(),
+      getAdminPersonBirthCityOptions(),
       getAdminCountriesOptions(),
     ])
   } catch (err) {

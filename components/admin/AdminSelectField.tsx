@@ -22,6 +22,7 @@ interface AdminSelectFieldProps<T extends AdminSelectOption = AdminSelectOption>
   addDialogTitle: string
   emptyResultsMessage: string
   createAction: (prevState: InlineCreateState, formData: FormData) => Promise<InlineCreateState>
+  onSelectedIdChange?: (selectedId: string) => void
   /**
    * Custom form content to render inside the inline create dialog.
    * The dialog handles open/close buttons, so only render the form fields.
@@ -69,11 +70,18 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   addDialogTitle,
   emptyResultsMessage,
   createAction,
+  onSelectedIdChange,
   inlineForm,
 }: AdminSelectFieldProps<T>) {
   const [allOptions, setAllOptions] = useState<T[]>(options)
-  const [query, setQuery] = useState('')
   const [value, setValue] = useState(selectedId ?? '')
+  const [query, setQuery] = useState(() => {
+    if (!selectedId) return ''
+    const selected = options.find((opt) => opt.id === selectedId)
+    if (!selected) return ''
+    const lbl = selected[displayKey]
+    return typeof lbl === 'string' ? lbl : String(selected.label ?? selected.short_name ?? '')
+  })
   const [dialogOpen, setDialogOpen] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
   const [createError, setCreateError] = useState<string | undefined>()
@@ -119,6 +127,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
           return next
         })
         setValue(newId)
+        onSelectedIdChange?.(newId)
         setQuery(newLabel)
         setDialogOpen(false)
       } else {
@@ -181,6 +190,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
             onChange={(e) => {
               const id = e.target.value
               setValue(id)
+              onSelectedIdChange?.(id)
               const selected = allOptions.find((opt) => opt.id === id)
               if (selected) setQuery(getDisplayLabel(selected))
               setIsOpen(false)

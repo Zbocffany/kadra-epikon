@@ -1,8 +1,12 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { createCityInline } from '@/app/admin/cities/actions'
 import { deletePerson, updatePerson } from '../actions'
-import { getAdminPeople, getAdminPersonDetails, getPersonDisplayName } from '@/lib/db/people'
-import { getAdminCities } from '@/lib/db/clubs'
+import {
+  getAdminPersonBirthCityOptions,
+  getAdminPersonDetails,
+  getPersonDisplayName,
+} from '@/lib/db/people'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import {
   DetailsPageContainer,
@@ -10,6 +14,7 @@ import {
   DetailsPageContent,
 } from '@/components/admin/DetailsPageLayout'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
+import PersonBirthplaceFields from '@/components/admin/PersonBirthplaceFields'
 
 type Params = DetailPageParams
 type SearchParams = DetailPageSearchParams
@@ -32,7 +37,7 @@ export default async function AdminPersonDetailsPage({
 
   const [person, cities, countries] = await Promise.all([
     getAdminPersonDetails(id),
-    getAdminCities(),
+    getAdminPersonBirthCityOptions(),
     getAdminCountriesOptions(),
   ])
 
@@ -99,52 +104,14 @@ export default async function AdminPersonDetailsPage({
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="birth_date" className="text-sm font-medium text-neutral-300">Data urodzenia</label>
-                <input
-                  id="birth_date"
-                  name="birth_date"
-                  type="date"
-                  defaultValue={person.birth_date ?? ''}
-                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="birth_city_id" className="text-sm font-medium text-neutral-300">Miasto urodzenia</label>
-                <select
-                  id="birth_city_id"
-                  name="birth_city_id"
-                  defaultValue={person.birth_city_id ?? ''}
-                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-                >
-                  <option value="">— brak —</option>
-                  {cities.map((city) => (
-                    <option key={city.id} value={city.id}>
-                      {city.city_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="birth_country_id" className="text-sm font-medium text-neutral-300">Kraj urodzenia</label>
-                <select
-                  id="birth_country_id"
-                  name="birth_country_id"
-                  defaultValue={person.birth_country_id ?? ''}
-                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-                >
-                  <option value="">— brak —</option>
-                  {countries.map((country) => (
-                    <option key={country.id} value={country.id}>
-                      {country.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            <PersonBirthplaceFields
+              cities={cities}
+              countries={countries}
+              createCityAction={createCityInline}
+              defaultBirthDate={person.birth_date}
+              defaultCityId={person.birth_city_id}
+              defaultCountryId={person.birth_country_id}
+            />
 
             <div className="flex items-center gap-2">
               <input

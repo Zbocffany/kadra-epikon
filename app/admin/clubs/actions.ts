@@ -39,6 +39,7 @@ export async function updateClub(formData: FormData): Promise<void> {
   const id = getTrimmedString(formData, 'id')
   const name = getTrimmedString(formData, 'name')
   const club_city_id = getTrimmedNullable(formData, 'club_city_id')
+  const stadium_id = getTrimmedNullable(formData, 'stadium_id')
 
   if (!id) {
     redirectWithError('/admin/clubs', 'Brak ID klubu do edycji.')
@@ -55,6 +56,7 @@ export async function updateClub(formData: FormData): Promise<void> {
     .update({
       name,
       club_city_id,
+      stadium_id,
     })
     .eq('id', id)
 

@@ -2,8 +2,11 @@ import { notFound } from 'next/navigation'
 import { deleteClub, updateClub } from '../actions'
 import { getAdminCities, getAdminClubDetails } from '@/lib/db/clubs'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
+import { getAdminStadiumOptions } from '@/lib/db/stadiums'
+import type { AdminStadiumOption } from '@/lib/db/stadiums'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import { createCityInline } from '@/app/admin/cities/actions'
+import { createStadiumInline } from '@/app/admin/stadiums/actions'
 import {
   DetailsPageContainer,
   DetailsPageHeader,
@@ -13,6 +16,44 @@ import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin
 
 type Params = DetailPageParams
 type SearchParams = DetailPageSearchParams
+
+function StadiumInlineForm({ cities }: { cities: { id: string; city_name: string }[] }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="inline_stadium_name" className="text-xs text-neutral-400">
+          Nazwa stadionu
+        </label>
+        <input
+          id="inline_stadium_name"
+          name="name"
+          type="text"
+          required
+          className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+        />
+      </div>
+
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="inline_stadium_city" className="text-xs text-neutral-400">
+          Miasto stadionu
+        </label>
+        <select
+          id="inline_stadium_city"
+          name="stadium_city_id"
+          required
+          className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+        >
+          <option value="">— wybierz —</option>
+          {cities.map((city) => (
+            <option key={city.id} value={city.id}>
+              {city.city_name}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  )
+}
 
 export default async function AdminClubDetailsPage({
   params,
@@ -24,10 +65,11 @@ export default async function AdminClubDetailsPage({
   const { id } = await params
   const { mode, saved, error } = await searchParams
 
-  const [club, cities, countries] = await Promise.all([
+  const [club, cities, countries, stadiums] = await Promise.all([
     getAdminClubDetails(id),
     getAdminCities(),
     getAdminCountriesOptions(),
+    getAdminStadiumOptions(),
   ])
 
   if (!club) {
@@ -118,6 +160,20 @@ export default async function AdminClubDetailsPage({
                   </div>
                 )}
               />
+
+              <AdminSelectField
+                name="stadium_id"
+                label="Stadion"
+                selectedId={club.stadium_id}
+                options={(stadiums as AdminStadiumOption[]).map((s) => ({ id: s.id, label: s.name ?? '—' }))}
+                displayKey="label"
+                placeholder="Wpisz, aby filtrowac stadiony..."
+                addButtonLabel="+ Dodaj stadion"
+                addDialogTitle="Nowy stadion"
+                emptyResultsMessage="Brak wynikow — mozesz dodac nowy stadion ponizej."
+                createAction={createStadiumInline}
+                inlineForm={<StadiumInlineForm cities={cities} />}
+              />
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
@@ -155,7 +211,7 @@ export default async function AdminClubDetailsPage({
             <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
               <p className="text-xs uppercase tracking-wide text-neutral-500">Stadion</p>
               <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {club.stadium_names.length ? club.stadium_names.join(', ') : '—'}
+                {club.stadium_name ?? '—'}
               </p>
             </div>
           </div>

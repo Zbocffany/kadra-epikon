@@ -12,7 +12,8 @@ export type AdminClubDetails = {
   club_city_id: string | null
   city_name: string | null
   country_name: string | null
-  stadium_names: string[]
+  stadium_id: string | null
+  stadium_name: string | null
 }
 
 export type AdminCity = {
@@ -72,7 +73,7 @@ export async function getAdminClubDetails(
 
   const { data: club, error: clubError } = await supabase
     .from('tbl_Clubs')
-    .select('id, name, club_city_id')
+    .select('id, name, club_city_id, stadium_id')
     .eq('id', id)
     .maybeSingle()
 
@@ -86,14 +87,15 @@ export async function getAdminClubDetails(
       club_city_id: null,
       city_name: null,
       country_name: null,
-      stadium_names: [],
+      stadium_id: club.stadium_id ?? null,
+      stadium_name: null,
     }
   }
 
   const [
     { data: city, error: cityError },
     { data: periods, error: periodError },
-    { data: stadiums, error: stadiumError },
+    { data: stadium, error: stadiumError },
   ] = await Promise.all([
     supabase
       .from('tbl_Cities')
@@ -104,11 +106,13 @@ export async function getAdminClubDetails(
       .from('tbl_City_Country_Periods')
       .select('country_id, valid_from, valid_to')
       .eq('city_id', club.club_city_id),
-    supabase
-      .from('tbl_Stadiums')
-      .select('name')
-      .eq('stadium_city_id', club.club_city_id)
-      .order('name', { ascending: true }),
+    club.stadium_id
+      ? supabase
+          .from('tbl_Stadiums')
+          .select('name')
+          .eq('id', club.stadium_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null as { name: string | null } | null, error: null }),
   ])
 
   if (cityError) throw new Error(`tbl_Cities: ${cityError.message}`)
@@ -157,6 +161,7 @@ export async function getAdminClubDetails(
     club_city_id: club.club_city_id,
     city_name: city?.city_name ?? null,
     country_name: countryName,
-    stadium_names: (stadiums ?? []).map((s) => s.name).filter(Boolean),
+    stadium_id: club.stadium_id ?? null,
+    stadium_name: stadium?.name ?? null,
   }
 }

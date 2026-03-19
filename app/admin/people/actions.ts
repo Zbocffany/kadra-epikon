@@ -3,10 +3,40 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getTrimmedNullable, getTrimmedString, redirectWithAdded, redirectWithError, redirectWithSaved } from '@/lib/actions/admin'
 
-function resolveBirthCountryId(birthCityId: string | null, birthCountryId: string | null): string | null {
-  // If city is set, country should be derived from the city context.
-  if (birthCityId) return null
-  return birthCountryId
+async function resolveBirthCountryId(
+  birthCityId: string | null,
+  birthCountryId: string | null,
+  supabase: ReturnType<typeof createServiceRoleClient>
+): Promise<string | null> {
+  if (!birthCityId) {
+    return birthCountryId
+  }
+
+  const { data: periods, error: periodsError } = await supabase
+    .from('tbl_City_Country_Periods')
+    .select('country_id, valid_from, valid_to')
+    .eq('city_id', birthCityId)
+
+  if (periodsError) {
+    throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
+  }
+
+  const sortedPeriods = [...(periods ?? [])].sort((a, b) => {
+    const aCurrent = a.valid_to === null
+    const bCurrent = b.valid_to === null
+
+    if (aCurrent !== bCurrent) return aCurrent ? -1 : 1
+
+    const aTo = a.valid_to ? new Date(a.valid_to).getTime() : Number.NEGATIVE_INFINITY
+    const bTo = b.valid_to ? new Date(b.valid_to).getTime() : Number.NEGATIVE_INFINITY
+    if (aTo !== bTo) return bTo - aTo
+
+    const aFrom = a.valid_from ? new Date(a.valid_from).getTime() : Number.NEGATIVE_INFINITY
+    const bFrom = b.valid_from ? new Date(b.valid_from).getTime() : Number.NEGATIVE_INFINITY
+    return bFrom - aFrom
+  })
+
+  return sortedPeriods[0]?.country_id ?? birthCountryId
 }
 
 function ensureAnyName(firstName: string | null, lastName: string | null, nickname: string | null): boolean {
@@ -20,7 +50,6 @@ export async function createPerson(formData: FormData): Promise<void> {
   const birthDate = getTrimmedNullable(formData, 'birth_date')
   const birthCityId = getTrimmedNullable(formData, 'birth_city_id')
   const birthCountryRaw = getTrimmedNullable(formData, 'birth_country_id')
-  const birthCountryId = resolveBirthCountryId(birthCityId, birthCountryRaw)
   const isActive = getTrimmedString(formData, 'is_active') === 'on'
 
   if (!ensureAnyName(firstName, lastName, nickname)) {
@@ -28,6 +57,14 @@ export async function createPerson(formData: FormData): Promise<void> {
   }
 
   const supabase = createServiceRoleClient()
+  let birthCountryId: string | null
+
+  try {
+    birthCountryId = await resolveBirthCountryId(birthCityId, birthCountryRaw, supabase)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Nie udalo sie ustalic kraju urodzenia.'
+    redirectWithError('/admin/people', message)
+  }
 
   const { error } = await supabase.from('tbl_People').insert({
     id: crypto.randomUUID(),
@@ -56,7 +93,6 @@ export async function updatePerson(formData: FormData): Promise<void> {
   const birthDate = getTrimmedNullable(formData, 'birth_date')
   const birthCityId = getTrimmedNullable(formData, 'birth_city_id')
   const birthCountryRaw = getTrimmedNullable(formData, 'birth_country_id')
-  const birthCountryId = resolveBirthCountryId(birthCityId, birthCountryRaw)
   const isActive = getTrimmedString(formData, 'is_active') === 'on'
 
   if (!id) {
@@ -68,6 +104,14 @@ export async function updatePerson(formData: FormData): Promise<void> {
   }
 
   const supabase = createServiceRoleClient()
+  let birthCountryId: string | null
+
+  try {
+    birthCountryId = await resolveBirthCountryId(birthCityId, birthCountryRaw, supabase)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Nie udalo sie ustalic kraju urodzenia.'
+    redirectWithError(`/admin/people/${id}`, message)
+  }
 
   const { error } = await supabase
     .from('tbl_People')
