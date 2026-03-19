@@ -141,7 +141,15 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   }, [options])
 
   useEffect(() => {
-    setValue(selectedId ?? '')
+    const id = selectedId ?? ''
+    setValue(id)
+    if (!id) {
+      setQuery('')
+    } else {
+      const selected = allOptions.find((opt) => opt.id === id)
+      if (selected) setQuery(getDisplayLabel(selected))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId])
 
   const filteredOptions = useMemo(() => {
