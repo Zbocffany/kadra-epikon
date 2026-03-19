@@ -18,6 +18,25 @@ import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin
 type Params = DetailPageParams
 type SearchParams = DetailPageSearchParams
 
+const VOIVODESHIP_OPTIONS = [
+  'Dolnośląskie',
+  'Kujawsko-pomorskie',
+  'Lubelskie',
+  'Lubuskie',
+  'Łódzkie',
+  'Małopolskie',
+  'Mazowieckie',
+  'Opolskie',
+  'Podkarpackie',
+  'Podlaskie',
+  'Pomorskie',
+  'Śląskie',
+  'Świętokrzyskie',
+  'Warmińsko-mazurskie',
+  'Wielkopolskie',
+  'Zachodniopomorskie',
+] as const
+
 export default async function AdminCityDetailsPage({
   params,
   searchParams,
@@ -66,21 +85,21 @@ export default async function AdminCityDetailsPage({
               value={city.current_period_id ?? ''}
             />
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="city_name" className="text-sm font-medium text-neutral-300">
-                  Nazwa miasta <span className="text-red-400">*</span>
-                </label>
-                <input
-                  id="city_name"
-                  name="city_name"
-                  type="text"
-                  required
-                  defaultValue={city.city_name ?? ''}
-                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-                />
-              </div>
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="city_name" className="text-sm font-medium text-neutral-300">
+                Nazwa miasta <span className="text-red-400">*</span>
+              </label>
+              <input
+                id="city_name"
+                name="city_name"
+                type="text"
+                required
+                defaultValue={city.city_name ?? ''}
+                className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+              />
+            </div>
 
+            <div className="grid gap-4 sm:grid-cols-2">
               <AdminSelectField
                 name="country_id"
                 label="Kraj"
@@ -142,6 +161,25 @@ export default async function AdminCityDetailsPage({
                   </div>
                 )}
               />
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="voivodeship" className="text-sm font-medium text-neutral-300">
+                  Wojewodztwo
+                </label>
+                <select
+                  id="voivodeship"
+                  name="voivodeship"
+                  defaultValue={city.voivodeship ?? ''}
+                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+                >
+                  <option value="">— brak —</option>
+                  {VOIVODESHIP_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2">
@@ -161,11 +199,20 @@ export default async function AdminCityDetailsPage({
           </form>
         }
         viewContent={
-          <div className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-            <p className="text-xs uppercase tracking-wide text-neutral-500">Kraj</p>
-            <p className="mt-2 text-lg font-semibold text-neutral-100">
-              {city.country_name ?? '—'}
-            </p>
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Kraj</p>
+              <p className="mt-2 text-lg font-semibold text-neutral-100">
+                {city.country_name ?? '—'}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Wojewodztwo</p>
+              <p className="mt-2 text-lg font-semibold text-neutral-100">
+                {city.voivodeship ?? '—'}
+              </p>
+            </div>
           </div>
         }
       />

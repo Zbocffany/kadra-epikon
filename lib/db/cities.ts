@@ -25,6 +25,7 @@ export type AdminCityDetails = {
   current_country_id: string | null
   current_period_id: string | null
   country_name: string | null
+  voivodeship: string | null
 }
 
 function sortPeriods(periods: CityCountryPeriod[]): CityCountryPeriod[] {
@@ -121,7 +122,7 @@ export async function getAdminCityDetails(id: string): Promise<AdminCityDetails 
 
   const { data: city, error: cityError } = await supabase
     .from('tbl_Cities')
-    .select('id, city_name')
+    .select('id, city_name, voivodeship')
     .eq('id', id)
     .maybeSingle()
 
@@ -158,5 +159,6 @@ export async function getAdminCityDetails(id: string): Promise<AdminCityDetails 
     current_country_id: best?.country_id ?? null,
     current_period_id: best?.id ?? null,
     country_name: countryName,
+    voivodeship: city.voivodeship ?? null,
   }
 }

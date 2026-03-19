@@ -3,6 +3,7 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import type { InlineCreateState } from '@/lib/types/admin'
 import {
+  getTrimmedNullable,
   getTrimmedString,
   inlineError,
   inlineSuccess,
@@ -101,6 +102,7 @@ export async function updateCity(formData: FormData): Promise<void> {
   const id = getTrimmedString(formData, 'id')
   const cityName = getTrimmedString(formData, 'city_name')
   const countryId = getTrimmedString(formData, 'country_id')
+  const voivodeship = getTrimmedNullable(formData, 'voivodeship')
   const currentPeriodId = getTrimmedString(formData, 'current_period_id')
 
   if (!id) {
@@ -119,7 +121,7 @@ export async function updateCity(formData: FormData): Promise<void> {
 
   const { error: cityError } = await supabase
     .from('tbl_Cities')
-    .update({ city_name: cityName })
+    .update({ city_name: cityName, voivodeship: voivodeship })
     .eq('id', id)
 
   if (cityError) {
