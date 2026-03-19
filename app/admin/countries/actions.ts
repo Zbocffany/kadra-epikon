@@ -216,108 +216,178 @@ export async function deleteCountry(formData: FormData): Promise<void> {
   redirectWithAdded('/admin/countries', `Usunieto kraj: ${country?.name ?? id}`)
 }
 
-export async function setSuccessor(formData: FormData): Promise<void> {
+export async function saveCountryHistoryEvent(formData: FormData): Promise<void> {
   const countryId = getTrimmedString(formData, 'country_id')
-  const postcountryId = getTrimmedString(formData, 'postcountry_id')
-
-  if (!countryId) redirectWithError('/admin/countries', 'Brak ID kraju.')
-  if (!postcountryId) redirectWithError(`/admin/countries/${countryId}`, 'Wybierz nastepnika.')
-
-  const supabase = createServiceRoleClient()
-
-  await supabase.from('tbl_Successions').delete().eq('precountry_id', countryId)
-
-  const { error } = await supabase.from('tbl_Successions').insert({
-    id: crypto.randomUUID(),
-    precountry_id: countryId,
-    postcountry_id: postcountryId,
-  })
-
-  if (error) {
-    if (error.code === '23505') {
-      redirectWithError(`/admin/countries/${countryId}`, 'Ten kraj jest juz nastepnikiem innego kraju.')
-    }
-    redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${error.message}`)
-  }
-
-  redirectWithSaved(`/admin/countries/${countryId}`)
-}
-
-export async function setPredecessor(formData: FormData): Promise<void> {
-  const countryId = getTrimmedString(formData, 'country_id')
-  const precountryId = getTrimmedString(formData, 'precountry_id')
-
-  if (!countryId) redirectWithError('/admin/countries', 'Brak ID kraju.')
-  if (!precountryId) redirectWithError(`/admin/countries/${countryId}`, 'Wybierz poprzednika.')
-
-  const supabase = createServiceRoleClient()
-
-  await supabase.from('tbl_Successions').delete().eq('postcountry_id', countryId)
-
-  const { error } = await supabase.from('tbl_Successions').insert({
-    id: crypto.randomUUID(),
-    precountry_id: precountryId,
-    postcountry_id: countryId,
-  })
-
-  if (error) {
-    if (error.code === '23505') {
-      redirectWithError(`/admin/countries/${countryId}`, 'Ten kraj juz ma przypisanego nastepnika.')
-    }
-    redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${error.message}`)
-  }
-
-  redirectWithSaved(`/admin/countries/${countryId}`)
-}
-
-export async function clearSuccessor(formData: FormData): Promise<void> {
-  const countryId = getTrimmedString(formData, 'country_id')
-  if (!countryId) redirectWithError('/admin/countries', 'Brak ID kraju.')
-
-  const supabase = createServiceRoleClient()
-  await supabase.from('tbl_Successions').delete().eq('precountry_id', countryId)
-
-  redirectWithSaved(`/admin/countries/${countryId}`)
-}
-
-export async function clearPredecessor(formData: FormData): Promise<void> {
-  const countryId = getTrimmedString(formData, 'country_id')
-  if (!countryId) redirectWithError('/admin/countries', 'Brak ID kraju.')
-
-  const supabase = createServiceRoleClient()
-  await supabase.from('tbl_Successions').delete().eq('postcountry_id', countryId)
-
-  redirectWithSaved(`/admin/countries/${countryId}`)
-}
-
-export async function addCountryHistoryEvent(formData: FormData): Promise<void> {
-  const countryId = getTrimmedString(formData, 'country_id')
+  const eventId = getTrimmedNullable(formData, 'event_id')
   const title = getTrimmedNullable(formData, 'title')
   const description = getTrimmedNullable(formData, 'description')
   const eventType = getTrimmedNullable(formData, 'event_type')
   const eventDateRaw = getTrimmedNullable(formData, 'event_date')
   const eventDatePrecision = getTrimmedNullable(formData, 'event_date_precision')
   const eventOrderRaw = getTrimmedNullable(formData, 'event_order')
+  const predecessorId = getTrimmedNullable(formData, 'predecessor_id')
+  const successorId = getTrimmedNullable(formData, 'successor_id')
 
   if (!countryId) redirectWithError('/admin/countries', 'Brak ID kraju.')
-  if (!title) redirectWithError(`/admin/countries/${countryId}`, 'Tytuł zdarzenia jest wymagany.')
+  if (!title) redirectWithError(`/admin/countries/${countryId}`, 'Tytul zdarzenia jest wymagany.')
+
+  if (predecessorId && predecessorId === countryId) {
+    redirectWithError(`/admin/countries/${countryId}`, 'Poprzednik nie moze byc tym samym krajem.')
+  }
+
+  if (successorId && successorId === countryId) {
+    redirectWithError(`/admin/countries/${countryId}`, 'Nastepnik nie moze byc tym samym krajem.')
+  }
 
   const eventOrder = eventOrderRaw ? parseInt(eventOrderRaw, 10) : null
+  const eventDate = eventDateRaw || null
+  const precision = eventDate ? (eventDatePrecision || 'DAY') : null
 
   const supabase = createServiceRoleClient()
-  const { error } = await supabase.from('tbl_Country_History').insert({
-    id: crypto.randomUUID(),
-    country_id: countryId,
-    title,
-    description,
-    event_type: eventType,
-    event_date: eventDateRaw || null,
-    event_date_precision: eventDateRaw ? (eventDatePrecision || 'DAY') : null,
-    event_order: eventOrder,
-  })
+  const finalEventId = eventId ?? crypto.randomUUID()
 
-  if (error) {
-    redirectWithError(`/admin/countries/${countryId}`, `Błąd bazy danych: ${error.message}`)
+  if (eventId) {
+    const { error: updateError } = await supabase
+      .from('tbl_Country_History')
+      .update({
+        title,
+        description,
+        event_type: eventType,
+        event_date: eventDate,
+        event_date_precision: precision,
+        event_order: eventOrder,
+      })
+      .eq('id', eventId)
+      .eq('country_id', countryId)
+
+    if (updateError) {
+      redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${updateError.message}`)
+    }
+  } else {
+    const { error: insertError } = await supabase.from('tbl_Country_History').insert({
+      id: finalEventId,
+      country_id: countryId,
+      title,
+      description,
+      event_type: eventType,
+      event_date: eventDate,
+      event_date_precision: precision,
+      event_order: eventOrder,
+    })
+
+    if (insertError) {
+      redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${insertError.message}`)
+    }
+  }
+
+  // Successor relation: current country -> successor
+  if (successorId) {
+    const { data: existingSuccessor, error: existingSuccessorError } = await supabase
+      .from('tbl_Successions')
+      .select('id')
+      .eq('precountry_id', countryId)
+      .maybeSingle()
+
+    if (existingSuccessorError) {
+      redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${existingSuccessorError.message}`)
+    }
+
+    if (existingSuccessor) {
+      const { error: updateSuccessorError } = await supabase
+        .from('tbl_Successions')
+        .update({
+          postcountry_id: successorId,
+          source_event_id: finalEventId,
+          effective_date: eventDate,
+        })
+        .eq('id', existingSuccessor.id)
+
+      if (updateSuccessorError) {
+        if (updateSuccessorError.code === '23505') {
+          redirectWithError(`/admin/countries/${countryId}`, 'Wybrany nastepnik jest juz przypisany do innej sukcesji.')
+        }
+        redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${updateSuccessorError.message}`)
+      }
+    } else {
+      const { error: insertSuccessorError } = await supabase.from('tbl_Successions').insert({
+        id: crypto.randomUUID(),
+        precountry_id: countryId,
+        postcountry_id: successorId,
+        source_event_id: finalEventId,
+        effective_date: eventDate,
+      })
+
+      if (insertSuccessorError) {
+        if (insertSuccessorError.code === '23505') {
+          redirectWithError(`/admin/countries/${countryId}`, 'Wybrany nastepnik jest juz przypisany do innej sukcesji.')
+        }
+        redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${insertSuccessorError.message}`)
+      }
+    }
+  } else {
+    const { error: deleteSuccessorError } = await supabase
+      .from('tbl_Successions')
+      .delete()
+      .eq('precountry_id', countryId)
+
+    if (deleteSuccessorError) {
+      redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${deleteSuccessorError.message}`)
+    }
+  }
+
+  // Predecessor relation: predecessor -> current country
+  if (predecessorId) {
+    const { data: existingPredecessor, error: existingPredecessorError } = await supabase
+      .from('tbl_Successions')
+      .select('id')
+      .eq('postcountry_id', countryId)
+      .maybeSingle()
+
+    if (existingPredecessorError) {
+      redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${existingPredecessorError.message}`)
+    }
+
+    if (existingPredecessor) {
+      const { error: updatePredecessorError } = await supabase
+        .from('tbl_Successions')
+        .update({
+          precountry_id: predecessorId,
+          source_event_id: finalEventId,
+          effective_date: eventDate,
+        })
+        .eq('id', existingPredecessor.id)
+
+      if (updatePredecessorError) {
+        if (updatePredecessorError.code === '23505') {
+          redirectWithError(`/admin/countries/${countryId}`, 'Wybrany poprzednik ma juz przypisanego innego sukcesora.')
+        }
+        redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${updatePredecessorError.message}`)
+      }
+    } else {
+      const { error: insertPredecessorError } = await supabase.from('tbl_Successions').insert({
+        id: crypto.randomUUID(),
+        precountry_id: predecessorId,
+        postcountry_id: countryId,
+        source_event_id: finalEventId,
+        effective_date: eventDate,
+      })
+
+      if (insertPredecessorError) {
+        if (insertPredecessorError.code === '23505') {
+          redirectWithError(`/admin/countries/${countryId}`, 'Wybrany poprzednik ma juz przypisanego innego sukcesora.')
+        }
+        redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${insertPredecessorError.message}`)
+      }
+    }
+  } else {
+    const { error: deletePredecessorError } = await supabase
+      .from('tbl_Successions')
+      .delete()
+      .eq('postcountry_id', countryId)
+
+    if (deletePredecessorError) {
+      redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${deletePredecessorError.message}`)
+    }
   }
 
   redirectWithSaved(`/admin/countries/${countryId}`)
@@ -330,6 +400,15 @@ export async function deleteCountryHistoryEvent(formData: FormData): Promise<voi
   if (!countryId || !eventId) redirectWithError('/admin/countries', 'Brak danych.')
 
   const supabase = createServiceRoleClient()
+  const { error: deleteSuccessionsError } = await supabase
+    .from('tbl_Successions')
+    .delete()
+    .eq('source_event_id', eventId)
+
+  if (deleteSuccessionsError) {
+    redirectWithError(`/admin/countries/${countryId}`, `Blad usuwania sukcesji: ${deleteSuccessionsError.message}`)
+  }
+
   const { error } = await supabase
     .from('tbl_Country_History')
     .delete()
@@ -337,7 +416,7 @@ export async function deleteCountryHistoryEvent(formData: FormData): Promise<voi
     .eq('country_id', countryId)
 
   if (error) {
-    redirectWithError(`/admin/countries/${countryId}`, `Błąd usuwania: ${error.message}`)
+    redirectWithError(`/admin/countries/${countryId}`, `Blad usuwania: ${error.message}`)
   }
 
   redirectWithSaved(`/admin/countries/${countryId}`)

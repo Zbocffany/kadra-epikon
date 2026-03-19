@@ -153,66 +153,74 @@ export async function getCountryHistory(
   return data ?? []
 }
 
-export type AdminSuccessionEntry = {
-  successionId: string
-  countryId: string
-  countryName: string
+export type AdminSuccessionStateEntry = {
+  succession_id: string
+  country_id: string
+  country_name: string
+  source_event_id: string | null
+  effective_date: string | null
 }
 
-export async function getSuccessorOf(
+export type AdminSuccessionState = {
+  predecessor: AdminSuccessionStateEntry | null
+  successor: AdminSuccessionStateEntry | null
+}
+
+export async function getCountrySuccessionState(
   countryId: string
-): Promise<AdminSuccessionEntry | null> {
+): Promise<AdminSuccessionState> {
   const supabase = createServiceRoleClient()
 
-  const { data: succession, error } = await supabase
+  const { data: successorRow, error: successorError } = await supabase
     .from('tbl_Successions')
-    .select('id, postcountry_id')
+    .select('id, postcountry_id, source_event_id, effective_date')
     .eq('precountry_id', countryId)
     .maybeSingle()
 
-  if (error) throw new Error(`tbl_Successions: ${error.message}`)
-  if (!succession) return null
-
-  const { data: country, error: countryError } = await supabase
-    .from('tbl_Countries')
-    .select('name')
-    .eq('id', succession.postcountry_id)
-    .maybeSingle()
-
-  if (countryError) throw new Error(`tbl_Countries: ${countryError.message}`)
-
-  return {
-    successionId: succession.id,
-    countryId: succession.postcountry_id,
-    countryName: country?.name ?? '—',
-  }
-}
-
-export async function getPredecessorOf(
-  countryId: string
-): Promise<AdminSuccessionEntry | null> {
-  const supabase = createServiceRoleClient()
-
-  const { data: succession, error } = await supabase
+  const { data: predecessorRow, error: predecessorError } = await supabase
     .from('tbl_Successions')
-    .select('id, precountry_id')
+    .select('id, precountry_id, source_event_id, effective_date')
     .eq('postcountry_id', countryId)
     .maybeSingle()
 
-  if (error) throw new Error(`tbl_Successions: ${error.message}`)
-  if (!succession) return null
+  if (successorError) throw new Error(`tbl_Successions: ${successorError.message}`)
+  if (predecessorError) throw new Error(`tbl_Successions: ${predecessorError.message}`)
 
-  const { data: country, error: countryError } = await supabase
-    .from('tbl_Countries')
-    .select('name')
-    .eq('id', succession.precountry_id)
-    .maybeSingle()
+  const countryIds = [
+    successorRow?.postcountry_id,
+    predecessorRow?.precountry_id,
+  ].filter(Boolean) as string[]
 
-  if (countryError) throw new Error(`tbl_Countries: ${countryError.message}`)
+  const countryNameMap = new Map<string, string>()
+
+  if (countryIds.length > 0) {
+    const { data: countries, error: countriesError } = await supabase
+      .from('tbl_Countries')
+      .select('id, name')
+      .in('id', countryIds)
+
+    if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
+    ;(countries ?? []).forEach((c) => countryNameMap.set(c.id, c.name ?? '—'))
+  }
 
   return {
-    successionId: succession.id,
-    countryId: succession.precountry_id,
-    countryName: country?.name ?? '—',
+    predecessor: predecessorRow
+      ? {
+          succession_id: predecessorRow.id,
+          country_id: predecessorRow.precountry_id,
+          country_name: countryNameMap.get(predecessorRow.precountry_id) ?? '—',
+          source_event_id: predecessorRow.source_event_id,
+          effective_date: predecessorRow.effective_date,
+        }
+      : null,
+    successor: successorRow
+      ? {
+          succession_id: successorRow.id,
+          country_id: successorRow.postcountry_id,
+          country_name: countryNameMap.get(successorRow.postcountry_id) ?? '—',
+          source_event_id: successorRow.source_event_id,
+          effective_date: successorRow.effective_date,
+        }
+      : null,
   }
 }
