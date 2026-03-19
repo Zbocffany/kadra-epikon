@@ -121,7 +121,7 @@ function CityCreateFields({
 }
 
 export default async function AdminCitiesPage({ searchParams }: { searchParams: SearchParams }) {
-  const { added, error: formError, create } = await searchParams
+  const { error: formError, create } = await searchParams
 
   let cities: AdminCityListItem[] = []
   let countries: AdminCountryOption[] = []
@@ -186,12 +186,6 @@ export default async function AdminCitiesPage({ searchParams }: { searchParams: 
     >
       {!fetchError && (
         <>
-          {added && (
-            <div className="rounded-lg border border-emerald-800 bg-emerald-950/50 px-4 py-3 text-sm text-emerald-300">
-              Miasto "{added}" zostało dodane.
-            </div>
-          )}
-
           <AdminTable data={cities} columns={columns} emptyMessage="Brak miast w bazie danych." />
           {cities.length > 0 && (
             <p className="text-xs text-neutral-500">Kliknij nazwę miasta, aby przejść do strony szczegółów.</p>
@@ -203,12 +197,6 @@ export default async function AdminCitiesPage({ searchParams }: { searchParams: 
                 <div className="mb-4">
                   <h2 className="text-lg font-semibold text-neutral-100">Dodaj miasto</h2>
                 </div>
-
-                {formError && (
-                  <div className="mb-5 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
-                    {formError}
-                  </div>
-                )}
 
                 <form action={createCity} className="space-y-4">
                   <CityCreateFields countries={countries} federations={federations} />

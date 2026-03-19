@@ -65,26 +65,12 @@ export function DetailsPageHeader({
 export function DetailsPageContent({
   title,
   breadcrumb,
-  saved,
-  error,
   isEdit,
   editContent,
   viewContent,
 }: DetailsPageContentProps) {
   return (
     <>
-      {saved && (
-        <div className="mb-4 rounded-lg border border-emerald-800 bg-emerald-950/50 px-4 py-3 text-sm text-emerald-300">
-          Zmiany zostały zapisane.
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-4 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
-          {error}
-        </div>
-      )}
-
       <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-6">
         <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
           {breadcrumb}

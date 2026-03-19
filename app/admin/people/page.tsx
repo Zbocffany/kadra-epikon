@@ -77,7 +77,7 @@ function formatDate(date: string | null): string {
 }
 
 export default async function AdminPeoplePage({ searchParams }: { searchParams: SearchParams }) {
-  const { added, error: formError, create } = await searchParams
+  const { error: formError, create } = await searchParams
 
   let people: AdminPersonListItem[] = []
   let cities: AdminPersonBirthCityOption[] = []
@@ -167,12 +167,6 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
     >
       {!fetchError && (
         <>
-          {added && (
-            <div className="rounded-lg border border-emerald-800 bg-emerald-950/50 px-4 py-3 text-sm text-emerald-300">
-              Osoba "{added}" została dodana.
-            </div>
-          )}
-
           <AdminTable data={people} columns={columns} emptyMessage="Brak osób w bazie danych." />
           {people.length > 0 && (
             <p className="text-xs text-neutral-500">Kliknij osóbe, aby przejść do strony szczegółów.</p>
@@ -184,12 +178,6 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
                 <div className="mb-4">
                   <h2 className="text-lg font-semibold text-neutral-100">Dodaj osóbe</h2>
                 </div>
-
-                {formError && (
-                  <div className="mb-5 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
-                    {formError}
-                  </div>
-                )}
 
                 <form action={createPerson} className="space-y-4">
                   <PeopleCreateFields cities={cities} countries={countries} />

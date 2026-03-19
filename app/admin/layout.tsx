@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import { signOutAction } from '@/app/login/actions'
+import AdminStatusBar from '@/components/admin/AdminStatusBar'
 
 export default async function AdminLayout({
   children,
@@ -50,7 +51,8 @@ export default async function AdminLayout({
         </div>
       </header>
 
-      {children}
+      <div className="pb-24">{children}</div>
+      <AdminStatusBar />
     </>
   )
 }

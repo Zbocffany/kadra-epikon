@@ -109,7 +109,7 @@ export default async function AdminClubsPage({
 }: {
   searchParams: SearchParams
 }) {
-  const { added, error: formError, create } = await searchParams
+  const { error: formError, create } = await searchParams
 
   let clubs: AdminClub[] = []
   let cities: AdminCity[] = []
@@ -181,12 +181,6 @@ export default async function AdminClubsPage({
     >
       {!fetchError && (
         <>
-          {added && (
-            <div className="rounded-lg border border-emerald-800 bg-emerald-950/50 px-4 py-3 text-sm text-emerald-300">
-              Klub "{added}" został dodany.
-            </div>
-          )}
-
           <AdminTable data={clubs} columns={columns} emptyMessage="Brak klubów w bazie danych." />
           {!fetchError && clubs.length > 0 && (
             <p className="text-xs text-neutral-500">
@@ -200,12 +194,6 @@ export default async function AdminClubsPage({
                 <div className="mb-4">
                   <h2 className="text-lg font-semibold text-neutral-100">Dodaj klub</h2>
                 </div>
-
-                {formError && (
-                  <div className="mb-5 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
-                    {formError}
-                  </div>
-                )}
 
                 <form action={createClub} className="space-y-4">
                   <ClubCreateFields cities={cities} countries={countries} />

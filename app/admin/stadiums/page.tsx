@@ -102,7 +102,7 @@ function StadiumCreateFields({ cities, countries }: { cities: AdminCity[]; count
 }
 
 export default async function AdminStadiumsPage({ searchParams }: { searchParams: SearchParams }) {
-  const { added, error: formError, create } = await searchParams
+  const { error: formError, create } = await searchParams
 
   let stadiums: AdminStadiumListItem[] = []
   let cities: AdminCity[] = []
@@ -180,12 +180,6 @@ export default async function AdminStadiumsPage({ searchParams }: { searchParams
     >
       {!fetchError && (
         <>
-          {added && (
-            <div className="rounded-lg border border-emerald-800 bg-emerald-950/50 px-4 py-3 text-sm text-emerald-300">
-              Stadion "{added}" został dodany.
-            </div>
-          )}
-
           <AdminTable data={stadiums} columns={columns} emptyMessage="Brak stadionów w bazie danych." />
           {stadiums.length > 0 && (
             <p className="text-xs text-neutral-500">Kliknij nazwę stadionu, aby przejść do strony szczegółów.</p>
@@ -197,12 +191,6 @@ export default async function AdminStadiumsPage({ searchParams }: { searchParams
                 <div className="mb-4">
                   <h2 className="text-lg font-semibold text-neutral-100">Dodaj stadion</h2>
                 </div>
-
-                {formError && (
-                  <div className="mb-5 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
-                    {formError}
-                  </div>
-                )}
 
                 <form action={createStadium} className="space-y-4">
                   <StadiumCreateFields cities={cities} countries={countries} />
