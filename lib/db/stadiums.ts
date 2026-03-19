@@ -23,6 +23,12 @@ export type AdminStadiumDetails = {
   country_name: string | null
 }
 
+export type AdminStadiumOption = {
+  id: string
+  name: string | null
+  stadium_city_id: string | null
+}
+
 function sortPeriods(periods: CityCountryPeriod[]): CityCountryPeriod[] {
   return [...periods].sort((a, b) => {
     const aCurrent = a.valid_to === null
@@ -135,6 +141,18 @@ export async function getAdminStadiums(): Promise<AdminStadiumListItem[]> {
       country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
     }
   })
+}
+
+export async function getAdminStadiumOptions(): Promise<AdminStadiumOption[]> {
+  const supabase = createServiceRoleClient()
+
+  const { data, error } = await supabase
+    .from('tbl_Stadiums')
+    .select('id, name, stadium_city_id')
+    .order('name', { ascending: true })
+
+  if (error) throw new Error(`tbl_Stadiums: ${error.message}`)
+  return data ?? []
 }
 
 export async function getAdminStadiumDetails(

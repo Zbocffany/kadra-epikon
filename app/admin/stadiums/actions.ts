@@ -1,8 +1,11 @@
 'use server'
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import type { InlineCreateState } from '@/lib/types/admin'
 import {
   getTrimmedString,
+  inlineError,
+  inlineSuccess,
   redirectWithAdded,
   redirectWithError,
   redirectWithSaved,
@@ -37,6 +40,41 @@ export async function createStadium(formData: FormData): Promise<void> {
   }
 
   redirectWithAdded('/admin/stadiums', name)
+}
+
+export async function createStadiumInline(
+  prevState: InlineCreateState,
+  formData: FormData
+): Promise<InlineCreateState> {
+  const name = getTrimmedString(formData, 'name')
+  const stadiumCityId = getTrimmedString(formData, 'stadium_city_id')
+
+  if (!name) {
+    return inlineError(prevState, 'Nazwa stadionu jest wymagana.')
+  }
+
+  if (!stadiumCityId) {
+    return inlineError(prevState, 'Miasto stadionu jest wymagane.')
+  }
+
+  const supabase = createServiceRoleClient()
+  const id = crypto.randomUUID()
+
+  const { error } = await supabase.from('tbl_Stadiums').insert({
+    id,
+    name,
+    stadium_city_id: stadiumCityId,
+  })
+
+  if (error) {
+    if (error.code === '23505') {
+      return inlineError(prevState, 'Stadion o tej nazwie juz istnieje.')
+    }
+
+    return inlineError(prevState, `Blad bazy danych: ${error.message}`)
+  }
+
+  return inlineSuccess(prevState, id, name)
 }
 
 export async function updateStadium(formData: FormData): Promise<void> {
