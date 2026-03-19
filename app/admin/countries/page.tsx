@@ -6,6 +6,9 @@ import {
 } from '@/lib/db/countries'
 import type { AdminCountry, AdminFederation } from '@/lib/db/countries'
 import FederationSelectField from '@/components/admin/FederationSelectField'
+import AdminListLayout from '@/components/admin/AdminListLayout'
+import AdminTable from '@/components/admin/AdminTable'
+import type { AdminTableColumn } from '@/components/admin/AdminTable'
 
 function CountryForm({
   federations,
@@ -84,56 +87,6 @@ function CountryForm({
   )
 }
 
-function CountriesTable({ countries }: { countries: AdminCountry[] }) {
-  if (!countries.length) {
-    return (
-      <div className="rounded-xl border border-amber-800 bg-amber-950/40 px-6 py-8 text-sm text-amber-200">
-        Brak krajow w tabeli <code>tbl_Countries</code>. Uruchom seed
-        <code> db/seeds/002_UEFA_countries.sql</code>.
-      </div>
-    )
-  }
-
-  return (
-    <div className="overflow-x-auto rounded-xl border border-neutral-800">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-neutral-800 bg-neutral-900 text-left">
-            <th className="px-4 py-3 font-medium text-neutral-400">#</th>
-            <th className="px-4 py-3 font-medium text-neutral-400">Nazwa</th>
-            <th className="px-4 py-3 font-medium text-neutral-400">FIFA</th>
-            <th className="px-4 py-3 font-medium text-neutral-400">Federacja</th>
-          </tr>
-        </thead>
-        <tbody>
-          {countries.map((country, i) => (
-            <tr
-              key={country.id}
-              className={`border-b border-neutral-800 last:border-b-0 ${
-                i % 2 === 0 ? 'bg-neutral-950' : 'bg-neutral-900/40'
-              }`}
-            >
-              <td className="px-4 py-3 text-neutral-500">{i + 1}</td>
-              <td className="px-4 py-3 font-medium">
-                <Link
-                  href={`/admin/countries/${country.id}`}
-                  className="text-neutral-100 underline decoration-neutral-700 underline-offset-4 transition hover:text-white hover:decoration-neutral-300"
-                >
-                  {country.name}
-                </Link>
-              </td>
-              <td className="px-4 py-3 text-neutral-300">{country.fifa_code ?? '—'}</td>
-              <td className="px-4 py-3 text-neutral-400">
-                {country.federation_short_name ?? '—'}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 type SearchParams = Promise<{ added?: string; error?: string }>
 
 export default async function AdminCountriesPage({
@@ -156,40 +109,63 @@ export default async function AdminCountriesPage({
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
 
+  const columns: AdminTableColumn<AdminCountry>[] = [
+    {
+      key: 'index',
+      label: '#',
+      render: (_, i) => i + 1,
+      className: 'text-neutral-500',
+    },
+    {
+      key: 'name',
+      label: 'Nazwa',
+      render: (country) => (
+        <Link
+          href={`/admin/countries/${country.id}`}
+          className="text-neutral-100 underline decoration-neutral-700 underline-offset-4 transition hover:text-white hover:decoration-neutral-300"
+        >
+          {country.name}
+        </Link>
+      ),
+      className: 'font-medium',
+    },
+    {
+      key: 'fifa_code',
+      label: 'FIFA',
+      render: (country) => country.fifa_code ?? '—',
+      className: 'text-neutral-300',
+    },
+    {
+      key: 'federation',
+      label: 'Federacja',
+      render: (country) => country.federation_short_name ?? '—',
+      className: 'text-neutral-400',
+    },
+  ]
+
+  const emptyMessage = !countries.length
+    ? 'Brak krajow w tabeli tbl_Countries. Uruchom seed db/seeds/002_UEFA_countries.sql.'
+    : 'Brak krajow.'
+
   return (
-    <main className="min-h-screen px-4 py-10 sm:px-8">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
-              Admin
+    <AdminListLayout
+      title="Kraje"
+      breadcrumb="Admin"
+      recordCount={countries.length}
+      recordLabel={countries.length === 1 ? 'kraj' : 'krajow'}
+      fetchError={fetchError}
+    >
+      {!fetchError && (
+        <>
+          <CountryForm federations={federations} added={added} error={formError} />
+          <AdminTable data={countries} columns={columns} emptyMessage={emptyMessage} />
+          {!fetchError && countries.length > 0 && (
+            <p className="text-xs text-neutral-500">
+              Kliknij nazwe kraju, aby przejsc do strony szczegolow.
             </p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight">Kraje</h1>
-          </div>
-          <span className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs text-neutral-400">
-            {countries.length} {countries.length === 1 ? 'kraj' : 'krajow'}
-          </span>
-        </div>
-
-        {fetchError && (
-          <div className="mb-6 rounded-lg border border-red-800 bg-red-950/50 px-5 py-4 text-sm text-red-300">
-            <strong className="font-semibold">Blad pobierania danych:</strong> {fetchError}
-          </div>
-        )}
-
-        {!fetchError && (
-          <div className="mb-8">
-            <CountryForm federations={federations} added={added} error={formError} />
-          </div>
-        )}
-
-        {!fetchError && <CountriesTable countries={countries} />}
-        {!fetchError && countries.length > 0 && (
-          <p className="mt-4 text-xs text-neutral-500">
-            Kliknij nazwe kraju, aby przejsc do strony szczegolow.
-          </p>
-        )}
-      </div>
-    </main>
+          )}
+        </>
+      )}
+    </AdminListLayout>
   )
 }

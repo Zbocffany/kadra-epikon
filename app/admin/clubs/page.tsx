@@ -6,6 +6,9 @@ import CitySelectField from '@/components/admin/CitySelectField'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCountryOption } from '@/lib/db/cities'
+import AdminListLayout from '@/components/admin/AdminListLayout'
+import AdminTable from '@/components/admin/AdminTable'
+import type { AdminTableColumn } from '@/components/admin/AdminTable'
 
 // ─── Form ─────────────────────────────────────────────────────────────────────
 
@@ -73,53 +76,6 @@ function ClubForm({
   )
 }
 
-// ─── Table ────────────────────────────────────────────────────────────────────
-
-function ClubsTable({ clubs }: { clubs: AdminClub[] }) {
-  if (!clubs.length) {
-    return (
-      <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-6 py-16 text-center text-neutral-500">
-        Brak klubów w bazie danych.
-      </div>
-    )
-  }
-
-  return (
-    <div className="overflow-x-auto rounded-xl border border-neutral-800">
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="border-b border-neutral-800 bg-neutral-900 text-left">
-            <th className="px-4 py-3 font-medium text-neutral-400">#</th>
-            <th className="px-4 py-3 font-medium text-neutral-400">Nazwa</th>
-            <th className="px-4 py-3 font-medium text-neutral-400">Miasto</th>
-          </tr>
-        </thead>
-        <tbody>
-          {clubs.map((club, i) => (
-            <tr
-              key={club.id}
-              className={`border-b border-neutral-800 last:border-b-0 ${
-                i % 2 === 0 ? 'bg-neutral-950' : 'bg-neutral-900/40'
-              }`}
-            >
-              <td className="px-4 py-3 text-neutral-500">{i + 1}</td>
-              <td className="px-4 py-3 font-medium">
-                <Link
-                  href={`/admin/clubs/${club.id}`}
-                  className="text-neutral-100 underline decoration-neutral-700 underline-offset-4 transition hover:text-white hover:decoration-neutral-300"
-                >
-                  {club.name}
-                </Link>
-              </td>
-              <td className="px-4 py-3 text-neutral-400">{club.city_name ?? '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 type SearchParams = Promise<{ added?: string; error?: string }>
@@ -146,50 +102,65 @@ export default async function AdminClubsPage({
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
 
+  const columns: AdminTableColumn<AdminClub>[] = [
+    {
+      key: 'index',
+      label: '#',
+      render: (_, i) => i + 1,
+      className: 'text-neutral-500',
+    },
+    {
+      key: 'name',
+      label: 'Nazwa',
+      render: (club) => (
+        <Link
+          href={`/admin/clubs/${club.id}`}
+          className="text-neutral-100 underline decoration-neutral-700 underline-offset-4 transition hover:text-white hover:decoration-neutral-300"
+        >
+          {club.name}
+        </Link>
+      ),
+      className: 'font-medium',
+    },
+    {
+      key: 'city',
+      label: 'Miasto',
+      render: (club) => club.city_name ?? '—',
+      className: 'text-neutral-400',
+    },
+  ]
+
+  const pluralLabel = (() => {
+    const count = clubs.length
+    if (count === 1) return 'klub'
+    if (count < 5) return 'kluby'
+    return 'klubów'
+  })()
+
   return (
-    <main className="min-h-screen px-4 py-10 sm:px-8">
-      <div className="mx-auto max-w-5xl">
-        {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
-              Admin
+    <AdminListLayout
+      title="Kluby"
+      breadcrumb="Admin"
+      recordCount={clubs.length}
+      recordLabel={pluralLabel}
+      fetchError={fetchError}
+    >
+      {!fetchError && (
+        <>
+          <ClubForm
+            cities={cities}
+            countries={countries}
+            added={added}
+            error={formError}
+          />
+          <AdminTable data={clubs} columns={columns} emptyMessage="Brak klubów w bazie danych." />
+          {!fetchError && clubs.length > 0 && (
+            <p className="text-xs text-neutral-500">
+              Kliknij nazwe klubu, aby przejsc do strony szczegolow.
             </p>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight">Kluby</h1>
-          </div>
-          <span className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs text-neutral-400">
-            {clubs.length}{' '}
-            {clubs.length === 1 ? 'klub' : clubs.length < 5 ? 'kluby' : 'klubów'}
-          </span>
-        </div>
-
-        {/* Fetch error */}
-        {fetchError && (
-          <div className="mb-6 rounded-lg border border-red-800 bg-red-950/50 px-5 py-4 text-sm text-red-300">
-            <strong className="font-semibold">Błąd pobierania danych:</strong> {fetchError}
-          </div>
-        )}
-
-        {/* Form */}
-        {!fetchError && (
-          <div className="mb-8">
-            <ClubForm
-              cities={cities}
-              countries={countries}
-              added={added}
-              error={formError}
-            />
-          </div>
-        )}
-
-        {/* List */}
-        {!fetchError && <ClubsTable clubs={clubs} />}
-        {!fetchError && clubs.length > 0 && (
-          <p className="mt-4 text-xs text-neutral-500">
-            Kliknij nazwe klubu, aby przejsc do strony szczegolow.
-          </p>
-        )}
-      </div>
-    </main>
+          )}
+        </>
+      )}
+    </AdminListLayout>
   )
 }
