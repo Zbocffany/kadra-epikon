@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import {
   createFederationInline,
@@ -10,9 +9,15 @@ import {
   getAdminFederations,
 } from '@/lib/db/countries'
 import FederationSelectField from '@/components/admin/FederationSelectField'
+import {
+  DetailsPageContainer,
+  DetailsPageHeader,
+  DetailsPageContent,
+} from '@/components/admin/DetailsPageLayout'
+import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 
-type Params = Promise<{ id: string }>
-type SearchParams = Promise<{ mode?: string; saved?: string; error?: string }>
+type Params = DetailPageParams
+type SearchParams = DetailPageSearchParams
 
 export default async function AdminCountryDetailsPage({
   params,
@@ -36,129 +41,98 @@ export default async function AdminCountryDetailsPage({
   const isEdit = mode === 'edit'
 
   return (
-    <main className="min-h-screen px-4 py-10 sm:px-8">
-      <div className="mx-auto max-w-3xl">
-        <div className="mb-6 flex items-center justify-between gap-3">
-          <Link
-            href="/admin/countries"
-            className="text-sm text-neutral-400 underline decoration-neutral-700 underline-offset-4 hover:text-neutral-200"
-          >
-            Powrot do listy krajow
-          </Link>
+    <DetailsPageContainer>
+      <DetailsPageHeader
+        title={country.name}
+        backLabel="Powrot do listy krajow"
+        backHref="/admin/countries"
+        editHref={`/admin/countries/${country.id}?mode=edit`}
+        deleteAction={deleteCountry}
+        deleteId={country.id}
+      />
 
-          <div className="flex items-center gap-2">
-            <Link
-              href={`/admin/countries/${country.id}?mode=edit`}
-              className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-            >
-              Edytuj
-            </Link>
-            <form action={deleteCountry}>
-              <input type="hidden" name="id" value={country.id} />
-              <button
-                type="submit"
-                className="rounded-md border border-red-800 bg-red-950/50 px-3 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-900/40"
-              >
-                Usun
-              </button>
-            </form>
-          </div>
-        </div>
+      <DetailsPageContent
+        title={country.name}
+        breadcrumb="Admin / Kraje"
+        saved={saved}
+        error={error}
+        isEdit={isEdit}
+        editContent={
+          <form action={updateCountry} className="mt-6 space-y-4">
+            <input type="hidden" name="id" value={country.id} />
 
-        {saved && (
-          <div className="mb-4 rounded-lg border border-emerald-800 bg-emerald-950/50 px-4 py-3 text-sm text-emerald-300">
-            Zmiany zostaly zapisane.
-          </div>
-        )}
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="name" className="text-sm font-medium text-neutral-300">
+                Nazwa <span className="text-red-400">*</span>
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                required
+                defaultValue={country.name}
+                className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+              />
+            </div>
 
-        {error && (
-          <div className="mb-4 rounded-lg border border-red-800 bg-red-950/50 px-4 py-3 text-sm text-red-300">
-            {error}
-          </div>
-        )}
-
-        <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-6">
-          <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
-            Admin / Kraje
-          </p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">{country.name}</h1>
-
-          {isEdit ? (
-            <form action={updateCountry} className="mt-6 space-y-4">
-              <input type="hidden" name="id" value={country.id} />
-
+            <div className="grid gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="name" className="text-sm font-medium text-neutral-300">
-                  Nazwa <span className="text-red-400">*</span>
+                <label htmlFor="fifa_code" className="text-sm font-medium text-neutral-300">
+                  Kod FIFA
                 </label>
                 <input
-                  id="name"
-                  name="name"
+                  id="fifa_code"
+                  name="fifa_code"
                   type="text"
-                  required
-                  defaultValue={country.name}
-                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+                  maxLength={3}
+                  defaultValue={country.fifa_code ?? ''}
+                  className="uppercase rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="fifa_code" className="text-sm font-medium text-neutral-300">
-                    Kod FIFA
-                  </label>
-                  <input
-                    id="fifa_code"
-                    name="fifa_code"
-                    type="text"
-                    maxLength={3}
-                    defaultValue={country.fifa_code ?? ''}
-                    className="uppercase rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-                  />
-                </div>
-
-                <FederationSelectField
-                  name="federation_id"
-                  label="Federacja"
-                  selectedId={country.federation_id}
-                  options={federations}
-                  createFederationInlineAction={createFederationInline}
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <Link
-                  href={`/admin/countries/${country.id}`}
-                  className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-                >
-                  Anuluj
-                </Link>
-                <button
-                  type="submit"
-                  className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
-                >
-                  Zapisz
-                </button>
-              </div>
-            </form>
-          ) : (
-            <div className="mt-6 grid gap-4 sm:grid-cols-2">
-              <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-                <p className="text-xs uppercase tracking-wide text-neutral-500">Kod FIFA</p>
-                <p className="mt-2 text-lg font-semibold text-neutral-100">
-                  {country.fifa_code ?? '—'}
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-                <p className="text-xs uppercase tracking-wide text-neutral-500">Federacja</p>
-                <p className="mt-2 text-lg font-semibold text-neutral-100">
-                  {country.federation_short_name ?? '—'}
-                </p>
-              </div>
+              <FederationSelectField
+                name="federation_id"
+                label="Federacja"
+                selectedId={country.federation_id}
+                options={federations}
+                createFederationInlineAction={createFederationInline}
+              />
             </div>
-          )}
-        </div>
-      </div>
-    </main>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <a
+                href={`/admin/countries/${country.id}`}
+                className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+              >
+                Anuluj
+              </a>
+              <button
+                type="submit"
+                className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
+              >
+                Zapisz
+              </button>
+            </div>
+          </form>
+        }
+        viewContent={
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Kod FIFA</p>
+              <p className="mt-2 text-lg font-semibold text-neutral-100">
+                {country.fifa_code ?? '—'}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Federacja</p>
+              <p className="mt-2 text-lg font-semibold text-neutral-100">
+                {country.federation_short_name ?? '—'}
+              </p>
+            </div>
+          </div>
+        }
+      />
+    </DetailsPageContainer>
   )
 }

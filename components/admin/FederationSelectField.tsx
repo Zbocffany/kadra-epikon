@@ -1,19 +1,9 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import type { InlineCreateState, SelectOptionWithShortName } from '@/lib/types/admin'
 
-type Option = {
-  id: string
-  short_name: string
-}
-
-type InlineCreateState = {
-  ok: boolean
-  id?: string
-  label?: string
-  error?: string
-  version: number
-}
+type Option = SelectOptionWithShortName
 
 type CreateFederationInlineAction = (
   prevState: InlineCreateState,

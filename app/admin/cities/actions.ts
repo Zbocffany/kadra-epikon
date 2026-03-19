@@ -2,14 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { createServiceRoleClient } from '@/lib/supabase/server'
-
-type InlineCreateState = {
-  ok: boolean
-  id?: string
-  label?: string
-  error?: string
-  version: number
-}
+import type { InlineCreateState } from '@/lib/types/admin'
 
 export async function createCity(formData: FormData): Promise<void> {
   const cityName = (formData.get('city_name') as string | null)?.trim() ?? ''

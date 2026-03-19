@@ -2,14 +2,7 @@
 
 import { redirect } from 'next/navigation'
 import { createServiceRoleClient } from '@/lib/supabase/server'
-
-type InlineCreateState = {
-  ok: boolean
-  id?: string
-  label?: string
-  error?: string
-  version: number
-}
+import type { InlineCreateState } from '@/lib/types/admin'
 
 function normalizeFifaCode(raw: FormDataEntryValue | null): string | null {
   const val = (typeof raw === 'string' ? raw : '').trim().toUpperCase()
