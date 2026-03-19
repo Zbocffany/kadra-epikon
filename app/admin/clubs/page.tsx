@@ -64,8 +64,8 @@ function ClubForm({
           addDialogTitle="Nowe miasto"
           emptyResultsMessage="Brak wyników — możesz dodać nowe miasto poniżej."
           createAction={createCityInline}
-          renderInlineForm={(ref) => (
-            <div ref={ref} className="space-y-3">
+          inlineForm={(
+            <div className="space-y-3">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor="inline_city_name" className="text-xs text-neutral-400">
                   Nazwa miasta

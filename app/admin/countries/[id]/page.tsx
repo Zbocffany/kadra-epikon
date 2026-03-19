@@ -100,8 +100,8 @@ export default async function AdminCountryDetailsPage({
                 addDialogTitle="Nowa federacja"
                 emptyResultsMessage="Brak wyników — możesz dodać nową federację poniżej."
                 createAction={createFederationInline}
-                renderInlineForm={(ref) => (
-                  <div ref={ref} className="space-y-3">
+                inlineForm={(
+                  <div className="space-y-3">
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="flex flex-col gap-1.5">
                         <label htmlFor="inline_fed_short" className="text-xs text-neutral-400">

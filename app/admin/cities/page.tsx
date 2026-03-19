@@ -67,8 +67,8 @@ function CityForm({
           addDialogTitle="Nowy kraj"
           emptyResultsMessage="Brak wyników — możesz dodać nowy kraj poniżej."
           createAction={createCountryInline}
-          renderInlineForm={(ref) => (
-            <div ref={ref} className="space-y-3">
+          inlineForm={(
+            <div className="space-y-3">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor="inline_country_name" className="text-xs text-neutral-400">

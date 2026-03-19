@@ -26,7 +26,7 @@ interface AdminSelectFieldProps<T extends AdminSelectOption = AdminSelectOption>
    * Custom form content to render inside the inline create dialog.
    * The dialog handles open/close buttons, so only render the form fields.
    */
-  renderInlineForm: (ref: React.MutableRefObject<HTMLDivElement | null>) => ReactNode
+  inlineForm: ReactNode
 }
 
 /**
@@ -48,8 +48,8 @@ interface AdminSelectFieldProps<T extends AdminSelectOption = AdminSelectOption>
  *   addDialogTitle="Nowy kraj"
  *   emptyResultsMessage="Brak wyników"
  *   createAction={createCountryInline}
- *   renderInlineForm={(ref) => (
- *     <div ref={ref} className="space-y-3">
+ *   inlineForm={(
+ *     <div className="space-y-3">
  *       <input name="name" type="text" required />
  *       <input name="fifa_code" type="text" />
  *     </div>
@@ -69,7 +69,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   addDialogTitle,
   emptyResultsMessage,
   createAction,
-  renderInlineForm,
+  inlineForm,
 }: AdminSelectFieldProps<T>) {
   const [allOptions, setAllOptions] = useState<T[]>(options)
   const [query, setQuery] = useState('')
@@ -227,7 +227,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
             </div>
           )}
 
-          {renderInlineForm(inlineFormRef as React.MutableRefObject<HTMLDivElement | null>)}
+          <div ref={inlineFormRef}>{inlineForm}</div>
 
           <div className="mt-4 flex items-center justify-end gap-2">
             <button
