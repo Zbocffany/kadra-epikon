@@ -1,12 +1,19 @@
 import { notFound } from 'next/navigation'
 import {
+  clearPredecessor,
+  clearSuccessor,
   createFederationInline,
   deleteCountry,
+  setPredecessor,
+  setSuccessor,
   updateCountry,
 } from '../actions'
 import {
+  getAdminCountries,
   getAdminCountryDetails,
   getAdminFederations,
+  getPredecessorOf,
+  getSuccessorOf,
 } from '@/lib/db/countries'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import {
@@ -29,9 +36,12 @@ export default async function AdminCountryDetailsPage({
   const { id } = await params
   const { mode, saved, error } = await searchParams
 
-  const [country, federations] = await Promise.all([
+  const [country, federations, allCountries, successor, predecessor] = await Promise.all([
     getAdminCountryDetails(id),
     getAdminFederations(),
+    getAdminCountries(),
+    getSuccessorOf(id),
+    getPredecessorOf(id),
   ])
 
   if (!country) {
@@ -39,6 +49,7 @@ export default async function AdminCountryDetailsPage({
   }
 
   const isEdit = mode === 'edit'
+  const otherCountries = allCountries.filter((c) => c.id !== id)
 
   return (
     <DetailsPageContainer>
@@ -182,6 +193,95 @@ export default async function AdminCountryDetailsPage({
           </div>
         }
       />
+
+      {/* Sukcesja pilkarska */}
+      <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-6">
+        <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500 mb-5">
+          Sukcesja piłkarska
+        </p>
+
+        <div className="grid gap-8 sm:grid-cols-2">
+          {/* Poprzednik */}
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-wide text-neutral-500">Poprzednik</p>
+            {predecessor ? (
+              <div className="mb-3 flex items-center gap-3">
+                <span className="text-sm font-medium text-neutral-200">{predecessor.countryName}</span>
+                <form action={clearPredecessor}>
+                  <input type="hidden" name="country_id" value={id} />
+                  <button
+                    type="submit"
+                    className="text-xs text-red-400 hover:text-red-300 underline underline-offset-2"
+                  >
+                    Usuń
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <p className="mb-3 text-sm text-neutral-500">Brak poprzednika</p>
+            )}
+            <form action={setPredecessor} className="flex gap-2">
+              <input type="hidden" name="country_id" value={id} />
+              <select
+                name="precountry_id"
+                defaultValue={predecessor?.countryId ?? ''}
+                className="flex-1 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none"
+              >
+                <option value="">— wybierz kraj —</option>
+                {otherCountries.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="rounded-md bg-neutral-100 px-3 py-2 text-xs font-semibold text-neutral-900 hover:bg-white"
+              >
+                Ustaw
+              </button>
+            </form>
+          </div>
+
+          {/* Nastepnik */}
+          <div>
+            <p className="mb-2 text-xs uppercase tracking-wide text-neutral-500">Następnik</p>
+            {successor ? (
+              <div className="mb-3 flex items-center gap-3">
+                <span className="text-sm font-medium text-neutral-200">{successor.countryName}</span>
+                <form action={clearSuccessor}>
+                  <input type="hidden" name="country_id" value={id} />
+                  <button
+                    type="submit"
+                    className="text-xs text-red-400 hover:text-red-300 underline underline-offset-2"
+                  >
+                    Usuń
+                  </button>
+                </form>
+              </div>
+            ) : (
+              <p className="mb-3 text-sm text-neutral-500">Brak następnika</p>
+            )}
+            <form action={setSuccessor} className="flex gap-2">
+              <input type="hidden" name="country_id" value={id} />
+              <select
+                name="postcountry_id"
+                defaultValue={successor?.countryId ?? ''}
+                className="flex-1 rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none"
+              >
+                <option value="">— wybierz kraj —</option>
+                {otherCountries.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="rounded-md bg-neutral-100 px-3 py-2 text-xs font-semibold text-neutral-900 hover:bg-white"
+              >
+                Ustaw
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
     </DetailsPageContainer>
   )
 }

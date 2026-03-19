@@ -110,3 +110,67 @@ export async function getAdminCountryDetails(
     federation_short_name: federationShortName,
   }
 }
+
+export type AdminSuccessionEntry = {
+  successionId: string
+  countryId: string
+  countryName: string
+}
+
+export async function getSuccessorOf(
+  countryId: string
+): Promise<AdminSuccessionEntry | null> {
+  const supabase = createServiceRoleClient()
+
+  const { data: succession, error } = await supabase
+    .from('tbl_Successions')
+    .select('id, postcountry_id')
+    .eq('precountry_id', countryId)
+    .maybeSingle()
+
+  if (error) throw new Error(`tbl_Successions: ${error.message}`)
+  if (!succession) return null
+
+  const { data: country, error: countryError } = await supabase
+    .from('tbl_Countries')
+    .select('name')
+    .eq('id', succession.postcountry_id)
+    .maybeSingle()
+
+  if (countryError) throw new Error(`tbl_Countries: ${countryError.message}`)
+
+  return {
+    successionId: succession.id,
+    countryId: succession.postcountry_id,
+    countryName: country?.name ?? '—',
+  }
+}
+
+export async function getPredecessorOf(
+  countryId: string
+): Promise<AdminSuccessionEntry | null> {
+  const supabase = createServiceRoleClient()
+
+  const { data: succession, error } = await supabase
+    .from('tbl_Successions')
+    .select('id, precountry_id')
+    .eq('postcountry_id', countryId)
+    .maybeSingle()
+
+  if (error) throw new Error(`tbl_Successions: ${error.message}`)
+  if (!succession) return null
+
+  const { data: country, error: countryError } = await supabase
+    .from('tbl_Countries')
+    .select('name')
+    .eq('id', succession.precountry_id)
+    .maybeSingle()
+
+  if (countryError) throw new Error(`tbl_Countries: ${countryError.message}`)
+
+  return {
+    successionId: succession.id,
+    countryId: succession.precountry_id,
+    countryName: country?.name ?? '—',
+  }
+}

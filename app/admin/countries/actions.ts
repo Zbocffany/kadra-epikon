@@ -215,3 +215,77 @@ export async function deleteCountry(formData: FormData): Promise<void> {
 
   redirectWithAdded('/admin/countries', `Usunieto kraj: ${country?.name ?? id}`)
 }
+
+export async function setSuccessor(formData: FormData): Promise<void> {
+  const countryId = getTrimmedString(formData, 'country_id')
+  const postcountryId = getTrimmedString(formData, 'postcountry_id')
+
+  if (!countryId) redirectWithError('/admin/countries', 'Brak ID kraju.')
+  if (!postcountryId) redirectWithError(`/admin/countries/${countryId}`, 'Wybierz nastepnika.')
+
+  const supabase = createServiceRoleClient()
+
+  await supabase.from('tbl_Successions').delete().eq('precountry_id', countryId)
+
+  const { error } = await supabase.from('tbl_Successions').insert({
+    id: crypto.randomUUID(),
+    precountry_id: countryId,
+    postcountry_id: postcountryId,
+  })
+
+  if (error) {
+    if (error.code === '23505') {
+      redirectWithError(`/admin/countries/${countryId}`, 'Ten kraj jest juz nastepnikiem innego kraju.')
+    }
+    redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${error.message}`)
+  }
+
+  redirectWithSaved(`/admin/countries/${countryId}`)
+}
+
+export async function setPredecessor(formData: FormData): Promise<void> {
+  const countryId = getTrimmedString(formData, 'country_id')
+  const precountryId = getTrimmedString(formData, 'precountry_id')
+
+  if (!countryId) redirectWithError('/admin/countries', 'Brak ID kraju.')
+  if (!precountryId) redirectWithError(`/admin/countries/${countryId}`, 'Wybierz poprzednika.')
+
+  const supabase = createServiceRoleClient()
+
+  await supabase.from('tbl_Successions').delete().eq('postcountry_id', countryId)
+
+  const { error } = await supabase.from('tbl_Successions').insert({
+    id: crypto.randomUUID(),
+    precountry_id: precountryId,
+    postcountry_id: countryId,
+  })
+
+  if (error) {
+    if (error.code === '23505') {
+      redirectWithError(`/admin/countries/${countryId}`, 'Ten kraj juz ma przypisanego nastepnika.')
+    }
+    redirectWithError(`/admin/countries/${countryId}`, `Blad bazy danych: ${error.message}`)
+  }
+
+  redirectWithSaved(`/admin/countries/${countryId}`)
+}
+
+export async function clearSuccessor(formData: FormData): Promise<void> {
+  const countryId = getTrimmedString(formData, 'country_id')
+  if (!countryId) redirectWithError('/admin/countries', 'Brak ID kraju.')
+
+  const supabase = createServiceRoleClient()
+  await supabase.from('tbl_Successions').delete().eq('precountry_id', countryId)
+
+  redirectWithSaved(`/admin/countries/${countryId}`)
+}
+
+export async function clearPredecessor(formData: FormData): Promise<void> {
+  const countryId = getTrimmedString(formData, 'country_id')
+  if (!countryId) redirectWithError('/admin/countries', 'Brak ID kraju.')
+
+  const supabase = createServiceRoleClient()
+  await supabase.from('tbl_Successions').delete().eq('postcountry_id', countryId)
+
+  redirectWithSaved(`/admin/countries/${countryId}`)
+}
