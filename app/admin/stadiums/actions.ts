@@ -38,7 +38,7 @@ export async function createStadium(formData: FormData): Promise<void> {
       redirectWithError('/admin/stadiums', 'Stadion o tej nazwie już istnieje.')
     }
 
-    redirectWithError('/admin/stadiums', `Błąd bazy danych: ${error.message}`)
+    redirectWithError('/admin/stadiums', 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   redirectWithAdded('/admin/stadiums', name)
@@ -74,7 +74,7 @@ export async function createStadiumInline(
       return inlineError(prevState, 'Stadion o tej nazwie już istnieje.')
     }
 
-    return inlineError(prevState, `Błąd bazy danych: ${error.message}`)
+    return inlineError(prevState, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   return inlineSuccess(prevState, id, name)
@@ -113,7 +113,7 @@ export async function updateStadium(formData: FormData): Promise<void> {
       redirectWithError(`/admin/stadiums/${id}`, 'Stadion o tej nazwie już istnieje.')
     }
 
-    redirectWithError(`/admin/stadiums/${id}`, `Błąd bazy danych: ${error.message}`)
+    redirectWithError(`/admin/stadiums/${id}`, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   redirectWithSaved(`/admin/stadiums/${id}`)
@@ -140,7 +140,9 @@ export async function deleteStadium(formData: FormData): Promise<void> {
   if (error) {
     redirectWithError(
       `/admin/stadiums/${id}`,
-      `Nie można usunąć stadionu (prawdopodobnie jest używany): ${error.message}`
+      error.code === '23503'
+        ? 'Nie można usunąć stadionu — jest powiązany z innymi danymi.'
+        : 'Wystąpił błąd bazy danych. Spróbuj ponownie.'
     )
   }
 

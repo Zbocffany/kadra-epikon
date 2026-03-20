@@ -21,7 +21,7 @@ async function ensureClubTeamExists(clubId: string): Promise<void> {
     })
 
   if (error) {
-    throw new Error(`tbl_Teams: ${error.message}`)
+    throw new Error('Nie udało się zarejestrować drużyny dla klubu.')
   }
 }
 
@@ -47,7 +47,7 @@ export async function createClub(formData: FormData): Promise<void> {
     if (error.code === '23505') {
       redirectWithError('/admin/clubs', `Klub o nazwie „${name}" już istnieje.`)
     }
-    redirectWithError('/admin/clubs', `Błąd bazy danych: ${error.message}`)
+    redirectWithError('/admin/clubs', 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   try {
@@ -90,7 +90,7 @@ export async function updateClub(formData: FormData): Promise<void> {
     if (error.code === '23505') {
       redirectWithError(`/admin/clubs/${id}`, 'Klub o tej nazwie już istnieje.')
     }
-    redirectWithError(`/admin/clubs/${id}`, `Błąd bazy danych: ${error.message}`)
+    redirectWithError(`/admin/clubs/${id}`, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   redirectWithSaved(`/admin/clubs/${id}`)
@@ -117,7 +117,9 @@ export async function deleteClub(formData: FormData): Promise<void> {
   if (error) {
     redirectWithError(
       `/admin/clubs/${id}`,
-      `Nie można usunąć klubu (prawdopodobnie jest używany): ${error.message}`
+      error.code === '23503'
+        ? 'Nie można usunąć klubu — jest powiązany z innymi danymi.'
+        : 'Wystąpił błąd bazy danych. Spróbuj ponownie.'
     )
   }
 
@@ -160,7 +162,7 @@ export async function saveClubHistoryEvent(formData: FormData): Promise<void> {
       .eq('club_id', clubId)
 
     if (updateError) {
-      redirectWithError(`/admin/clubs/${clubId}`, `Błąd bazy danych: ${updateError.message}`)
+      redirectWithError(`/admin/clubs/${clubId}`, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
     }
   } else {
     const { error: insertError } = await supabase.from('tbl_Club_History').insert({
@@ -175,7 +177,7 @@ export async function saveClubHistoryEvent(formData: FormData): Promise<void> {
     })
 
     if (insertError) {
-      redirectWithError(`/admin/clubs/${clubId}`, `Błąd bazy danych: ${insertError.message}`)
+      redirectWithError(`/admin/clubs/${clubId}`, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
     }
   }
 
@@ -198,7 +200,7 @@ export async function deleteClubHistoryEvent(formData: FormData): Promise<void> 
     .eq('club_id', clubId)
 
   if (error) {
-    redirectWithError(`/admin/clubs/${clubId}`, `Błąd usuwania: ${error.message}`)
+    redirectWithError(`/admin/clubs/${clubId}`, 'Wystąpił błąd serwera. Spróbuj ponownie.')
   }
 
   redirectWithSaved(`/admin/clubs/${clubId}`)

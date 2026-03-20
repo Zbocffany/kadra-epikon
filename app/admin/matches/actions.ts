@@ -138,7 +138,7 @@ async function resolveMatchCityId(
       .maybeSingle()
 
     if (stadiumError) {
-      redirectWithError(redirectPath, `Błąd odczytu stadionu: ${stadiumError.message}`)
+      redirectWithError(redirectPath, 'Wystąpił błąd serwera. Spróbuj ponownie.')
     }
 
     if (!stadium) {
@@ -174,7 +174,7 @@ async function validateTeamsExistOrRedirect(
     .in('id', [homeTeamId, awayTeamId])
 
   if (teamsError) {
-    redirectWithError(redirectPath, `Błąd odczytu drużyn: ${teamsError.message}`)
+    redirectWithError(redirectPath, 'Wystąpił błąd serwera. Spróbuj ponownie.')
   }
 
   if ((teams ?? []).length !== 2) {
@@ -211,7 +211,7 @@ export async function createMatch(formData: FormData): Promise<void> {
   })
 
   if (error) {
-    redirectWithError('/admin/matches', `Błąd bazy danych: ${error.message}`)
+    redirectWithError('/admin/matches', 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   redirectWithAdded('/admin/matches', `Dodano mecz z datą ${input.matchDate}`)
@@ -255,7 +255,7 @@ export async function updateMatch(formData: FormData): Promise<void> {
     .eq('id', id)
 
   if (error) {
-    redirectWithError(redirectPath, `Błąd bazy danych: ${error.message}`)
+    redirectWithError(redirectPath, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   redirectWithSaved(redirectPath)
@@ -280,7 +280,12 @@ export async function deleteMatch(formData: FormData): Promise<void> {
   const { error } = await supabase.from('tbl_Matches').delete().eq('id', id)
 
   if (error) {
-    redirectWithError(`/admin/matches/${id}`, `Nie można usunąć meczu: ${error.message}`)
+    redirectWithError(
+      `/admin/matches/${id}`,
+      error.code === '23503'
+        ? 'Nie można usunąć meczu — jest powiązany z innymi danymi.'
+        : 'Wystąpił błąd bazy danych. Spróbuj ponownie.'
+    )
   }
 
   const label = match?.match_date ?? id

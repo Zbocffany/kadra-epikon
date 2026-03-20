@@ -19,7 +19,7 @@ async function resolveBirthCountryId(
     .eq('city_id', birthCityId)
 
   if (periodsError) {
-    throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
+    throw new Error('Błąd odczytu danych miasta. Spróbuj ponownie.')
   }
 
   const sortedPeriods = [...(periods ?? [])].sort((a, b) => {
@@ -80,7 +80,7 @@ export async function createPerson(formData: FormData): Promise<void> {
   })
 
   if (error) {
-    redirectWithError('/admin/people', `Błąd bazy danych: ${error.message}`)
+    redirectWithError('/admin/people', 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   const label = [firstName, lastName].filter(Boolean).join(' ').trim() || nickname || 'osoba'
@@ -130,7 +130,7 @@ export async function updatePerson(formData: FormData): Promise<void> {
     .eq('id', id)
 
   if (error) {
-    redirectWithError(`/admin/people/${id}`, `Błąd bazy danych: ${error.message}`)
+    redirectWithError(`/admin/people/${id}`, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   redirectWithSaved(`/admin/people/${id}`)
@@ -157,7 +157,9 @@ export async function deletePerson(formData: FormData): Promise<void> {
   if (error) {
     redirectWithError(
       `/admin/people/${id}`,
-      `Nie można usunąć osoby (prawdopodobnie jest używana): ${error.message}`
+      error.code === '23503'
+        ? 'Nie można usunąć osoby — jest powiązana z innymi danymi.'
+        : 'Wystąpił błąd bazy danych. Spróbuj ponownie.'
     )
   }
 
