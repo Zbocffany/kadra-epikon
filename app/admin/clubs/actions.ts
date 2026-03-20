@@ -10,6 +10,21 @@ import {
   redirectWithSaved,
 } from '@/lib/actions/admin'
 
+async function ensureClubTeamExists(clubId: string): Promise<void> {
+  const supabase = createServiceRoleClient()
+
+  const { error } = await supabase
+    .from('tbl_Teams')
+    .upsert({ id: crypto.randomUUID(), country_id: null, club_id: clubId }, {
+      onConflict: 'club_id',
+      ignoreDuplicates: true,
+    })
+
+  if (error) {
+    throw new Error(`tbl_Teams: ${error.message}`)
+  }
+}
+
 export async function createClub(formData: FormData): Promise<void> {
   await requireAdminAccess()
   const name = getTrimmedString(formData, 'name')
@@ -20,9 +35,10 @@ export async function createClub(formData: FormData): Promise<void> {
   }
 
   const supabase = createServiceRoleClient()
+  const id = crypto.randomUUID()
 
   const { error } = await supabase.from('tbl_Clubs').insert({
-    id: crypto.randomUUID(),
+    id,
     name,
     club_city_id,
   })
@@ -32,6 +48,13 @@ export async function createClub(formData: FormData): Promise<void> {
       redirectWithError('/admin/clubs', `Klub o nazwie „${name}" już istnieje.`)
     }
     redirectWithError('/admin/clubs', `Błąd bazy danych: ${error.message}`)
+  }
+
+  try {
+    await ensureClubTeamExists(id)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Nie udało się utworzyć drużyny dla klubu.'
+    redirectWithError('/admin/clubs', message)
   }
 
   redirectWithAdded('/admin/clubs', name)
