@@ -18,6 +18,21 @@ function normalizeFifaCode(raw: FormDataEntryValue | null): string | null {
   return val ? val : null
 }
 
+async function ensureCountryTeamExists(countryId: string): Promise<void> {
+  const supabase = createServiceRoleClient()
+
+  const { error } = await supabase
+    .from('tbl_Teams')
+    .upsert({ id: crypto.randomUUID(), country_id: countryId, club_id: null }, {
+      onConflict: 'country_id',
+      ignoreDuplicates: true,
+    })
+
+  if (error) {
+    throw new Error(`tbl_Teams: ${error.message}`)
+  }
+}
+
 export async function createCountry(formData: FormData): Promise<void> {
   const name = getTrimmedString(formData, 'name')
   const fifaCode = normalizeFifaCode(formData.get('fifa_code'))
@@ -32,9 +47,10 @@ export async function createCountry(formData: FormData): Promise<void> {
   }
 
   const supabase = createServiceRoleClient()
+  const id = crypto.randomUUID()
 
   const { error } = await supabase.from('tbl_Countries').insert({
-    id: crypto.randomUUID(),
+    id,
     name,
     fifa_code: fifaCode,
     federation_id: federationId,
@@ -49,6 +65,13 @@ export async function createCountry(formData: FormData): Promise<void> {
     }
 
     redirectWithError('/admin/countries', `Błąd bazy danych: ${error.message}`)
+  }
+
+  try {
+    await ensureCountryTeamExists(id)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Nie udało się utworzyć drużyny dla kraju.'
+    redirectWithError('/admin/countries', message)
   }
 
   redirectWithAdded('/admin/countries', name)
@@ -82,6 +105,15 @@ export async function createCountryInline(
 
   if (error) {
     return inlineError(prevState, mapDbError(error, 'Rekord z taka wartością już istnieje.'))
+  }
+
+  try {
+    await ensureCountryTeamExists(id)
+  } catch (err) {
+    return inlineError(
+      prevState,
+      err instanceof Error ? err.message : 'Nie udało się utworzyć drużyny dla kraju.'
+    )
   }
 
   return inlineSuccess(prevState, id, name)
