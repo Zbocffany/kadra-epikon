@@ -2,6 +2,7 @@
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import type { InlineCreateState } from '@/lib/types/admin'
+import { requireAdminAccess } from '@/lib/auth/admin'
 import {
   getTrimmedString,
   inlineError,
@@ -12,6 +13,7 @@ import {
 } from '@/lib/actions/admin'
 
 export async function createStadium(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const name = getTrimmedString(formData, 'name')
   const stadiumCityId = getTrimmedString(formData, 'stadium_city_id')
 
@@ -46,6 +48,7 @@ export async function createStadiumInline(
   prevState: InlineCreateState,
   formData: FormData
 ): Promise<InlineCreateState> {
+  await requireAdminAccess()
   const name = getTrimmedString(formData, 'name')
   const stadiumCityId = getTrimmedString(formData, 'stadium_city_id')
 
@@ -78,6 +81,7 @@ export async function createStadiumInline(
 }
 
 export async function updateStadium(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
   const name = getTrimmedString(formData, 'name')
   const stadiumCityId = getTrimmedString(formData, 'stadium_city_id')
@@ -116,6 +120,7 @@ export async function updateStadium(formData: FormData): Promise<void> {
 }
 
 export async function deleteStadium(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
 
   if (!id) {

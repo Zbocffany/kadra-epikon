@@ -2,6 +2,7 @@
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import type { InlineCreateState } from '@/lib/types/admin'
+import { requireAdminAccess } from '@/lib/auth/admin'
 import {
   getTrimmedNullable,
   getTrimmedString,
@@ -34,6 +35,7 @@ async function ensureCountryTeamExists(countryId: string): Promise<void> {
 }
 
 export async function createCountry(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const name = getTrimmedString(formData, 'name')
   const fifaCode = normalizeFifaCode(formData.get('fifa_code'))
   const federationId = getTrimmedNullable(formData, 'federation_id')
@@ -81,6 +83,7 @@ export async function createCountryInline(
   prevState: InlineCreateState,
   formData: FormData
 ): Promise<InlineCreateState> {
+  await requireAdminAccess()
   const name = getTrimmedString(formData, 'name')
   const fifaCode = normalizeFifaCode(formData.get('fifa_code'))
   const federationId = getTrimmedNullable(formData, 'federation_id')
@@ -123,6 +126,7 @@ export async function createFederationInline(
   prevState: InlineCreateState,
   formData: FormData
 ): Promise<InlineCreateState> {
+  await requireAdminAccess()
   const shortName = (formData.get('short_name') as string | null)?.trim().toUpperCase() ?? ''
   const fullName = (formData.get('full_name') as string | null)?.trim() ?? ''
   const foundationYearRaw = (formData.get('foundation_year') as string | null)?.trim() ?? ''
@@ -182,6 +186,7 @@ export async function createFederationInline(
 }
 
 export async function updateCountry(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
   const name = getTrimmedString(formData, 'name')
   const fifaCode = normalizeFifaCode(formData.get('fifa_code'))
@@ -222,6 +227,7 @@ export async function updateCountry(formData: FormData): Promise<void> {
 }
 
 export async function deleteCountry(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
 
   if (!id) {
@@ -249,6 +255,7 @@ export async function deleteCountry(formData: FormData): Promise<void> {
 }
 
 export async function saveCountryHistoryEvent(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const countryId = getTrimmedString(formData, 'country_id')
   const eventId = getTrimmedNullable(formData, 'event_id')
   const title = getTrimmedNullable(formData, 'title')
@@ -432,6 +439,7 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
 }
 
 export async function deleteCountryHistoryEvent(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const countryId = getTrimmedString(formData, 'country_id')
   const eventId = getTrimmedString(formData, 'event_id')
 

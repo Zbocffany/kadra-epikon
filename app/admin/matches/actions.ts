@@ -1,6 +1,7 @@
 'use server'
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { requireAdminAccess } from '@/lib/auth/admin'
 import {
   getTrimmedNullable,
   getTrimmedString,
@@ -175,6 +176,7 @@ async function validateTeamsExistOrRedirect(
 }
 
 export async function createMatch(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const input = readMatchInput(formData, '/admin/matches', { requireStatuses: false })
   validateMatchInputOrRedirect(input, '/admin/matches')
 
@@ -209,6 +211,7 @@ export async function createMatch(formData: FormData): Promise<void> {
 }
 
 export async function updateMatch(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
 
   if (!id) {
@@ -252,6 +255,7 @@ export async function updateMatch(formData: FormData): Promise<void> {
 }
 
 export async function deleteMatch(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
 
   if (!id) {

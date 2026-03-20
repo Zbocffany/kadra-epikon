@@ -1,6 +1,7 @@
 ﻿'use server'
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { requireAdminAccess } from '@/lib/auth/admin'
 import {
   getTrimmedNullable,
   getTrimmedString,
@@ -10,6 +11,7 @@ import {
 } from '@/lib/actions/admin'
 
 export async function createClub(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const name = getTrimmedString(formData, 'name')
   const club_city_id = getTrimmedNullable(formData, 'club_city_id')
 
@@ -36,6 +38,7 @@ export async function createClub(formData: FormData): Promise<void> {
 }
 
 export async function updateClub(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
   const name = getTrimmedString(formData, 'name')
   const club_city_id = getTrimmedNullable(formData, 'club_city_id')
@@ -71,6 +74,7 @@ export async function updateClub(formData: FormData): Promise<void> {
 }
 
 export async function deleteClub(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
 
   if (!id) {
@@ -98,6 +102,7 @@ export async function deleteClub(formData: FormData): Promise<void> {
 }
 
 export async function saveClubHistoryEvent(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const clubId = getTrimmedString(formData, 'club_id')
   const eventId = getTrimmedNullable(formData, 'event_id')
   const title = getTrimmedNullable(formData, 'title')
@@ -155,6 +160,7 @@ export async function saveClubHistoryEvent(formData: FormData): Promise<void> {
 }
 
 export async function deleteClubHistoryEvent(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const clubId = getTrimmedString(formData, 'club_id')
   const eventId = getTrimmedString(formData, 'event_id')
 

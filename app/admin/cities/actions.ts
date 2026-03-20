@@ -2,6 +2,7 @@
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import type { InlineCreateState } from '@/lib/types/admin'
+import { requireAdminAccess } from '@/lib/auth/admin'
 import {
   getTrimmedNullable,
   getTrimmedString,
@@ -30,6 +31,7 @@ async function isPolandCountryId(countryId: string): Promise<boolean> {
 }
 
 export async function createCity(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const cityName = getTrimmedString(formData, 'city_name')
   const countryId = getTrimmedString(formData, 'country_id')
   const voivodeship = getTrimmedNullable(formData, 'voivodeship')
@@ -84,6 +86,7 @@ export async function createCityInline(
   prevState: InlineCreateState,
   formData: FormData
 ): Promise<InlineCreateState> {
+  await requireAdminAccess()
   const cityName = getTrimmedString(formData, 'city_name')
   const countryId = getTrimmedString(formData, 'country_id')
   const voivodeship = getTrimmedNullable(formData, 'voivodeship')
@@ -139,6 +142,7 @@ export async function createCityInline(
 }
 
 export async function updateCity(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
   const cityName = getTrimmedString(formData, 'city_name')
   const countryId = getTrimmedString(formData, 'country_id')
@@ -205,6 +209,7 @@ export async function updateCity(formData: FormData): Promise<void> {
 }
 
 export async function deleteCity(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
 
   if (!id) {

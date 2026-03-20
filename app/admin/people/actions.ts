@@ -1,6 +1,7 @@
 ﻿'use server'
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { requireAdminAccess } from '@/lib/auth/admin'
 import { getTrimmedNullable, getTrimmedString, redirectWithAdded, redirectWithError, redirectWithSaved } from '@/lib/actions/admin'
 
 async function resolveBirthCountryId(
@@ -44,6 +45,7 @@ function ensureAnyName(firstName: string | null, lastName: string | null, nickna
 }
 
 export async function createPerson(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const firstName = getTrimmedNullable(formData, 'first_name')
   const lastName = getTrimmedNullable(formData, 'last_name')
   const nickname = getTrimmedNullable(formData, 'nickname')
@@ -86,6 +88,7 @@ export async function createPerson(formData: FormData): Promise<void> {
 }
 
 export async function updatePerson(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
   const firstName = getTrimmedNullable(formData, 'first_name')
   const lastName = getTrimmedNullable(formData, 'last_name')
@@ -134,6 +137,7 @@ export async function updatePerson(formData: FormData): Promise<void> {
 }
 
 export async function deletePerson(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
 
   if (!id) {
