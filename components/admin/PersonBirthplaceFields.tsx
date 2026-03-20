@@ -12,6 +12,7 @@ type PersonBirthplaceFieldsProps = {
   countries: AdminCountryOption[]
   createCityAction: (prevState: InlineCreateState, formData: FormData) => Promise<InlineCreateState>
   createCountryAction: (prevState: InlineCreateState, formData: FormData) => Promise<InlineCreateState>
+  showBirthDate?: boolean
   defaultBirthDate?: string | null
   defaultCityId?: string | null
   defaultCountryId?: string | null
@@ -22,6 +23,7 @@ export default function PersonBirthplaceFields({
   countries,
   createCityAction,
   createCountryAction,
+  showBirthDate = true,
   defaultBirthDate,
   defaultCityId,
   defaultCountryId,
@@ -57,18 +59,20 @@ export default function PersonBirthplaceFields({
 
   return (
     <div className="grid gap-4 sm:grid-cols-3">
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="birth_date" className="text-sm font-medium text-neutral-300">
-          Data urodzenia
-        </label>
-        <input
-          id="birth_date"
-          name="birth_date"
-          type="date"
-          defaultValue={defaultBirthDate ?? ''}
-          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-        />
-      </div>
+      {showBirthDate && (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="birth_date" className="text-sm font-medium text-neutral-300">
+            Data urodzenia
+          </label>
+          <input
+            id="birth_date"
+            name="birth_date"
+            type="date"
+            defaultValue={defaultBirthDate ?? ''}
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+          />
+        </div>
+      )}
 
       <AdminSelectField
         name="birth_city_id"

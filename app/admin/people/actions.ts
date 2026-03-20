@@ -1,6 +1,7 @@
 ﻿'use server'
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { requireAdminAccess } from '@/lib/auth/admin'
 import { getTrimmedNullable, getTrimmedString, redirectWithAdded, redirectWithError, redirectWithSaved } from '@/lib/actions/admin'
 
 async function resolveBirthCountryId(
@@ -18,7 +19,7 @@ async function resolveBirthCountryId(
     .eq('city_id', birthCityId)
 
   if (periodsError) {
-    throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
+    throw new Error('Błąd odczytu danych miasta. Spróbuj ponownie.')
   }
 
   const sortedPeriods = [...(periods ?? [])].sort((a, b) => {
@@ -44,6 +45,7 @@ function ensureAnyName(firstName: string | null, lastName: string | null, nickna
 }
 
 export async function createPerson(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const firstName = getTrimmedNullable(formData, 'first_name')
   const lastName = getTrimmedNullable(formData, 'last_name')
   const nickname = getTrimmedNullable(formData, 'nickname')
@@ -78,7 +80,7 @@ export async function createPerson(formData: FormData): Promise<void> {
   })
 
   if (error) {
-    redirectWithError('/admin/people', `Błąd bazy danych: ${error.message}`)
+    redirectWithError('/admin/people', 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   const label = [firstName, lastName].filter(Boolean).join(' ').trim() || nickname || 'osoba'
@@ -86,6 +88,7 @@ export async function createPerson(formData: FormData): Promise<void> {
 }
 
 export async function updatePerson(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
   const firstName = getTrimmedNullable(formData, 'first_name')
   const lastName = getTrimmedNullable(formData, 'last_name')
@@ -127,13 +130,14 @@ export async function updatePerson(formData: FormData): Promise<void> {
     .eq('id', id)
 
   if (error) {
-    redirectWithError(`/admin/people/${id}`, `Błąd bazy danych: ${error.message}`)
+    redirectWithError(`/admin/people/${id}`, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   redirectWithSaved(`/admin/people/${id}`)
 }
 
 export async function deletePerson(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
 
   if (!id) {
@@ -153,7 +157,9 @@ export async function deletePerson(formData: FormData): Promise<void> {
   if (error) {
     redirectWithError(
       `/admin/people/${id}`,
-      `Nie można usunąć osoby (prawdopodobnie jest używana): ${error.message}`
+      error.code === '23503'
+        ? 'Nie można usunąć osoby — jest powiązana z innymi danymi.'
+        : 'Wystąpił błąd bazy danych. Spróbuj ponownie.'
     )
   }
 

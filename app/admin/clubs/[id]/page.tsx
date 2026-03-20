@@ -20,6 +20,7 @@ import {
   DetailsPageHeader,
   DetailsPageContent,
 } from '@/components/admin/DetailsPageLayout'
+import { DetailsFieldCard, DetailsFieldValue } from '@/components/admin/DetailsFieldCard'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 
 type Params = DetailPageParams
@@ -99,6 +100,124 @@ export default async function AdminClubDetailsPage({
     : null
   const isHistoryModalOpen = Boolean(history)
   const isNewHistoryEvent = history === 'new'
+  const fields = (
+    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <DetailsFieldCard label="Nazwa klubu" spanTwo>
+        {isEdit ? (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="name" className="text-sm font-medium text-neutral-300">
+              Nazwa <span className="text-red-400">*</span>
+            </label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              required
+              defaultValue={club.name}
+              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            />
+          </div>
+        ) : (
+          <DetailsFieldValue value={club.name} />
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Miasto">
+        {isEdit ? (
+          <AdminSelectField
+            name="club_city_id"
+            label="Miasto"
+            selectedId={club.club_city_id}
+            options={cities.map((c) => ({ id: c.id, label: c.city_name }))}
+            displayKey="label"
+            addButtonLabel="+ Dodaj miasto"
+            addDialogTitle="Nowe miasto"
+            emptyResultsMessage="Brak wyników — możesz dodać nowe miasto poniżej."
+            createAction={createCityInline}
+            inlineForm={(
+              <div className="space-y-3">
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="inline_city_name" className="text-xs text-neutral-400">
+                    Nazwa miasta
+                  </label>
+                  <input
+                    id="inline_city_name"
+                    name="city_name"
+                    type="text"
+                    required
+                    className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="inline_city_country" className="text-xs text-neutral-400">
+                    Kraj
+                  </label>
+                  <select
+                    id="inline_city_country"
+                    name="country_id"
+                    required
+                    className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                  >
+                    <option value="">— wybierz —</option>
+                    {countries.map((country) => (
+                      <option key={country.id} value={country.id}>
+                        {country.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="inline_city_voivodeship" className="text-xs text-neutral-400">
+                    Województwo (tylko Polska)
+                  </label>
+                  <select
+                    id="inline_city_voivodeship"
+                    name="voivodeship"
+                    className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                  >
+                    <option value="">— brak —</option>
+                    {VOIVODESHIP_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+          />
+        ) : (
+          <DetailsFieldValue value={club.city_name ?? '—'} />
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Kraj">
+        <DetailsFieldValue value={club.country_name ?? '—'} />
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Stadion" spanTwo>
+        {isEdit ? (
+          <AdminSelectField
+            name="stadium_id"
+            label="Stadion"
+            selectedId={club.stadium_id}
+            options={(stadiums as AdminStadiumOption[]).map((s) => ({ id: s.id, label: s.name ?? '—' }))}
+            displayKey="label"
+            placeholder="Wpisz, aby filtrowac stadiony..."
+            addButtonLabel="+ Dodaj stadion"
+            addDialogTitle="Nowy stadion"
+            emptyResultsMessage="Brak wyników — możesz dodać nowy stadion poniżej."
+            createAction={createStadiumInline}
+            inlineForm={<StadiumInlineForm cities={cities} />}
+          />
+        ) : (
+          <DetailsFieldValue value={club.stadium_name ?? '—'} />
+        )}
+      </DetailsFieldCard>
+    </div>
+  )
 
   return (
     <DetailsPageContainer>
@@ -118,103 +237,9 @@ export default async function AdminClubDetailsPage({
         error={error}
         isEdit={isEdit}
         editContent={
-          <form action={updateClub} className="mt-6 space-y-4">
+          <form action={updateClub} className="space-y-4">
             <input type="hidden" name="id" value={club.id} />
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="name" className="text-sm font-medium text-neutral-300">
-                  Nazwa <span className="text-red-400">*</span>
-                </label>
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  required
-                  defaultValue={club.name}
-                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-                />
-              </div>
-
-              <AdminSelectField
-                name="club_city_id"
-                label="Miasto"
-                selectedId={club.club_city_id}
-                options={cities.map((c) => ({ id: c.id, label: c.city_name }))}
-                displayKey="label"
-                addButtonLabel="+ Dodaj miasto"
-                addDialogTitle="Nowe miasto"
-                emptyResultsMessage="Brak wyników — możesz dodać nowe miasto poniżej."
-                createAction={createCityInline}
-                inlineForm={(
-                  <div className="space-y-3">
-                    <div className="flex flex-col gap-1.5">
-                      <label htmlFor="inline_city_name" className="text-xs text-neutral-400">
-                        Nazwa miasta
-                      </label>
-                      <input
-                        id="inline_city_name"
-                        name="city_name"
-                        type="text"
-                        required
-                        className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <label htmlFor="inline_city_country" className="text-xs text-neutral-400">
-                        Kraj
-                      </label>
-                      <select
-                        id="inline_city_country"
-                        name="country_id"
-                        required
-                        className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                      >
-                        <option value="">— wybierz —</option>
-                        {countries.map((country) => (
-                          <option key={country.id} value={country.id}>
-                            {country.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <label htmlFor="inline_city_voivodeship" className="text-xs text-neutral-400">
-                        Województwo (tylko Polska)
-                      </label>
-                      <select
-                        id="inline_city_voivodeship"
-                        name="voivodeship"
-                        className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                      >
-                        <option value="">— brak —</option>
-                        {VOIVODESHIP_OPTIONS.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-              />
-
-              <AdminSelectField
-                name="stadium_id"
-                label="Stadion"
-                selectedId={club.stadium_id}
-                options={(stadiums as AdminStadiumOption[]).map((s) => ({ id: s.id, label: s.name ?? '—' }))}
-                displayKey="label"
-                placeholder="Wpisz, aby filtrowac stadiony..."
-                addButtonLabel="+ Dodaj stadion"
-                addDialogTitle="Nowy stadion"
-                emptyResultsMessage="Brak wyników — możesz dodać nowy stadion poniżej."
-                createAction={createStadiumInline}
-                inlineForm={<StadiumInlineForm cities={cities} />}
-              />
-            </div>
+            {fields}
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <a
@@ -234,28 +259,7 @@ export default async function AdminClubDetailsPage({
         }
         viewContent={
           <>
-            <div className="mt-6 grid gap-4 sm:grid-cols-3">
-              <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-                <p className="text-xs uppercase tracking-wide text-neutral-500">Miasto</p>
-                <p className="mt-2 text-lg font-semibold text-neutral-100">
-                  {club.city_name ?? '—'}
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-                <p className="text-xs uppercase tracking-wide text-neutral-500">Kraj</p>
-                <p className="mt-2 text-lg font-semibold text-neutral-100">
-                  {club.country_name ?? '—'}
-                </p>
-              </div>
-
-              <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-                <p className="text-xs uppercase tracking-wide text-neutral-500">Stadion</p>
-                <p className="mt-2 text-lg font-semibold text-neutral-100">
-                  {club.stadium_name ?? '—'}
-                </p>
-              </div>
-            </div>
+            {fields}
 
             <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-6">
               <p className="mb-5 text-xs font-semibold uppercase tracking-widest text-neutral-500">

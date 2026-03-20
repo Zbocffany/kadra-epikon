@@ -53,6 +53,6 @@ export function mapDbError(error: DbError, duplicateMessage: string): string {
   if (error.code === '23505') {
     return duplicateMessage
   }
-  return `Błąd bazy danych: ${error.message}`
+  return 'Wystąpił błąd bazy danych. Spróbuj ponownie.'
 }
 

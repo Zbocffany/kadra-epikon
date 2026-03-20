@@ -1,4 +1,5 @@
 ﻿import { createServiceRoleClient } from '@/lib/supabase/server'
+import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
 export type AdminClub = {
   id: string
@@ -73,6 +74,50 @@ export async function getAdminClubs(): Promise<AdminClub[]> {
     name: c.name,
     city_name: c.club_city_id ? (cityMap.get(c.club_city_id) ?? null) : null,
   }))
+}
+
+export async function getAdminClubsPage(
+  page: number,
+  pageSize: number
+): Promise<PaginatedDbResult<AdminClub>> {
+  const supabase = createServiceRoleClient()
+  const { from, to } = getPageRange(page, pageSize)
+
+  const { data: clubs, error: clubsError, count } = await supabase
+    .from('tbl_Clubs')
+    .select('id, name, club_city_id', { count: 'exact' })
+    .order('name', { ascending: true })
+    .range(from, to)
+
+  if (clubsError) throw new Error(`tbl_Clubs: ${clubsError.message}`)
+  if (!clubs?.length) return { items: [], total: count ?? 0 }
+
+  const cityIds = [...new Set(clubs.map((c) => c.club_city_id).filter(Boolean))]
+
+  if (!cityIds.length) {
+    return {
+      items: clubs.map((c) => ({ id: c.id, name: c.name, city_name: null })),
+      total: count ?? 0,
+    }
+  }
+
+  const { data: cities, error: citiesError } = await supabase
+    .from('tbl_Cities')
+    .select('id, city_name')
+    .in('id', cityIds)
+
+  if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
+
+  const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
+
+  return {
+    items: clubs.map((c) => ({
+      id: c.id,
+      name: c.name,
+      city_name: c.club_city_id ? (cityMap.get(c.club_city_id) ?? null) : null,
+    })),
+    total: count ?? 0,
+  }
 }
 
 export async function getAdminCities(): Promise<AdminCity[]> {

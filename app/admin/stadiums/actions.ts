@@ -2,6 +2,7 @@
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import type { InlineCreateState } from '@/lib/types/admin'
+import { requireAdminAccess } from '@/lib/auth/admin'
 import {
   getTrimmedString,
   inlineError,
@@ -12,6 +13,7 @@ import {
 } from '@/lib/actions/admin'
 
 export async function createStadium(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const name = getTrimmedString(formData, 'name')
   const stadiumCityId = getTrimmedString(formData, 'stadium_city_id')
 
@@ -36,7 +38,7 @@ export async function createStadium(formData: FormData): Promise<void> {
       redirectWithError('/admin/stadiums', 'Stadion o tej nazwie już istnieje.')
     }
 
-    redirectWithError('/admin/stadiums', `Błąd bazy danych: ${error.message}`)
+    redirectWithError('/admin/stadiums', 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   redirectWithAdded('/admin/stadiums', name)
@@ -46,6 +48,7 @@ export async function createStadiumInline(
   prevState: InlineCreateState,
   formData: FormData
 ): Promise<InlineCreateState> {
+  await requireAdminAccess()
   const name = getTrimmedString(formData, 'name')
   const stadiumCityId = getTrimmedString(formData, 'stadium_city_id')
 
@@ -71,13 +74,14 @@ export async function createStadiumInline(
       return inlineError(prevState, 'Stadion o tej nazwie już istnieje.')
     }
 
-    return inlineError(prevState, `Błąd bazy danych: ${error.message}`)
+    return inlineError(prevState, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   return inlineSuccess(prevState, id, name)
 }
 
 export async function updateStadium(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
   const name = getTrimmedString(formData, 'name')
   const stadiumCityId = getTrimmedString(formData, 'stadium_city_id')
@@ -109,13 +113,14 @@ export async function updateStadium(formData: FormData): Promise<void> {
       redirectWithError(`/admin/stadiums/${id}`, 'Stadion o tej nazwie już istnieje.')
     }
 
-    redirectWithError(`/admin/stadiums/${id}`, `Błąd bazy danych: ${error.message}`)
+    redirectWithError(`/admin/stadiums/${id}`, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   redirectWithSaved(`/admin/stadiums/${id}`)
 }
 
 export async function deleteStadium(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
 
   if (!id) {
@@ -135,7 +140,9 @@ export async function deleteStadium(formData: FormData): Promise<void> {
   if (error) {
     redirectWithError(
       `/admin/stadiums/${id}`,
-      `Nie można usunąć stadionu (prawdopodobnie jest używany): ${error.message}`
+      error.code === '23503'
+        ? 'Nie można usunąć stadionu — jest powiązany z innymi danymi.'
+        : 'Wystąpił błąd bazy danych. Spróbuj ponownie.'
     )
   }
 

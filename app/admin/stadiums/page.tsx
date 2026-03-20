@@ -5,15 +5,17 @@ import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import { getAdminCities } from '@/lib/db/clubs'
 import type { AdminCity } from '@/lib/db/clubs'
-import { getAdminStadiums } from '@/lib/db/stadiums'
+import AdminPagination from '@/components/admin/AdminPagination'
+import { getAdminStadiumsPage } from '@/lib/db/stadiums'
 import type { AdminStadiumListItem } from '@/lib/db/stadiums'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import AdminListLayout from '@/components/admin/AdminListLayout'
 import AdminTable from '@/components/admin/AdminTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
+import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
 
-type SearchParams = Promise<{ added?: string; error?: string; create?: string }>
+type SearchParams = Promise<RawSearchParams>
 
 function StadiumCreateFields({ cities, countries }: { cities: AdminCity[]; countries: AdminCountryOption[] }) {
   return (
@@ -102,28 +104,38 @@ function StadiumCreateFields({ cities, countries }: { cities: AdminCity[]; count
 }
 
 export default async function AdminStadiumsPage({ searchParams }: { searchParams: SearchParams }) {
-  const { error: formError, create } = await searchParams
+  const resolvedSearchParams = await searchParams
+  const { error: formError, create } = resolvedSearchParams
+  const { page, pageSize } = parsePaginationParams(resolvedSearchParams)
 
   let stadiums: AdminStadiumListItem[] = []
+  let totalStadiums = 0
   let cities: AdminCity[] = []
   let countries: AdminCountryOption[] = []
   let fetchError: string | null = null
 
   try {
-    ;[stadiums, cities, countries] = await Promise.all([
-      getAdminStadiums(),
+    const [stadiumsPage, fetchedCities, fetchedCountries] = await Promise.all([
+      getAdminStadiumsPage(page, pageSize),
       getAdminCities(),
       getAdminCountriesOptions(),
     ])
+    stadiums = stadiumsPage.items
+    totalStadiums = stadiumsPage.total
+    cities = fetchedCities
+    countries = fetchedCountries
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
+
+  const pagination = getPaginationMeta(totalStadiums, page, pageSize)
+  const indexOffset = pagination.from > 0 ? pagination.from - 1 : 0
 
   const columns: AdminTableColumn<AdminStadiumListItem>[] = [
     {
       key: 'index',
       label: '#',
-      render: (_, i) => i + 1,
+      render: (_, i) => indexOffset + i + 1,
       className: 'text-neutral-500',
     },
     {
@@ -154,7 +166,7 @@ export default async function AdminStadiumsPage({ searchParams }: { searchParams
   ]
 
   const pluralLabel = (() => {
-    const count = stadiums.length
+    const count = totalStadiums
     if (count === 1) return 'stadion'
     if (count < 5) return 'stadiony'
     return 'stadionów'
@@ -166,7 +178,7 @@ export default async function AdminStadiumsPage({ searchParams }: { searchParams
     <AdminListLayout
       title="Stadiony"
       breadcrumb="Admin"
-      recordCount={stadiums.length}
+      recordCount={totalStadiums}
       recordLabel={pluralLabel}
       fetchError={fetchError}
       headerActions={(
@@ -181,6 +193,19 @@ export default async function AdminStadiumsPage({ searchParams }: { searchParams
       {!fetchError && (
         <>
           <AdminTable data={stadiums} columns={columns} emptyMessage="Brak stadionów w bazie danych." />
+          {stadiums.length > 0 && (
+            <AdminPagination
+              basePath="/admin/stadiums"
+              searchParams={resolvedSearchParams}
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.total}
+              from={pagination.from}
+              to={pagination.to}
+              itemLabel={pagination.total === 1 ? 'stadionu' : 'stadionów'}
+            />
+          )}
           {stadiums.length > 0 && (
             <p className="text-xs text-neutral-500">Kliknij nazwę stadionu, aby przejść do strony szczegółów.</p>
           )}

@@ -2,6 +2,7 @@
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import type { InlineCreateState } from '@/lib/types/admin'
+import { requireAdminAccess } from '@/lib/auth/admin'
 import {
   getTrimmedNullable,
   getTrimmedString,
@@ -21,7 +22,7 @@ async function isPolandCountryId(countryId: string): Promise<boolean> {
     .maybeSingle()
 
   if (error) {
-    throw new Error(`tbl_Countries: ${error.message}`)
+    throw new Error('Błąd walidacji kraju. Spróbuj ponownie.')
   }
 
   const fifaCode = data?.fifa_code?.toUpperCase() ?? ''
@@ -30,6 +31,7 @@ async function isPolandCountryId(countryId: string): Promise<boolean> {
 }
 
 export async function createCity(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const cityName = getTrimmedString(formData, 'city_name')
   const countryId = getTrimmedString(formData, 'country_id')
   const voivodeship = getTrimmedNullable(formData, 'voivodeship')
@@ -59,7 +61,7 @@ export async function createCity(formData: FormData): Promise<void> {
   })
 
   if (cityError) {
-    redirectWithError('/admin/cities', `Błąd bazy danych: ${cityError.message}`)
+    redirectWithError('/admin/cities', 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   const { error: periodError } = await supabase.from('tbl_City_Country_Periods').insert({
@@ -74,7 +76,7 @@ export async function createCity(formData: FormData): Promise<void> {
   if (periodError) {
     // Best effort cleanup when linking country fails after city insert.
     await supabase.from('tbl_Cities').delete().eq('id', cityId)
-    redirectWithError('/admin/cities', `Błąd relacji miasto-kraj: ${periodError.message}`)
+    redirectWithError('/admin/cities', 'Błąd zapisu powiązania miasto–kraj. Spróbuj ponownie.')
   }
 
   redirectWithAdded('/admin/cities', cityName)
@@ -84,6 +86,7 @@ export async function createCityInline(
   prevState: InlineCreateState,
   formData: FormData
 ): Promise<InlineCreateState> {
+  await requireAdminAccess()
   const cityName = getTrimmedString(formData, 'city_name')
   const countryId = getTrimmedString(formData, 'country_id')
   const voivodeship = getTrimmedNullable(formData, 'voivodeship')
@@ -103,7 +106,7 @@ export async function createCityInline(
         return inlineError(prevState, 'Województwo można ustawić tylko dla miast w Polsce.')
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Nieznany blad walidacji kraju.'
+      const message = error instanceof Error ? error.message : 'Błąd walidacji kraju. Spróbuj ponownie.'
       return inlineError(prevState, message)
     }
   }
@@ -118,7 +121,7 @@ export async function createCityInline(
   })
 
   if (cityError) {
-    return inlineError(prevState, `Błąd bazy danych: ${cityError.message}`)
+    return inlineError(prevState, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   const { error: periodError } = await supabase.from('tbl_City_Country_Periods').insert({
@@ -132,13 +135,14 @@ export async function createCityInline(
 
   if (periodError) {
     await supabase.from('tbl_Cities').delete().eq('id', cityId)
-    return inlineError(prevState, `Błąd relacji miasto-kraj: ${periodError.message}`)
+    return inlineError(prevState, 'Błąd zapisu powiązania miasto–kraj. Spróbuj ponownie.')
   }
 
   return inlineSuccess(prevState, cityId, cityName)
 }
 
 export async function updateCity(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
   const cityName = getTrimmedString(formData, 'city_name')
   const countryId = getTrimmedString(formData, 'country_id')
@@ -172,7 +176,7 @@ export async function updateCity(formData: FormData): Promise<void> {
     .eq('id', id)
 
   if (cityError) {
-    redirectWithError(`/admin/cities/${id}`, `Błąd bazy danych: ${cityError.message}`)
+    redirectWithError(`/admin/cities/${id}`, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
   if (currentPeriodId) {
@@ -182,7 +186,7 @@ export async function updateCity(formData: FormData): Promise<void> {
       .eq('id', currentPeriodId)
 
     if (updatePeriodError) {
-      redirectWithError(`/admin/cities/${id}`, `Błąd relacji miasto-kraj: ${updatePeriodError.message}`)
+      redirectWithError(`/admin/cities/${id}`, 'Błąd zapisu powiązania miasto–kraj. Spróbuj ponownie.')
     }
   } else {
     const { error: createPeriodError } = await supabase
@@ -197,7 +201,7 @@ export async function updateCity(formData: FormData): Promise<void> {
       })
 
     if (createPeriodError) {
-      redirectWithError(`/admin/cities/${id}`, `Błąd relacji miasto-kraj: ${createPeriodError.message}`)
+      redirectWithError(`/admin/cities/${id}`, 'Błąd zapisu powiązania miasto–kraj. Spróbuj ponownie.')
     }
   }
 
@@ -205,6 +209,7 @@ export async function updateCity(formData: FormData): Promise<void> {
 }
 
 export async function deleteCity(formData: FormData): Promise<void> {
+  await requireAdminAccess()
   const id = getTrimmedString(formData, 'id')
 
   if (!id) {
@@ -225,7 +230,7 @@ export async function deleteCity(formData: FormData): Promise<void> {
     .eq('city_id', id)
 
   if (periodsError) {
-    redirectWithError(`/admin/cities/${id}`, `Nie można usunąć relacji miasta: ${periodsError.message}`)
+    redirectWithError(`/admin/cities/${id}`, 'Nie można usunąć powiązań miasta. Spróbuj ponownie.')
   }
 
   const { error: cityError } = await supabase.from('tbl_Cities').delete().eq('id', id)
@@ -233,7 +238,9 @@ export async function deleteCity(formData: FormData): Promise<void> {
   if (cityError) {
     redirectWithError(
       `/admin/cities/${id}`,
-      `Nie można usunąć miasta (prawdopodobnie jest używane): ${cityError.message}`
+      cityError.code === '23503'
+        ? 'Nie można usunąć miasta — jest powiązane z innymi danymi.'
+        : 'Wystąpił błąd bazy danych. Spróbuj ponownie.'
     )
   }
 

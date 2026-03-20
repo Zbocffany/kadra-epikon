@@ -1,4 +1,5 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
 type CityCountryPeriod = {
   city_id: string
@@ -166,6 +167,64 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
         : null,
     }))
     .sort((a, b) => buildDisplayName(a).localeCompare(buildDisplayName(b), 'pl'))
+}
+
+export async function getAdminPeoplePage(
+  page: number,
+  pageSize: number
+): Promise<PaginatedDbResult<AdminPersonListItem>> {
+  const supabase = createServiceRoleClient()
+  const { from, to } = getPageRange(page, pageSize)
+
+  const { data: people, error: peopleError, count } = await supabase
+    .from('tbl_People')
+    .select('id, first_name, last_name, nickname, birth_date, is_active, birth_city_id, birth_country_id', {
+      count: 'exact',
+    })
+    .order('last_name', { ascending: true, nullsFirst: false })
+    .order('first_name', { ascending: true, nullsFirst: false })
+    .order('nickname', { ascending: true, nullsFirst: false })
+    .range(from, to)
+
+  if (peopleError) throw new Error(`tbl_People: ${peopleError.message}`)
+  if (!people?.length) return { items: [], total: count ?? 0 }
+
+  const cityIds = [...new Set(people.map((p) => p.birth_city_id).filter(Boolean))]
+  const countryIds = [...new Set(people.map((p) => p.birth_country_id).filter(Boolean))]
+
+  const [{ data: cities, error: citiesError }, { data: countries, error: countriesError }] =
+    await Promise.all([
+      cityIds.length
+        ? supabase.from('tbl_Cities').select('id, city_name').in('id', cityIds)
+        : Promise.resolve({ data: [] as { id: string; city_name: string | null }[], error: null }),
+      countryIds.length
+        ? supabase.from('tbl_Countries').select('id, name').in('id', countryIds)
+        : Promise.resolve({ data: [] as { id: string; name: string | null }[], error: null }),
+    ])
+
+  if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
+  if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
+
+  const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
+  const countryMap = new Map((countries ?? []).map((c) => [c.id, c.name]))
+
+  return {
+    items: people.map((person) => ({
+      id: person.id,
+      first_name: person.first_name,
+      last_name: person.last_name,
+      nickname: person.nickname,
+      birth_date: person.birth_date,
+      is_active: person.is_active,
+      birth_city_id: person.birth_city_id,
+      birth_country_id: person.birth_country_id,
+      birth_city_name: person.birth_city_id ? (cityMap.get(person.birth_city_id) ?? null) : null,
+      birth_country_name: person.birth_country_id
+        ? (countryMap.get(person.birth_country_id) ?? null)
+        : null,
+    })),
+    total: count ?? 0,
+  }
 }
 
 export async function getAdminPersonDetails(id: string): Promise<AdminPersonDetails | null> {
