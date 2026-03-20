@@ -1,0 +1,22 @@
+-- This migration documents a step that was applied manually to the database
+-- before it could be captured in the migration history.
+--
+-- Context:
+--   Migration 003 created result_type_enum with value 'EXTRA&PENALTIES' (ampersand).
+--   Migration 004 expected a type named result_type_enum_v2 to exist and renamed it
+--   to result_type_enum (replacing the one from 003).
+--
+--   The creation of result_type_enum_v2 — with the corrected value
+--   'EXTRA_TIME_AND_PENALTIES' instead of 'EXTRA&PENALTIES' — was performed
+--   manually in Supabase Studio and is not present in any earlier migration file.
+--
+-- Current state (verified 2026-03-20):
+--   result_type_enum contains exactly:
+--     REGULAR_TIME
+--     EXTRA_TIME
+--     PENALTIES
+--     EXTRA_TIME_AND_PENALTIES
+--     GOLDEN_GOAL
+--     WALKOVER
+--
+-- No SQL changes are needed — the database is already in the correct state.
