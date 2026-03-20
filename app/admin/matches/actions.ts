@@ -146,9 +146,16 @@ async function resolveMatchCityId(
     }
 
     matchCityId = stadium.stadium_city_id ?? matchCityId
+
+    if (!matchCityId) {
+      redirectWithError(
+        redirectPath,
+        'Wybrany stadion nie ma przypisanego miasta. Wybierz miasto meczu ręcznie.'
+      )
+    }
   }
 
-  if (!matchStadiumId && !matchCityId) {
+  if (!matchCityId) {
     redirectWithError(redirectPath, 'Wybierz stadion albo miasto meczu.')
   }
 
