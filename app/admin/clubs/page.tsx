@@ -1,4 +1,4 @@
-﻿import { getAdminClubs, getAdminCities } from '@/lib/db/clubs'
+﻿import { getAdminClubsPage, getAdminCities } from '@/lib/db/clubs'
 import type { AdminClub, AdminCity } from '@/lib/db/clubs'
 import { createClub } from './actions'
 import Link from 'next/link'
@@ -7,9 +7,11 @@ import { createCityInline } from '@/app/admin/cities/actions'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
+import AdminPagination from '@/components/admin/AdminPagination'
 import AdminListLayout from '@/components/admin/AdminListLayout'
 import AdminTable from '@/components/admin/AdminTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
+import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
 
 function ClubCreateFields({
   cities,
@@ -102,35 +104,45 @@ function ClubCreateFields({
   )
 }
 
-type SearchParams = Promise<{ added?: string; error?: string; create?: string }>
+type SearchParams = Promise<RawSearchParams>
 
 export default async function AdminClubsPage({
   searchParams,
 }: {
   searchParams: SearchParams
 }) {
-  const { error: formError, create } = await searchParams
+  const resolvedSearchParams = await searchParams
+  const { error: formError, create } = resolvedSearchParams
+  const { page, pageSize } = parsePaginationParams(resolvedSearchParams)
 
   let clubs: AdminClub[] = []
+  let totalClubs = 0
   let cities: AdminCity[] = []
   let countries: AdminCountryOption[] = []
   let fetchError: string | null = null
 
   try {
-    ;[clubs, cities, countries] = await Promise.all([
-      getAdminClubs(),
+    const [clubsPage, fetchedCities, fetchedCountries] = await Promise.all([
+      getAdminClubsPage(page, pageSize),
       getAdminCities(),
       getAdminCountriesOptions(),
     ])
+    clubs = clubsPage.items
+    totalClubs = clubsPage.total
+    cities = fetchedCities
+    countries = fetchedCountries
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
+
+  const pagination = getPaginationMeta(totalClubs, page, pageSize)
+  const indexOffset = pagination.from > 0 ? pagination.from - 1 : 0
 
   const columns: AdminTableColumn<AdminClub>[] = [
     {
       key: 'index',
       label: '#',
-      render: (_, i) => i + 1,
+      render: (_, i) => indexOffset + i + 1,
       className: 'text-neutral-500',
     },
     {
@@ -155,7 +167,7 @@ export default async function AdminClubsPage({
   ]
 
   const pluralLabel = (() => {
-    const count = clubs.length
+    const count = totalClubs
     if (count === 1) return 'klub'
     if (count < 5) return 'kluby'
     return 'klubów'
@@ -167,7 +179,7 @@ export default async function AdminClubsPage({
     <AdminListLayout
       title="Kluby"
       breadcrumb="Admin"
-      recordCount={clubs.length}
+      recordCount={totalClubs}
       recordLabel={pluralLabel}
       fetchError={fetchError}
       headerActions={(
@@ -182,6 +194,19 @@ export default async function AdminClubsPage({
       {!fetchError && (
         <>
           <AdminTable data={clubs} columns={columns} emptyMessage="Brak klubów w bazie danych." />
+          {clubs.length > 0 && (
+            <AdminPagination
+              basePath="/admin/clubs"
+              searchParams={resolvedSearchParams}
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.total}
+              from={pagination.from}
+              to={pagination.to}
+              itemLabel={pagination.total === 1 ? 'klubu' : 'klubów'}
+            />
+          )}
           {!fetchError && clubs.length > 0 && (
             <p className="text-xs text-neutral-500">
               Kliknij nazwę klubu, aby przejść do strony szczegółów.

@@ -1,7 +1,8 @@
 ﻿import Link from 'next/link'
 import { createCity } from './actions'
 import { createCountryInline } from '@/app/admin/countries/actions'
-import { getAdminCitiesList, getAdminCountriesOptions } from '@/lib/db/cities'
+import AdminPagination from '@/components/admin/AdminPagination'
+import { getAdminCitiesListPage, getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCityListItem, AdminCountryOption } from '@/lib/db/cities'
 import { getAdminFederations } from '@/lib/db/countries'
 import type { AdminFederation } from '@/lib/db/countries'
@@ -10,8 +11,9 @@ import AdminListLayout from '@/components/admin/AdminListLayout'
 import AdminTable from '@/components/admin/AdminTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
+import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
 
-type SearchParams = Promise<{ added?: string; error?: string; create?: string }>
+type SearchParams = Promise<RawSearchParams>
 
 function CityCreateFields({
   countries,
@@ -121,28 +123,38 @@ function CityCreateFields({
 }
 
 export default async function AdminCitiesPage({ searchParams }: { searchParams: SearchParams }) {
-  const { error: formError, create } = await searchParams
+  const resolvedSearchParams = await searchParams
+  const { error: formError, create } = resolvedSearchParams
+  const { page, pageSize } = parsePaginationParams(resolvedSearchParams)
 
   let cities: AdminCityListItem[] = []
+  let totalCities = 0
   let countries: AdminCountryOption[] = []
   let federations: AdminFederation[] = []
   let fetchError: string | null = null
 
   try {
-    ;[cities, countries, federations] = await Promise.all([
-      getAdminCitiesList(),
+    const [citiesPage, fetchedCountries, fetchedFederations] = await Promise.all([
+      getAdminCitiesListPage(page, pageSize),
       getAdminCountriesOptions(),
       getAdminFederations(),
     ])
+    cities = citiesPage.items
+    totalCities = citiesPage.total
+    countries = fetchedCountries
+    federations = fetchedFederations
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
+
+  const pagination = getPaginationMeta(totalCities, page, pageSize)
+  const indexOffset = pagination.from > 0 ? pagination.from - 1 : 0
 
   const columns: AdminTableColumn<AdminCityListItem>[] = [
     {
       key: 'index',
       label: '#',
-      render: (_, i) => i + 1,
+      render: (_, i) => indexOffset + i + 1,
       className: 'text-neutral-500',
     },
     {
@@ -172,8 +184,8 @@ export default async function AdminCitiesPage({ searchParams }: { searchParams: 
     <AdminListLayout
       title="Miasta"
       breadcrumb="Admin"
-      recordCount={cities.length}
-      recordLabel={cities.length === 1 ? 'miasto' : 'miast'}
+      recordCount={totalCities}
+      recordLabel={totalCities === 1 ? 'miasto' : 'miast'}
       fetchError={fetchError}
       headerActions={(
         <Link
@@ -187,6 +199,19 @@ export default async function AdminCitiesPage({ searchParams }: { searchParams: 
       {!fetchError && (
         <>
           <AdminTable data={cities} columns={columns} emptyMessage="Brak miast w bazie danych." />
+          {cities.length > 0 && (
+            <AdminPagination
+              basePath="/admin/cities"
+              searchParams={resolvedSearchParams}
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.total}
+              from={pagination.from}
+              to={pagination.to}
+              itemLabel={pagination.total === 1 ? 'miasta' : 'miast'}
+            />
+          )}
           {cities.length > 0 && (
             <p className="text-xs text-neutral-500">Kliknij nazwę miasta, aby przejść do strony szczegółów.</p>
           )}

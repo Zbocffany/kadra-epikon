@@ -1,4 +1,5 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
 type CityCountryPeriod = {
   city_id: string
@@ -141,6 +142,66 @@ export async function getAdminStadiums(): Promise<AdminStadiumListItem[]> {
       country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
     }
   })
+}
+
+export async function getAdminStadiumsPage(
+  page: number,
+  pageSize: number
+): Promise<PaginatedDbResult<AdminStadiumListItem>> {
+  const supabase = createServiceRoleClient()
+  const { from, to } = getPageRange(page, pageSize)
+
+  const { data: stadiums, error: stadiumsError, count } = await supabase
+    .from('tbl_Stadiums')
+    .select('id, name, stadium_city_id', { count: 'exact' })
+    .order('name', { ascending: true })
+    .range(from, to)
+
+  if (stadiumsError) throw new Error(`tbl_Stadiums: ${stadiumsError.message}`)
+  if (!stadiums?.length) return { items: [], total: count ?? 0 }
+
+  const cityIds = [...new Set(stadiums.map((s) => s.stadium_city_id).filter(Boolean))]
+
+  if (!cityIds.length) {
+    return {
+      items: stadiums.map((stadium) => ({
+        id: stadium.id,
+        name: stadium.name,
+        stadium_city_id: stadium.stadium_city_id,
+        city_name: null,
+        country_name: null,
+      })),
+      total: count ?? 0,
+    }
+  }
+
+  const { data: cities, error: citiesError } = await supabase
+    .from('tbl_Cities')
+    .select('id, city_name')
+    .in('id', cityIds)
+
+  if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
+
+  const cityMap = new Map((cities ?? []).map((city) => [city.id, city.city_name]))
+  const currentCountryByCity = await getCurrentCountryIdByCity(cityIds)
+  const countryIds = [...new Set([...currentCountryByCity.values()])]
+  const countryMap = await getCountryNameMap(countryIds)
+
+  return {
+    items: stadiums.map((stadium) => {
+      const cityId = stadium.stadium_city_id
+      const countryId = cityId ? currentCountryByCity.get(cityId) : null
+
+      return {
+        id: stadium.id,
+        name: stadium.name,
+        stadium_city_id: cityId,
+        city_name: cityId ? (cityMap.get(cityId) ?? null) : null,
+        country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
+      }
+    }),
+    total: count ?? 0,
+  }
 }
 
 export async function getAdminStadiumOptions(): Promise<AdminStadiumOption[]> {

@@ -1,11 +1,13 @@
 ﻿import { createCountry, createFederationInline } from './actions'
 import Link from 'next/link'
-import { getAdminCountries, getAdminFederations } from '@/lib/db/countries'
+import AdminPagination from '@/components/admin/AdminPagination'
+import { getAdminCountriesPage, getAdminFederations } from '@/lib/db/countries'
 import type { AdminCountry, AdminFederation } from '@/lib/db/countries'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import AdminListLayout from '@/components/admin/AdminListLayout'
 import AdminTable from '@/components/admin/AdminTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
+import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
 
 function CountryCreateFields({ federations }: { federations: AdminFederation[] }) {
   return (
@@ -103,26 +105,38 @@ function CountryCreateFields({ federations }: { federations: AdminFederation[] }
   )
 }
 
-type SearchParams = Promise<{ added?: string; error?: string; create?: string }>
+type SearchParams = Promise<RawSearchParams>
 
 export default async function AdminCountriesPage({ searchParams }: { searchParams: SearchParams }) {
-  const { error: formError, create } = await searchParams
+  const resolvedSearchParams = await searchParams
+  const { error: formError, create } = resolvedSearchParams
+  const { page, pageSize } = parsePaginationParams(resolvedSearchParams)
 
   let countries: AdminCountry[] = []
+  let totalCountries = 0
   let federations: AdminFederation[] = []
   let fetchError: string | null = null
 
   try {
-    ;[countries, federations] = await Promise.all([getAdminCountries(), getAdminFederations()])
+    const [countriesPage, fetchedFederations] = await Promise.all([
+      getAdminCountriesPage(page, pageSize),
+      getAdminFederations(),
+    ])
+    countries = countriesPage.items
+    totalCountries = countriesPage.total
+    federations = fetchedFederations
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
+
+  const pagination = getPaginationMeta(totalCountries, page, pageSize)
+  const indexOffset = pagination.from > 0 ? pagination.from - 1 : 0
 
   const columns: AdminTableColumn<AdminCountry>[] = [
     {
       key: 'index',
       label: '#',
-      render: (_, i) => i + 1,
+      render: (_, i) => indexOffset + i + 1,
       className: 'text-neutral-500',
     },
     {
@@ -162,8 +176,8 @@ export default async function AdminCountriesPage({ searchParams }: { searchParam
     <AdminListLayout
       title="Kraje"
       breadcrumb="Admin"
-      recordCount={countries.length}
-      recordLabel={countries.length === 1 ? 'kraj' : 'krajów'}
+      recordCount={totalCountries}
+      recordLabel={totalCountries === 1 ? 'kraj' : 'krajów'}
       fetchError={fetchError}
       headerActions={(
         <Link
@@ -177,6 +191,19 @@ export default async function AdminCountriesPage({ searchParams }: { searchParam
       {!fetchError && (
         <>
           <AdminTable data={countries} columns={columns} emptyMessage={emptyMessage} />
+          {countries.length > 0 && (
+            <AdminPagination
+              basePath="/admin/countries"
+              searchParams={resolvedSearchParams}
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.total}
+              from={pagination.from}
+              to={pagination.to}
+              itemLabel={pagination.total === 1 ? 'kraju' : 'krajów'}
+            />
+          )}
           {countries.length > 0 && (
             <p className="text-xs text-neutral-500">Kliknij nazwę kraju, aby przejść do strony szczegółów.</p>
           )}

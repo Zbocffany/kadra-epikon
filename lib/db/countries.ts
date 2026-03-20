@@ -1,4 +1,5 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
 export type AdminCountry = {
   id: string
@@ -58,6 +59,47 @@ export async function getAdminCountries(): Promise<AdminCountry[]> {
       ? (federationMap.get(c.federation_id) ?? null)
       : null,
   }))
+}
+
+export async function getAdminCountriesPage(
+  page: number,
+  pageSize: number
+): Promise<PaginatedDbResult<AdminCountry>> {
+  const supabase = createServiceRoleClient()
+  const { from, to } = getPageRange(page, pageSize)
+
+  const { data: countries, error: countriesError, count } = await supabase
+    .from('tbl_Countries')
+    .select('id, name, fifa_code, federation_id', { count: 'exact' })
+    .order('name', { ascending: true })
+    .range(from, to)
+
+  if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
+  if (!countries?.length) return { items: [], total: count ?? 0 }
+
+  const federationIds = [...new Set(countries.map((c) => c.federation_id).filter(Boolean))]
+
+  let federationMap = new Map<string, string>()
+
+  if (federationIds.length) {
+    const { data: federations, error: federationError } = await supabase
+      .from('tbl_Federations')
+      .select('id, short_name')
+      .in('id', federationIds)
+
+    if (federationError) throw new Error(`tbl_Federations: ${federationError.message}`)
+    federationMap = new Map((federations ?? []).map((f) => [f.id, f.short_name]))
+  }
+
+  return {
+    items: countries.map((c) => ({
+      id: c.id,
+      name: c.name,
+      fifa_code: c.fifa_code,
+      federation_short_name: c.federation_id ? (federationMap.get(c.federation_id) ?? null) : null,
+    })),
+    total: count ?? 0,
+  }
 }
 
 export async function getAdminFederations(): Promise<AdminFederation[]> {

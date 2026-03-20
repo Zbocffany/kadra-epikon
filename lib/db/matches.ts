@@ -1,4 +1,5 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
 export type MatchStatus =
   | 'SCHEDULED'
@@ -50,6 +51,17 @@ export type AdminStadiumOption = {
   id: string
   label: string
   stadium_city_id: string | null
+}
+
+type MatchListRow = {
+  id: string
+  match_date: string
+  match_time: string | null
+  match_status: MatchStatus
+  editorial_status: EditorialStatus
+  competition_id: string
+  home_team_id: string
+  away_team_id: string
 }
 
 async function getTeamDisplayMap(teamIds: string[]): Promise<Map<string, string>> {
@@ -119,6 +131,41 @@ export async function getAdminMatches(): Promise<AdminMatch[]> {
 
   if (matchError) throw new Error(`tbl_Matches: ${matchError.message}`)
   if (!matches?.length) return []
+
+  return mapAdminMatches(supabase, matches)
+}
+
+export async function getAdminMatchesPage(
+  page: number,
+  pageSize: number
+): Promise<PaginatedDbResult<AdminMatch>> {
+  const supabase = createServiceRoleClient()
+  const { from, to } = getPageRange(page, pageSize)
+
+  const { data: matches, error: matchError, count } = await supabase
+    .from('tbl_Matches')
+    .select(
+      'id, match_date, match_time, match_status, editorial_status, competition_id, home_team_id, away_team_id',
+      { count: 'exact' }
+    )
+    .order('match_date', { ascending: false })
+    .order('match_time', { ascending: false })
+    .order('id', { ascending: false })
+    .range(from, to)
+
+  if (matchError) throw new Error(`tbl_Matches: ${matchError.message}`)
+  if (!matches?.length) {
+    return { items: [], total: count ?? 0 }
+  }
+
+  const items = await mapAdminMatches(supabase, matches)
+  return { items, total: count ?? 0 }
+}
+
+async function mapAdminMatches(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  matches: MatchListRow[]
+): Promise<AdminMatch[]> {
 
   // 2. Competitions + teams (parallel)
   const competitionIds = [...new Set(matches.map((m) => m.competition_id))]

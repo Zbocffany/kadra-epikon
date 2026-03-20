@@ -1,4 +1,5 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
 type CityCountryPeriod = {
   id?: string
@@ -103,6 +104,70 @@ export async function getAdminCitiesList(): Promise<AdminCityListItem[]> {
       country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
     }
   })
+}
+
+export async function getAdminCitiesListPage(
+  page: number,
+  pageSize: number
+): Promise<PaginatedDbResult<AdminCityListItem>> {
+  const supabase = createServiceRoleClient()
+  const { from, to } = getPageRange(page, pageSize)
+
+  const { data: cities, error: citiesError, count } = await supabase
+    .from('tbl_Cities')
+    .select('id, city_name', { count: 'exact' })
+    .order('city_name', { ascending: true })
+    .range(from, to)
+
+  if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
+  if (!cities?.length) return { items: [], total: count ?? 0 }
+
+  const cityIds = cities.map((c) => c.id)
+
+  const { data: periods, error: periodsError } = await supabase
+    .from('tbl_City_Country_Periods')
+    .select('city_id, country_id, valid_from, valid_to')
+    .in('city_id', cityIds)
+
+  if (periodsError) throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
+
+  const periodsByCity = new Map<string, CityCountryPeriod[]>()
+  for (const p of periods ?? []) {
+    const arr = periodsByCity.get(p.city_id) ?? []
+    arr.push(p)
+    periodsByCity.set(p.city_id, arr)
+  }
+
+  const currentCountryIdByCity = new Map<string, string>()
+  for (const cityId of cityIds) {
+    const best = sortPeriods(periodsByCity.get(cityId) ?? [])[0]
+    if (best?.country_id) currentCountryIdByCity.set(cityId, best.country_id)
+  }
+
+  const countryIds = [...new Set([...currentCountryIdByCity.values()])]
+  let countryMap = new Map<string, string>()
+
+  if (countryIds.length) {
+    const { data: countries, error: countriesError } = await supabase
+      .from('tbl_Countries')
+      .select('id, name')
+      .in('id', countryIds)
+
+    if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
+    countryMap = new Map((countries ?? []).map((c) => [c.id, c.name]))
+  }
+
+  return {
+    items: cities.map((city) => {
+      const countryId = currentCountryIdByCity.get(city.id)
+      return {
+        id: city.id,
+        city_name: city.city_name,
+        country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
+      }
+    }),
+    total: count ?? 0,
+  }
 }
 
 export async function getAdminCountriesOptions(): Promise<AdminCountryOption[]> {

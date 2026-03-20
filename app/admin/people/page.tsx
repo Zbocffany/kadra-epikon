@@ -4,14 +4,16 @@ import { createCityInline } from '@/app/admin/cities/actions'
 import { createCountryInline } from '@/app/admin/countries/actions'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCountryOption } from '@/lib/db/cities'
-import { getAdminPeople, getPersonDisplayName, getAdminPersonBirthCityOptions } from '@/lib/db/people'
+import AdminPagination from '@/components/admin/AdminPagination'
+import { getAdminPeoplePage, getPersonDisplayName, getAdminPersonBirthCityOptions } from '@/lib/db/people'
 import type { AdminPersonBirthCityOption, AdminPersonListItem } from '@/lib/db/people'
 import AdminListLayout from '@/components/admin/AdminListLayout'
 import AdminTable from '@/components/admin/AdminTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import PersonBirthplaceFields from '@/components/admin/PersonBirthplaceFields'
+import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
 
-type SearchParams = Promise<{ added?: string; error?: string; create?: string }>
+type SearchParams = Promise<RawSearchParams>
 
 function PeopleCreateFields({
   cities,
@@ -83,28 +85,38 @@ function formatDate(date: string | null): string {
 }
 
 export default async function AdminPeoplePage({ searchParams }: { searchParams: SearchParams }) {
-  const { error: formError, create } = await searchParams
+  const resolvedSearchParams = await searchParams
+  const { error: formError, create } = resolvedSearchParams
+  const { page, pageSize } = parsePaginationParams(resolvedSearchParams)
 
   let people: AdminPersonListItem[] = []
+  let totalPeople = 0
   let cities: AdminPersonBirthCityOption[] = []
   let countries: AdminCountryOption[] = []
   let fetchError: string | null = null
 
   try {
-    ;[people, cities, countries] = await Promise.all([
-      getAdminPeople(),
+    const [peoplePage, fetchedCities, fetchedCountries] = await Promise.all([
+      getAdminPeoplePage(page, pageSize),
       getAdminPersonBirthCityOptions(),
       getAdminCountriesOptions(),
     ])
+    people = peoplePage.items
+    totalPeople = peoplePage.total
+    cities = fetchedCities
+    countries = fetchedCountries
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
+
+  const pagination = getPaginationMeta(totalPeople, page, pageSize)
+  const indexOffset = pagination.from > 0 ? pagination.from - 1 : 0
 
   const columns: AdminTableColumn<AdminPersonListItem>[] = [
     {
       key: 'index',
       label: '#',
-      render: (_, i) => i + 1,
+      render: (_, i) => indexOffset + i + 1,
       className: 'text-neutral-500',
     },
     {
@@ -147,7 +159,7 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
   ]
 
   const pluralLabel = (() => {
-    const count = people.length
+    const count = totalPeople
     if (count === 1) return 'osoba'
     if (count < 5) return 'osoby'
     return 'osób'
@@ -159,7 +171,7 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
     <AdminListLayout
       title="Ludzie"
       breadcrumb="Admin"
-      recordCount={people.length}
+      recordCount={totalPeople}
       recordLabel={pluralLabel}
       fetchError={fetchError}
       headerActions={(
@@ -174,6 +186,19 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
       {!fetchError && (
         <>
           <AdminTable data={people} columns={columns} emptyMessage="Brak osób w bazie danych." />
+          {people.length > 0 && (
+            <AdminPagination
+              basePath="/admin/people"
+              searchParams={resolvedSearchParams}
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.total}
+              from={pagination.from}
+              to={pagination.to}
+              itemLabel={pagination.total === 1 ? 'osoby' : 'osób'}
+            />
+          )}
           {people.length > 0 && (
             <p className="text-xs text-neutral-500">Kliknij osobę, aby przejść do strony szczegółów.</p>
           )}

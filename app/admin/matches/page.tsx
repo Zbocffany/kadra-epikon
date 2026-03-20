@@ -2,11 +2,13 @@ import Link from 'next/link'
 import { createMatch } from './actions'
 import MatchCreateModal from './MatchCreateModal'
 import { getMatchStatusLabel } from './matchStatusLabels'
-import { getAdminMatches } from '@/lib/db/matches'
+import AdminPagination from '@/components/admin/AdminPagination'
+import { getAdminMatchesPage } from '@/lib/db/matches'
 import { getAdminMatchCreateOptions } from '@/lib/db/matches'
 import type { AdminMatch, AdminStadiumOption, EditorialStatus, MatchStatus } from '@/lib/db/matches'
+import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
 
-type SearchParams = Promise<{ create?: string; error?: string }>
+type SearchParams = Promise<RawSearchParams>
 
 // ─── Badge helpers ────────────────────────────────────────────────────────────
 
@@ -49,8 +51,11 @@ function formatDate(dateStr: string) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function AdminMatchesPage({ searchParams }: { searchParams: SearchParams }) {
-  const { create, error } = await searchParams
+  const resolvedSearchParams = await searchParams
+  const { create, error } = resolvedSearchParams
+  const { page, pageSize } = parsePaginationParams(resolvedSearchParams)
   let matches: AdminMatch[]
+  let totalMatches = 0
   let competitionOptions: { id: string; name: string }[] = []
   let teamOptions: { id: string; label: string }[] = []
   let cityOptions: { id: string; name: string }[] = []
@@ -59,11 +64,12 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
 
   try {
     const [fetchedMatches, options] = await Promise.all([
-      getAdminMatches(),
+      getAdminMatchesPage(page, pageSize),
       getAdminMatchCreateOptions(),
     ])
 
-    matches = fetchedMatches
+    matches = fetchedMatches.items
+    totalMatches = fetchedMatches.total
     competitionOptions = options.competitions
     teamOptions = options.teams
     cityOptions = options.cities
@@ -73,6 +79,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
     matches = []
   }
 
+  const pagination = getPaginationMeta(totalMatches, page, pageSize)
   const isCreateModalOpen = create === '1' || Boolean(error)
 
   return (
@@ -96,7 +103,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
               Dodaj mecz
             </Link>
             <span className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs text-neutral-400">
-              {matches.length} {matches.length === 1 ? 'mecz' : 'meczów'}
+              {totalMatches} {totalMatches === 1 ? 'mecz' : 'meczów'}
             </span>
           </div>
         </div>
@@ -176,9 +183,17 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
                 ))}
               </tbody>
             </table>
-            <div className="border-t border-neutral-800 bg-neutral-900/50 px-4 py-2 text-xs text-neutral-500">
-              {matches.length} {matches.length === 1 ? 'mecz' : 'meczów'} · posortowane od najnowszych
-            </div>
+            <AdminPagination
+              basePath="/admin/matches"
+              searchParams={resolvedSearchParams}
+              page={pagination.page}
+              pageSize={pagination.pageSize}
+              totalPages={pagination.totalPages}
+              totalItems={pagination.total}
+              from={pagination.from}
+              to={pagination.to}
+              itemLabel={pagination.total === 1 ? 'meczu' : 'meczów'}
+            />
           </div>
         )}
 
