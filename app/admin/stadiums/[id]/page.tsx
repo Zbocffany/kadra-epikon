@@ -14,6 +14,7 @@ import {
   DetailsPageHeader,
   DetailsPageContent,
 } from '@/components/admin/DetailsPageLayout'
+import { DetailsFieldCard, DetailsFieldValue } from '@/components/admin/DetailsFieldCard'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 
 type Params = DetailPageParams
@@ -96,6 +97,53 @@ export default async function AdminStadiumDetailsPage({
   }
 
   const isEdit = mode === 'edit'
+  const fields = (
+    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <DetailsFieldCard label="Nazwa stadionu" spanTwo>
+        {isEdit ? (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="name" className="text-sm font-medium text-neutral-300">
+              Nazwa stadionu <span className="text-red-400">*</span>
+            </label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              required
+              defaultValue={stadium.name ?? ''}
+              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            />
+          </div>
+        ) : (
+          <DetailsFieldValue value={stadium.name ?? '-'} />
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Miasto stadionu">
+        {isEdit ? (
+          <AdminSelectField
+            name="stadium_city_id"
+            label="Miasto stadionu"
+            required
+            selectedId={stadium.stadium_city_id}
+            options={cities.map((c) => ({ id: c.id, label: c.city_name }))}
+            displayKey="label"
+            addButtonLabel="+ Dodaj miasto"
+            addDialogTitle="Nowe miasto"
+            emptyResultsMessage="Brak wyników - możesz dodać nowe miasto poniżej."
+            createAction={createCityInline}
+            inlineForm={<CityInlineForm countries={countries} />}
+          />
+        ) : (
+          <DetailsFieldValue value={stadium.city_name ?? '-'} />
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Kraj stadionu">
+        <DetailsFieldValue value={stadium.country_name ?? '-'} />
+      </DetailsFieldCard>
+    </div>
+  )
 
   return (
     <DetailsPageContainer>
@@ -115,38 +163,9 @@ export default async function AdminStadiumDetailsPage({
         error={error}
         isEdit={isEdit}
         editContent={
-          <form action={updateStadium} className="mt-6 space-y-4">
+          <form action={updateStadium} className="space-y-4">
             <input type="hidden" name="id" value={stadium.id} />
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="name" className="text-sm font-medium text-neutral-300">
-                  Nazwa stadionu <span className="text-red-400">*</span>
-                </label>
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  required
-                  defaultValue={stadium.name ?? ''}
-                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-                />
-              </div>
-
-              <AdminSelectField
-                name="stadium_city_id"
-                label="Miasto stadionu"
-                required
-                selectedId={stadium.stadium_city_id}
-                options={cities.map((c) => ({ id: c.id, label: c.city_name }))}
-                displayKey="label"
-                addButtonLabel="+ Dodaj miasto"
-                addDialogTitle="Nowe miasto"
-                emptyResultsMessage="Brak wyników - możesz dodać nowe miasto poniżej."
-                createAction={createCityInline}
-                inlineForm={<CityInlineForm countries={countries} />}
-              />
-            </div>
+            {fields}
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <Link
@@ -164,23 +183,7 @@ export default async function AdminStadiumDetailsPage({
             </div>
           </form>
         }
-        viewContent={
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Miasto stadionu</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {stadium.city_name ?? '-'}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Kraj stadionu</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {stadium.country_name ?? '-'}
-              </p>
-            </div>
-          </div>
-        }
+        viewContent={fields}
       />
     </DetailsPageContainer>
   )

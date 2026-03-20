@@ -14,6 +14,7 @@ import {
   DetailsPageHeader,
   DetailsPageContent,
 } from '@/components/admin/DetailsPageLayout'
+import { DetailsFieldCard, DetailsFieldValue } from '@/components/admin/DetailsFieldCard'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 import PersonBirthplaceFields from '@/components/admin/PersonBirthplaceFields'
 
@@ -48,6 +49,120 @@ export default async function AdminPersonDetailsPage({
 
   const displayName = getPersonDisplayName(person)
   const isEdit = mode === 'edit'
+  const fields = (
+    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <DetailsFieldCard label="Imię">
+        {isEdit ? (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="first_name" className="text-sm font-medium text-neutral-300">Imię</label>
+            <input
+              id="first_name"
+              name="first_name"
+              type="text"
+              defaultValue={person.first_name ?? ''}
+              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+            />
+          </div>
+        ) : (
+          <DetailsFieldValue value={person.first_name ?? '—'} />
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Nazwisko">
+        {isEdit ? (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="last_name" className="text-sm font-medium text-neutral-300">Nazwisko</label>
+            <input
+              id="last_name"
+              name="last_name"
+              type="text"
+              defaultValue={person.last_name ?? ''}
+              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+            />
+          </div>
+        ) : (
+          <DetailsFieldValue value={person.last_name ?? '—'} />
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Pseudonim">
+        {isEdit ? (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="nickname" className="text-sm font-medium text-neutral-300">Pseudonim</label>
+            <input
+              id="nickname"
+              name="nickname"
+              type="text"
+              defaultValue={person.nickname ?? ''}
+              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+            />
+          </div>
+        ) : (
+          <DetailsFieldValue value={person.nickname ?? '—'} />
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Data urodzenia">
+        {isEdit ? (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="birth_date" className="text-sm font-medium text-neutral-300">Data urodzenia</label>
+            <input
+              id="birth_date"
+              name="birth_date"
+              type="date"
+              defaultValue={person.birth_date ?? ''}
+              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+            />
+          </div>
+        ) : (
+          <DetailsFieldValue value={formatDate(person.birth_date)} />
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Miejsce urodzenia" spanTwo>
+        {isEdit ? (
+          <PersonBirthplaceFields
+            cities={cities}
+            countries={countries}
+            createCityAction={createCityInline}
+            createCountryAction={createCountryInline}
+            showBirthDate={false}
+            defaultBirthDate={person.birth_date}
+            defaultCityId={person.birth_city_id}
+            defaultCountryId={person.birth_country_id}
+          />
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Miasto</p>
+              <p className="mt-2 text-lg font-semibold text-neutral-100">{person.birth_city_name ?? '—'}</p>
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-neutral-500">Kraj</p>
+              <p className="mt-2 text-lg font-semibold text-neutral-100">{person.birth_country_name ?? '—'}</p>
+            </div>
+          </div>
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Aktywna osoba" spanTwo>
+        {isEdit ? (
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              id="is_active"
+              name="is_active"
+              type="checkbox"
+              defaultChecked={Boolean(person.is_active)}
+              className="h-4 w-4"
+            />
+            <label htmlFor="is_active" className="text-sm text-neutral-300">Aktywna osoba</label>
+          </div>
+        ) : (
+          <DetailsFieldValue value={person.is_active ? 'Tak' : 'Nie'} />
+        )}
+      </DetailsFieldCard>
+    </div>
+  )
 
   return (
     <DetailsPageContainer>
@@ -67,65 +182,9 @@ export default async function AdminPersonDetailsPage({
         error={error}
         isEdit={isEdit}
         editContent={
-          <form action={updatePerson} className="mt-6 space-y-4">
+          <form action={updatePerson} className="space-y-4">
             <input type="hidden" name="id" value={person.id} />
-
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="first_name" className="text-sm font-medium text-neutral-300">Imię</label>
-                <input
-                  id="first_name"
-                  name="first_name"
-                  type="text"
-                  defaultValue={person.first_name ?? ''}
-                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="last_name" className="text-sm font-medium text-neutral-300">Nazwisko</label>
-                <input
-                  id="last_name"
-                  name="last_name"
-                  type="text"
-                  defaultValue={person.last_name ?? ''}
-                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="nickname" className="text-sm font-medium text-neutral-300">Pseudonim</label>
-                <input
-                  id="nickname"
-                  name="nickname"
-                  type="text"
-                  defaultValue={person.nickname ?? ''}
-                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-                />
-              </div>
-            </div>
-
-            <PersonBirthplaceFields
-              cities={cities}
-              countries={countries}
-              createCityAction={createCityInline}
-              createCountryAction={createCountryInline}
-              defaultBirthDate={person.birth_date}
-              defaultCityId={person.birth_city_id}
-              defaultCountryId={person.birth_country_id}
-            />
-
-            <div className="flex items-center gap-2">
-              <input
-                id="is_active"
-                name="is_active"
-                type="checkbox"
-                defaultChecked={Boolean(person.is_active)}
-                className="h-4 w-4"
-              />
-              <label htmlFor="is_active" className="text-sm text-neutral-300">Aktywna osoba</label>
-            </div>
-
+            {fields}
             <p className="text-xs text-neutral-500">Wymagane jest przynajmniej jedno pole: imię, nazwisko lub pseudonim.</p>
 
             <div className="flex items-center justify-end gap-2 pt-2">
@@ -144,44 +203,7 @@ export default async function AdminPersonDetailsPage({
             </div>
           </form>
         }
-        viewContent={
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Imię</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">{person.first_name ?? '—'}</p>
-            </div>
-
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Nazwisko</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">{person.last_name ?? '—'}</p>
-            </div>
-
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Pseudonim</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">{person.nickname ?? '—'}</p>
-            </div>
-
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Data urodzenia</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">{formatDate(person.birth_date)}</p>
-            </div>
-
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Miasto urodzenia</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">{person.birth_city_name ?? '—'}</p>
-            </div>
-
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Kraj urodzenia</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">{person.birth_country_name ?? '—'}</p>
-            </div>
-
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4 sm:col-span-2">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Aktywna osoba</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">{person.is_active ? 'Tak' : 'Nie'}</p>
-            </div>
-          </div>
-        }
+        viewContent={fields}
       />
     </DetailsPageContainer>
   )

@@ -14,6 +14,7 @@ import {
   DetailsPageHeader,
   DetailsPageContent,
 } from '@/components/admin/DetailsPageLayout'
+import { DetailsFieldCard, DetailsFieldValue } from '@/components/admin/DetailsFieldCard'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 
 type Params = DetailPageParams
@@ -40,6 +41,122 @@ export default async function AdminCityDetailsPage({
   }
 
   const isEdit = mode === 'edit'
+  const fields = (
+    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <DetailsFieldCard label="Nazwa miasta" spanTwo>
+        {isEdit ? (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="city_name" className="text-sm font-medium text-neutral-300">
+              Nazwa miasta <span className="text-red-400">*</span>
+            </label>
+            <input
+              id="city_name"
+              name="city_name"
+              type="text"
+              required
+              defaultValue={city.city_name ?? ''}
+              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            />
+          </div>
+        ) : (
+          <DetailsFieldValue value={city.city_name ?? '—'} />
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Kraj">
+        {isEdit ? (
+          <AdminSelectField
+            name="country_id"
+            label="Kraj"
+            required
+            selectedId={city.current_country_id}
+            options={countries.map((c) => ({ id: c.id, label: c.name }))}
+            displayKey="label"
+            addButtonLabel="+ Dodaj kraj"
+            addDialogTitle="Nowy kraj"
+            emptyResultsMessage="Brak wyników — możesz dodać nowy kraj poniżej."
+            createAction={createCountryInline}
+            inlineForm={(
+              <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="inline_country_name" className="text-xs text-neutral-400">
+                      Nazwa kraju
+                    </label>
+                    <input
+                      id="inline_country_name"
+                      name="name"
+                      type="text"
+                      required
+                      className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="inline_country_fifa" className="text-xs text-neutral-400">
+                      Kod FIFA
+                    </label>
+                    <input
+                      id="inline_country_fifa"
+                      name="fifa_code"
+                      type="text"
+                      maxLength={3}
+                      className="uppercase rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="inline_country_federation" className="text-xs text-neutral-400">
+                    Federacja
+                  </label>
+                  <select
+                    id="inline_country_federation"
+                    name="federation_id"
+                    className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                  >
+                    <option value="">— brak —</option>
+                    {federations.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.short_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            )}
+          />
+        ) : (
+          <DetailsFieldValue value={city.country_name ?? '—'} />
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Województwo">
+        {isEdit ? (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="voivodeship" className="text-sm font-medium text-neutral-300">
+              Województwo
+            </label>
+            <select
+              id="voivodeship"
+              name="voivodeship"
+              defaultValue={city.voivodeship ?? ''}
+              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            >
+              <option value="">— brak —</option>
+              {VOIVODESHIP_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <DetailsFieldValue value={city.voivodeship ?? '—'} />
+        )}
+      </DetailsFieldCard>
+    </div>
+  )
 
   return (
     <DetailsPageContainer>
@@ -59,110 +176,14 @@ export default async function AdminCityDetailsPage({
         error={error}
         isEdit={isEdit}
         editContent={
-          <form action={updateCity} className="mt-6 space-y-4">
+          <form action={updateCity} className="space-y-4">
             <input type="hidden" name="id" value={city.id} />
             <input
               type="hidden"
               name="current_period_id"
               value={city.current_period_id ?? ''}
             />
-
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="city_name" className="text-sm font-medium text-neutral-300">
-                Nazwa miasta <span className="text-red-400">*</span>
-              </label>
-              <input
-                id="city_name"
-                name="city_name"
-                type="text"
-                required
-                defaultValue={city.city_name ?? ''}
-                className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <AdminSelectField
-                name="country_id"
-                label="Kraj"
-                required
-                selectedId={city.current_country_id}
-                options={countries.map((c) => ({ id: c.id, label: c.name }))}
-                displayKey="label"
-                addButtonLabel="+ Dodaj kraj"
-                addDialogTitle="Nowy kraj"
-                emptyResultsMessage="Brak wyników — możesz dodać nowy kraj poniżej."
-                createAction={createCountryInline}
-                inlineForm={(
-                  <div className="space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="flex flex-col gap-1.5">
-                        <label htmlFor="inline_country_name" className="text-xs text-neutral-400">
-                          Nazwa kraju
-                        </label>
-                        <input
-                          id="inline_country_name"
-                          name="name"
-                          type="text"
-                          required
-                          className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label htmlFor="inline_country_fifa" className="text-xs text-neutral-400">
-                          Kod FIFA
-                        </label>
-                        <input
-                          id="inline_country_fifa"
-                          name="fifa_code"
-                          type="text"
-                          maxLength={3}
-                          className="uppercase rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <label htmlFor="inline_country_federation" className="text-xs text-neutral-400">
-                        Federacja
-                      </label>
-                      <select
-                        id="inline_country_federation"
-                        name="federation_id"
-                        className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                      >
-                        <option value="">— brak —</option>
-                        {federations.map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {f.short_name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                )}
-              />
-
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="voivodeship" className="text-sm font-medium text-neutral-300">
-                  Województwo
-                </label>
-                <select
-                  id="voivodeship"
-                  name="voivodeship"
-                  defaultValue={city.voivodeship ?? ''}
-                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-                >
-                  <option value="">— brak —</option>
-                  {VOIVODESHIP_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
+            {fields}
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <Link
@@ -180,23 +201,7 @@ export default async function AdminCityDetailsPage({
             </div>
           </form>
         }
-        viewContent={
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Kraj</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {city.country_name ?? '—'}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Województwo</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {city.voivodeship ?? '—'}
-              </p>
-            </div>
-          </div>
-        }
+        viewContent={fields}
       />
     </DetailsPageContainer>
   )

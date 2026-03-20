@@ -23,6 +23,7 @@ import {
   DetailsPageHeader,
   DetailsPageContent,
 } from '@/components/admin/DetailsPageLayout'
+import { DetailsFieldCard, DetailsFieldValue } from '@/components/admin/DetailsFieldCard'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 
 type Params = DetailPageParams
@@ -76,6 +77,112 @@ export default async function AdminCountryDetailsPage({
         (s) => s.source_event_id === selectedHistoryEvent.id && s.precountry_id === id
       )?.postcountry_id ?? '')
     : ''
+  const fields = (
+    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <DetailsFieldCard label="Nazwa kraju" spanTwo>
+        {isEdit ? (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="name" className="text-sm font-medium text-neutral-300">
+              Nazwa <span className="text-red-400">*</span>
+            </label>
+            <input
+              id="name"
+              name="name"
+              type="text"
+              required
+              defaultValue={country.name}
+              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            />
+          </div>
+        ) : (
+          <DetailsFieldValue value={country.name} />
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Kod FIFA">
+        {isEdit ? (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="fifa_code" className="text-sm font-medium text-neutral-300">
+              Kod FIFA
+            </label>
+            <input
+              id="fifa_code"
+              name="fifa_code"
+              type="text"
+              maxLength={3}
+              defaultValue={country.fifa_code ?? ''}
+              className="uppercase rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            />
+          </div>
+        ) : (
+          <DetailsFieldValue value={country.fifa_code ?? '—'} />
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Federacja">
+        {isEdit ? (
+          <AdminSelectField
+            name="federation_id"
+            label="Federacja"
+            selectedId={country.federation_id}
+            options={federations}
+            displayKey="short_name"
+            addButtonLabel="+ Dodaj federacje"
+            addDialogTitle="Nowa federacja"
+            emptyResultsMessage="Brak wyników — możesz dodać nową federację poniżej."
+            createAction={createFederationInline}
+            inlineForm={(
+              <div className="space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="inline_fed_short" className="text-xs text-neutral-400">
+                      Skrót
+                    </label>
+                    <input
+                      id="inline_fed_short"
+                      name="short_name"
+                      type="text"
+                      required
+                      className="uppercase rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="inline_fed_year" className="text-xs text-neutral-400">
+                      Rok założenia
+                    </label>
+                    <input
+                      id="inline_fed_year"
+                      name="foundation_year"
+                      type="number"
+                      min={1800}
+                      max={new Date().getFullYear()}
+                      className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label htmlFor="inline_fed_full" className="text-xs text-neutral-400">
+                    Pełna nazwa
+                  </label>
+                  <input
+                    id="inline_fed_full"
+                    name="full_name"
+                    type="text"
+                    required
+                    className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                  />
+                </div>
+              </div>
+            )}
+          />
+        ) : (
+          <DetailsFieldValue value={country.federation_short_name ?? '—'} />
+        )}
+      </DetailsFieldCard>
+    </div>
+  )
 
   return (
     <DetailsPageContainer>
@@ -95,95 +202,9 @@ export default async function AdminCountryDetailsPage({
         error={error}
         isEdit={isEdit}
         editContent={
-          <form action={updateCountry} className="mt-6 space-y-4">
+          <form action={updateCountry} className="space-y-4">
             <input type="hidden" name="id" value={country.id} />
-
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="name" className="text-sm font-medium text-neutral-300">
-                Nazwa <span className="text-red-400">*</span>
-              </label>
-              <input
-                id="name"
-                name="name"
-                type="text"
-                required
-                defaultValue={country.name}
-                className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor="fifa_code" className="text-sm font-medium text-neutral-300">
-                  Kod FIFA
-                </label>
-                <input
-                  id="fifa_code"
-                  name="fifa_code"
-                  type="text"
-                  maxLength={3}
-                  defaultValue={country.fifa_code ?? ''}
-                  className="uppercase rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-                />
-              </div>
-
-              <AdminSelectField
-                name="federation_id"
-                label="Federacja"
-                selectedId={country.federation_id}
-                options={federations}
-                displayKey="short_name"
-                addButtonLabel="+ Dodaj federacje"
-                addDialogTitle="Nowa federacja"
-                emptyResultsMessage="Brak wyników — możesz dodać nową federację poniżej."
-                createAction={createFederationInline}
-                inlineForm={(
-                  <div className="space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="flex flex-col gap-1.5">
-                        <label htmlFor="inline_fed_short" className="text-xs text-neutral-400">
-                          Skrót
-                        </label>
-                        <input
-                          id="inline_fed_short"
-                          name="short_name"
-                          type="text"
-                          required
-                          className="uppercase rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                        />
-                      </div>
-
-                      <div className="flex flex-col gap-1.5">
-                        <label htmlFor="inline_fed_year" className="text-xs text-neutral-400">
-                          Rok założenia
-                        </label>
-                        <input
-                          id="inline_fed_year"
-                          name="foundation_year"
-                          type="number"
-                          min={1800}
-                          max={new Date().getFullYear()}
-                          className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <label htmlFor="inline_fed_full" className="text-xs text-neutral-400">
-                        Pełna nazwa
-                      </label>
-                      <input
-                        id="inline_fed_full"
-                        name="full_name"
-                        type="text"
-                        required
-                        className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                      />
-                    </div>
-                  </div>
-                )}
-              />
-            </div>
+            {fields}
 
             <div className="flex items-center justify-end gap-2 pt-2">
               <a
@@ -201,23 +222,7 @@ export default async function AdminCountryDetailsPage({
             </div>
           </form>
         }
-        viewContent={
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Kod FIFA</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {country.fifa_code ?? '—'}
-              </p>
-            </div>
-
-            <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Federacja</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">
-                {country.federation_short_name ?? '—'}
-              </p>
-            </div>
-          </div>
-        }
+        viewContent={fields}
       />
 
       <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-6">
