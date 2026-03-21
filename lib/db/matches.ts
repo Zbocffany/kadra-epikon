@@ -13,6 +13,14 @@ export type EditorialStatus =
   | 'COMPLETE'
   | 'VERIFIED'
 
+export type MatchParticipantRole = 'PLAYER' | 'COACH' | 'REFEREE'
+
+export type PlayerPosition =
+  | 'GOALKEEPER'
+  | 'DEFENDER'
+  | 'MIDFIELDER'
+  | 'ATTACKER'
+
 export type AdminMatch = {
   id: string
   match_date: string
@@ -53,6 +61,48 @@ export type AdminStadiumOption = {
   stadium_city_id: string | null
 }
 
+export type AdminMatchParticipant = {
+  id: string
+  team_id: string | null
+  person_id: string
+  person_name: string
+  role: MatchParticipantRole
+  is_starting: boolean | null
+  player_position: PlayerPosition | null
+  club_team_id: string | null
+  club_team_name: string | null
+  derived_club_team_name: string | null
+}
+
+export type AdminMatchParticipantPersonOption = {
+  id: string
+  label: string
+}
+
+type MatchParticipantRow = {
+  id: string
+  team_id: string | null
+  person_id: string
+  role: MatchParticipantRole
+  is_starting: boolean | null
+  player_position: PlayerPosition | null
+  club_team_id: string | null
+}
+
+type MatchParticipantPersonRow = {
+  id: string
+  first_name: string | null
+  last_name: string | null
+  nickname: string | null
+}
+
+type PersonTeamPeriodRow = {
+  person_id: string
+  club_team_id: string
+  valid_from: string
+  valid_to: string | null
+}
+
 type MatchListRow = {
   id: string
   match_date: string
@@ -62,6 +112,52 @@ type MatchListRow = {
   competition_id: string
   home_team_id: string
   away_team_id: string
+}
+
+function buildPersonDisplayName(person: MatchParticipantPersonRow): string {
+  const first = person.first_name?.trim() ?? ''
+  const last = person.last_name?.trim() ?? ''
+  const nickname = person.nickname?.trim() ?? ''
+  const fullName = `${first} ${last}`.trim()
+
+  if (fullName) return fullName
+  if (nickname) return nickname
+  return '—'
+}
+
+function getDerivedClubTeamId(
+  periods: PersonTeamPeriodRow[],
+  matchDate: string
+): string | null {
+  const matching = periods
+    .filter((period) => period.valid_from <= matchDate && (!period.valid_to || period.valid_to >= matchDate))
+    .sort((a, b) => b.valid_from.localeCompare(a.valid_from))
+
+  return matching[0]?.club_team_id ?? null
+}
+
+function sortTeamParticipants(participants: AdminMatchParticipant[]): AdminMatchParticipant[] {
+  const roleRank: Record<MatchParticipantRole, number> = {
+    PLAYER: 0,
+    COACH: 1,
+    REFEREE: 2,
+  }
+
+  return [...participants].sort((a, b) => {
+    if (a.role !== b.role) {
+      return roleRank[a.role] - roleRank[b.role]
+    }
+
+    if (a.role === 'PLAYER' && b.role === 'PLAYER') {
+      const aStartingRank = a.is_starting ? 0 : 1
+      const bStartingRank = b.is_starting ? 0 : 1
+      if (aStartingRank !== bStartingRank) {
+        return aStartingRank - bStartingRank
+      }
+    }
+
+    return a.person_name.localeCompare(b.person_name, 'pl')
+  })
 }
 
 async function getTeamDisplayMap(teamIds: string[]): Promise<Map<string, string>> {
@@ -240,6 +336,105 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
     away_team_id: match.away_team_id,
     match_city_id: match.match_city_id ?? null,
     match_stadium_id: match.match_stadium_id ?? null,
+  }
+}
+
+export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, 'id' | 'match_date' | 'home_team_id' | 'away_team_id'>): Promise<{
+  homeParticipants: AdminMatchParticipant[]
+  awayParticipants: AdminMatchParticipant[]
+  referees: AdminMatchParticipant[]
+  people: AdminMatchParticipantPersonOption[]
+}> {
+  const supabase = createServiceRoleClient()
+
+  const [
+    { data: participants, error: participantsError },
+    { data: people, error: peopleError },
+  ] = await Promise.all([
+    supabase
+      .from('tbl_Match_Participants')
+      .select('id, team_id, person_id, role, is_starting, player_position, club_team_id')
+      .eq('match_id', match.id),
+    supabase
+      .from('tbl_People')
+      .select('id, first_name, last_name, nickname')
+      .order('last_name', { ascending: true, nullsFirst: false })
+      .order('first_name', { ascending: true, nullsFirst: false })
+      .order('nickname', { ascending: true, nullsFirst: false }),
+  ])
+
+  if (participantsError) throw new Error(`tbl_Match_Participants: ${participantsError.message}`)
+  if (peopleError) throw new Error(`tbl_People: ${peopleError.message}`)
+
+  const participantRows = (participants ?? []) as MatchParticipantRow[]
+  const peopleRows = (people ?? []) as MatchParticipantPersonRow[]
+  const personIds = [...new Set(participantRows.map((participant) => participant.person_id))]
+
+  const { data: periods, error: periodsError } = personIds.length
+    ? await supabase
+        .from('tbl_Person_Team_Periods')
+        .select('person_id, club_team_id, valid_from, valid_to')
+        .in('person_id', personIds)
+    : { data: [] as PersonTeamPeriodRow[], error: null }
+
+  if (periodsError) throw new Error(`tbl_Person_Team_Periods: ${periodsError.message}`)
+
+  const periodsByPerson = new Map<string, PersonTeamPeriodRow[]>()
+  for (const period of (periods ?? []) as PersonTeamPeriodRow[]) {
+    const existing = periodsByPerson.get(period.person_id) ?? []
+    existing.push(period)
+    periodsByPerson.set(period.person_id, existing)
+  }
+
+  const personNameMap = new Map(peopleRows.map((person) => [person.id, buildPersonDisplayName(person)]))
+  const derivedClubTeamIds = participantRows
+    .filter((participant) => !participant.club_team_id && participant.role !== 'REFEREE')
+    .map((participant) => getDerivedClubTeamId(periodsByPerson.get(participant.person_id) ?? [], match.match_date))
+    .filter((teamId): teamId is string => Boolean(teamId))
+  const allClubTeamIds = [...new Set([
+    ...participantRows
+      .map((participant) => participant.club_team_id)
+      .filter((teamId): teamId is string => Boolean(teamId)),
+    ...derivedClubTeamIds,
+  ])]
+  const clubTeamNameMap = await getTeamDisplayMap(allClubTeamIds)
+
+  const mappedParticipants = participantRows.map((participant) => {
+    const derivedClubTeamId = !participant.club_team_id && participant.role !== 'REFEREE'
+      ? getDerivedClubTeamId(periodsByPerson.get(participant.person_id) ?? [], match.match_date)
+      : null
+
+    return {
+      id: participant.id,
+      team_id: participant.team_id,
+      person_id: participant.person_id,
+      person_name: personNameMap.get(participant.person_id) ?? '—',
+      role: participant.role,
+      is_starting: participant.is_starting,
+      player_position: participant.player_position,
+      club_team_id: participant.club_team_id,
+      club_team_name: participant.club_team_id
+        ? (clubTeamNameMap.get(participant.club_team_id) ?? '—')
+        : null,
+      derived_club_team_name: derivedClubTeamId
+        ? (clubTeamNameMap.get(derivedClubTeamId) ?? '—')
+        : null,
+    } satisfies AdminMatchParticipant
+  })
+
+  return {
+    homeParticipants: sortTeamParticipants(
+      mappedParticipants.filter((participant) => participant.team_id === match.home_team_id)
+    ),
+    awayParticipants: sortTeamParticipants(
+      mappedParticipants.filter((participant) => participant.team_id === match.away_team_id)
+    ),
+    referees: [...mappedParticipants]
+      .filter((participant) => participant.role === 'REFEREE')
+      .sort((a, b) => a.person_name.localeCompare(b.person_name, 'pl')),
+    people: peopleRows
+      .map((person) => ({ id: person.id, label: buildPersonDisplayName(person) }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pl')),
   }
 }
 

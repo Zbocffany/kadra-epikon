@@ -1,14 +1,25 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
-import { deleteMatch, updateMatch } from '../actions'
+import MatchCoachesForm from './MatchCoachesForm'
+import MatchSquadForm from './MatchSquadForm'
+import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
+import { deleteMatch, saveMatchFull } from '../actions'
 import { getMatchStatusLabel, MATCH_STATUS_OPTIONS } from '../matchStatusLabels'
 import {
   DetailsPageContainer,
   DetailsPageContent,
   DetailsPageHeader,
 } from '@/components/admin/DetailsPageLayout'
-import { getAdminMatchCreateOptions, getAdminMatchDetails } from '@/lib/db/matches'
+import {
+  getAdminMatchCreateOptions,
+  getAdminMatchDetails,
+  getAdminMatchParticipants,
+  type AdminMatchParticipant,
+  type AdminMatchParticipantPersonOption,
+  type MatchParticipantRole,
+  type PlayerPosition,
+} from '@/lib/db/matches'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 
 type Params = DetailPageParams
@@ -47,6 +58,176 @@ function MatchFieldValue({ value }: { value: string }) {
   return <p className="text-lg font-semibold text-neutral-100">{value}</p>
 }
 
+function getRoleLabel(role: MatchParticipantRole) {
+  switch (role) {
+    case 'PLAYER':
+      return 'Zawodnik'
+    case 'COACH':
+      return 'Trener'
+    case 'REFEREE':
+      return 'Sędzia'
+  }
+}
+
+function getPlayerPositionLabel(playerPosition: PlayerPosition | null) {
+  switch (playerPosition) {
+    case 'GOALKEEPER':
+      return 'Bramkarz'
+    case 'DEFENDER':
+      return 'Obrońca'
+    case 'MIDFIELDER':
+      return 'Pomocnik'
+    case 'ATTACKER':
+      return 'Napastnik'
+    default:
+      return null
+  }
+}
+
+function renderParticipantClub(participant: AdminMatchParticipant) {
+  if (participant.club_team_name) {
+    return participant.club_team_name
+  }
+
+  if (participant.derived_club_team_name) {
+    return `${participant.derived_club_team_name} (wyliczony)`
+  }
+
+  return '—'
+}
+
+function MatchRefereesSection({
+  referees,
+}: {
+  referees: AdminMatchParticipant[]
+}) {
+  const referee = referees[0] ?? null
+
+  return (
+    <section className="mt-6 max-w-xl rounded-xl border border-neutral-800 bg-neutral-950 p-4 sm:p-5">
+      <h2 className="text-lg font-semibold text-neutral-100">Sędzia</h2>
+      <div className="mt-4">
+        {referee ? (
+          <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
+            <p className="text-sm font-semibold text-neutral-100">{referee.person_name}</p>
+            <p className="mt-1 text-xs text-neutral-400">Sędzia główny</p>
+          </div>
+        ) : (
+          <p className="text-sm text-neutral-500">Brak przypisanego sędziego.</p>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function MatchTeamParticipantsView({
+  participants,
+}: {
+  participants: AdminMatchParticipant[]
+}) {
+  const starters = participants.filter((p) => p.role === 'PLAYER' && p.is_starting)
+  const bench = participants.filter((p) => p.role === 'PLAYER' && !p.is_starting)
+  const coaches = participants.filter((p) => p.role === 'COACH')
+  const hasPlayers = starters.length > 0 || bench.length > 0
+
+  return (
+    <div className="mt-4 space-y-4">
+      {hasPlayers ? (
+        <div className="overflow-hidden rounded-lg border border-neutral-800">
+          <table className="w-full table-fixed">
+            <colgroup>
+              <col className="w-8" />
+              <col />
+              <col className="w-[140px]" />
+            </colgroup>
+            <tbody>
+              {starters.map((player, index) => (
+                <tr key={player.id} className="border-t border-neutral-800 first:border-t-0">
+                  <td className="bg-neutral-950 px-3 py-2 text-sm text-neutral-500">{index + 1}</td>
+                  <td className="bg-neutral-950 px-3 py-2 text-sm text-neutral-100">{player.person_name}</td>
+                  <td className="bg-neutral-950 px-3 py-2 text-right text-xs text-neutral-400">
+                    {getPlayerPositionLabel(player.player_position) ?? '—'}
+                  </td>
+                </tr>
+              ))}
+              {bench.map((player, index) => (
+                <tr key={player.id} className="border-t border-neutral-800">
+                  <td className="bg-neutral-900/40 px-3 py-2 text-sm text-neutral-600">{starters.length + index + 1}</td>
+                  <td className="bg-neutral-900/40 px-3 py-2 text-sm text-neutral-300">{player.person_name}</td>
+                  <td className="bg-neutral-900/40 px-3 py-2 text-right text-xs text-neutral-500">
+                    {getPlayerPositionLabel(player.player_position) ?? '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="text-sm text-neutral-500">Brak zawodników.</p>
+      )}
+
+      {coaches.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">Sztab</p>
+          <ul className="mt-2 space-y-1">
+            {coaches.map((coach) => (
+              <li key={coach.id} className="text-sm text-neutral-300">{coach.person_name}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MatchTeamParticipantsSection({
+  namePrefix,
+  title,
+  participants,
+  people,
+  isEdit,
+}: {
+  namePrefix: string
+  title: string
+  participants: AdminMatchParticipant[]
+  people: AdminMatchParticipantPersonOption[]
+  isEdit: boolean
+}) {
+  const players = participants.filter((participant) => participant.role === 'PLAYER')
+  const coaches = participants.filter((participant) => participant.role === 'COACH')
+
+  return (
+    <section className="rounded-xl border border-neutral-800 bg-neutral-950 p-6">
+      <h2 className="text-xl font-semibold text-neutral-100">{title}</h2>
+
+      {isEdit ? (
+        <>
+          <div className="mt-6">
+            <MatchSquadForm
+              namePrefix={namePrefix}
+              people={people}
+              players={players}
+            />
+          </div>
+
+          <div className="mt-6">
+            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">Sztab</p>
+            <div className="mt-3">
+              <MatchCoachesForm
+                namePrefix={namePrefix}
+                people={people}
+                coaches={coaches}
+              />
+            </div>
+          </div>
+        </>
+      ) : (
+        <MatchTeamParticipantsView participants={participants} />
+      )}
+    </section>
+  )
+}
+
 export default async function AdminMatchDetailsPage({
   params,
   searchParams,
@@ -57,14 +238,16 @@ export default async function AdminMatchDetailsPage({
   const { id } = await params
   const { mode, saved, error } = await searchParams
 
-  const [match, options] = await Promise.all([
-    getAdminMatchDetails(id),
-    getAdminMatchCreateOptions(),
-  ])
+  const match = await getAdminMatchDetails(id)
 
   if (!match) {
     notFound()
   }
+
+  const [options, participants] = await Promise.all([
+    getAdminMatchCreateOptions(),
+    getAdminMatchParticipants(match),
+  ])
 
   const isEdit = mode === 'edit'
   const competitionName =
@@ -302,10 +485,106 @@ export default async function AdminMatchDetailsPage({
     </div>
   )
 
+  const matchTitle = `${match.home_team_name} vs ${match.away_team_name}`
+  const currentReferee = participants.referees[0] ?? null
+
+  if (isEdit) {
+    return (
+      <DetailsPageContainer maxWidthClass="max-w-6xl">
+        <form action={saveMatchFull}>
+          <input type="hidden" name="id" value={match.id} />
+
+          <div className="mb-6">
+            <Link
+              href="/admin/matches"
+              className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+            >
+              Powrót do listy meczów
+            </Link>
+          </div>
+
+          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-6">
+            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">Admin / Mecze</p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">{matchTitle}</h1>
+
+            {saved && (
+              <div className="mt-6 rounded-lg border border-emerald-800 bg-emerald-950/50 px-5 py-4 text-sm text-emerald-300">
+                Zmiany zostały zapisane.
+              </div>
+            )}
+
+            {error && (
+              <div className="mt-6 rounded-lg border border-red-800 bg-red-950/50 px-5 py-4 text-sm text-red-300">
+                {error}
+              </div>
+            )}
+
+            {fields}
+          </div>
+
+          <section className="mt-6 max-w-xl rounded-xl border border-neutral-800 bg-neutral-950 p-4 sm:p-5">
+            <h2 className="text-lg font-semibold text-neutral-100">Sędzia</h2>
+            <div className="mt-3">
+              <select
+                name="referee_person_id"
+                defaultValue={currentReferee?.person_id ?? ''}
+                className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+              >
+                <option value="">— brak sędziego —</option>
+                {participants.people.map((person) => (
+                  <option key={person.id} value={person.id}>{person.label}</option>
+                ))}
+              </select>
+            </div>
+          </section>
+
+          <section className="mt-6 grid gap-6 2xl:grid-cols-2">
+            <MatchTeamParticipantsSection
+              namePrefix="home_"
+              title={match.home_team_name}
+              participants={participants.homeParticipants}
+              people={participants.people}
+              isEdit={true}
+            />
+            <MatchTeamParticipantsSection
+              namePrefix="away_"
+              title={match.away_team_name}
+              participants={participants.awayParticipants}
+              people={participants.people}
+              isEdit={true}
+            />
+          </section>
+
+          <div className="mt-8 flex items-center justify-end gap-2">
+            <ConfirmSubmitButton
+              formAction={deleteMatch}
+              confirmMessage={`Czy na pewno chcesz usunąć mecz "${matchTitle}"?`}
+              className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+            >
+              Usuń
+            </ConfirmSubmitButton>
+            <Link
+              href={`/admin/matches/${match.id}`}
+              className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+            >
+              Anuluj
+            </Link>
+            <button
+              type="submit"
+              className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
+            >
+              Zapisz
+            </button>
+          </div>
+        </form>
+      </DetailsPageContainer>
+    )
+  }
+
   return (
-    <DetailsPageContainer>
+    <DetailsPageContainer maxWidthClass="max-w-6xl">
       <DetailsPageHeader
-        title={`${match.home_team_name} vs ${match.away_team_name}`}
+        title={matchTitle}
         backLabel="Powrót do listy meczów"
         backHref="/admin/matches"
         editHref={`/admin/matches/${match.id}?mode=edit`}
@@ -314,34 +593,35 @@ export default async function AdminMatchDetailsPage({
       />
 
       <DetailsPageContent
-        title={`${match.home_team_name} vs ${match.away_team_name}`}
+        title={matchTitle}
         breadcrumb="Admin / Mecze"
         saved={saved}
         error={error}
-        isEdit={isEdit}
-        editContent={
-          <form action={updateMatch} className="space-y-4">
-            <input type="hidden" name="id" value={match.id} />
-            {fields}
-
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <Link
-                href={`/admin/matches/${match.id}`}
-                className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-              >
-                Anuluj
-              </Link>
-              <button
-                type="submit"
-                className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
-              >
-                Zapisz
-              </button>
-            </div>
-          </form>
-        }
+        isEdit={false}
+        editContent={null}
         viewContent={fields}
       />
+
+      <MatchRefereesSection
+        referees={participants.referees}
+      />
+
+      <section className="mt-6 grid gap-6 2xl:grid-cols-2">
+        <MatchTeamParticipantsSection
+          namePrefix="home_"
+          title={match.home_team_name}
+          participants={participants.homeParticipants}
+          people={participants.people}
+          isEdit={false}
+        />
+        <MatchTeamParticipantsSection
+          namePrefix="away_"
+          title={match.away_team_name}
+          participants={participants.awayParticipants}
+          people={participants.people}
+          isEdit={false}
+        />
+      </section>
     </DetailsPageContainer>
   )
 }
