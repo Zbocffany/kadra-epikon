@@ -55,9 +55,10 @@ type PersonComboboxProps = {
   placeholder: string
   onChange: (personId: string) => void
   onPeopleUpdate: (newPerson: AdminMatchParticipantPersonOption) => void
+  usedPersonIds?: string[]
 }
 
-function PersonCombobox({ name, value, people, placeholder, onChange, onPeopleUpdate }: PersonComboboxProps) {
+function PersonCombobox({ name, value, people, placeholder, onChange, onPeopleUpdate, usedPersonIds = [] }: PersonComboboxProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -99,6 +100,11 @@ function PersonCombobox({ name, value, people, placeholder, onChange, onPeopleUp
   }, [])
 
   function handleSelect(personId: string) {
+    // Check for duplicates
+    if (usedPersonIds.includes(personId) && personId !== value) {
+      alert('Ten piłkarz jest już przypisany do innego miejsca w składzie.')
+      return
+    }
     onChange(personId)
     setSearchText('')
     setIsOpen(false)
@@ -132,9 +138,12 @@ function PersonCombobox({ name, value, people, placeholder, onChange, onPeopleUp
               setSearchText('')
             }}
             onBlur={() => {
-              if (!selectedPerson) {
-                setSearchText('')
-              }
+              setTimeout(() => {
+                if (!selectedPerson) {
+                  setSearchText('')
+                }
+                setIsOpen(false)
+              }, 100)
             }}
             placeholder={placeholder}
             className={`w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm ${
@@ -145,7 +154,10 @@ function PersonCombobox({ name, value, people, placeholder, onChange, onPeopleUp
             {isOpen && searchText && filteredPeople.length === 0 && (
               <button
                 type="button"
-                onClick={() => setIsModalOpen(true)}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  setIsModalOpen(true)
+                }}
                 className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-700 text-white hover:bg-neutral-600 active:bg-neutral-600"
                 title="Dodaj nowego piłkarza"
               >
@@ -251,6 +263,7 @@ export default function MatchSquadForm({
                     placeholder={`Podstawowy ${index + 1}`}
                     onChange={(personId) => updateRow(index, { personId })}
                     onPeopleUpdate={handlePeopleUpdate}
+                    usedPersonIds={rows.map((r, i) => i === index ? '' : r.personId).filter(Boolean)}
                   />
                 </td>
                 <td className="border-l border-neutral-800 bg-neutral-950 px-2 py-2">
@@ -291,6 +304,7 @@ export default function MatchSquadForm({
                       placeholder={`Rezerwowy ${index + 1}`}
                       onChange={(personId) => updateRow(STARTERS_COUNT + index, { personId })}
                       onPeopleUpdate={handlePeopleUpdate}
+                      usedPersonIds={rows.filter((_, i) => i !== STARTERS_COUNT + index).map(r => r.personId).filter(Boolean)}
                     />
                   </td>
                   <td className="border-l border-neutral-800 bg-neutral-950 px-2 py-2">
