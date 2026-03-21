@@ -120,6 +120,23 @@ function MatchRefereesSection({
   )
 }
 
+function PositionBadge({ position, bench = false }: { position: PlayerPosition | null; bench?: boolean }) {
+  const label = getPlayerPositionLabel(position)
+  const letter = label?.[0] ?? '–'
+  return (
+    <span
+      className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-black ${
+        bench
+          ? 'border border-neutral-500 bg-gradient-to-b from-neutral-700 to-neutral-900 text-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_1px_3px_rgba(0,0,0,0.6)]'
+          : 'border border-neutral-400 bg-gradient-to-b from-neutral-500 to-neutral-800 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_1px_3px_rgba(0,0,0,0.6)]'
+      }`}
+      title={label ?? undefined}
+    >
+      {letter}
+    </span>
+  )
+}
+
 function MatchTeamParticipantsView({
   participants,
 }: {
@@ -137,26 +154,26 @@ function MatchTeamParticipantsView({
           <table className="w-full table-fixed">
             <colgroup>
               <col className="w-8" />
+              <col className="w-8" />
               <col />
-              <col className="w-[140px]" />
             </colgroup>
             <tbody>
               {starters.map((player, index) => (
                 <tr key={player.id} className="border-t border-neutral-800 first:border-t-0">
                   <td className="bg-neutral-950 px-3 py-2 text-sm text-neutral-500">{index + 1}</td>
-                  <td className="bg-neutral-950 px-3 py-2 text-sm text-neutral-100">{player.person_name}</td>
-                  <td className="bg-neutral-950 px-3 py-2 text-right text-xs text-neutral-400">
-                    {getPlayerPositionLabel(player.player_position) ?? '—'}
+                  <td className="bg-neutral-950 py-2 pl-0 pr-2">
+                    <PositionBadge position={player.player_position} />
                   </td>
+                  <td className="bg-neutral-950 px-3 py-2 text-sm text-neutral-100">{player.person_name}</td>
                 </tr>
               ))}
               {bench.map((player, index) => (
                 <tr key={player.id} className="border-t border-neutral-800">
                   <td className="bg-neutral-900/40 px-3 py-2 text-sm text-neutral-600">{starters.length + index + 1}</td>
-                  <td className="bg-neutral-900/40 px-3 py-2 text-sm text-neutral-300">{player.person_name}</td>
-                  <td className="bg-neutral-900/40 px-3 py-2 text-right text-xs text-neutral-500">
-                    {getPlayerPositionLabel(player.player_position) ?? '—'}
+                  <td className="bg-neutral-900/40 py-2 pl-0 pr-2">
+                    <PositionBadge position={player.player_position} bench />
                   </td>
+                  <td className="bg-neutral-900/40 px-3 py-2 text-sm text-neutral-300">{player.person_name}</td>
                 </tr>
               ))}
             </tbody>

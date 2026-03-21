@@ -77,6 +77,9 @@ export type AdminMatchParticipant = {
 export type AdminMatchParticipantPersonOption = {
   id: string
   label: string
+  firstName: string
+  lastName: string
+  nickname: string
 }
 
 type MatchParticipantRow = {
@@ -433,7 +436,13 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
       .filter((participant) => participant.role === 'REFEREE')
       .sort((a, b) => a.person_name.localeCompare(b.person_name, 'pl')),
     people: peopleRows
-      .map((person) => ({ id: person.id, label: buildPersonDisplayName(person) }))
+      .map((person) => ({ 
+        id: person.id, 
+        label: buildPersonDisplayName(person),
+        firstName: person.first_name ?? '',
+        lastName: person.last_name ?? '',
+        nickname: person.nickname ?? '',
+      }))
       .sort((a, b) => a.label.localeCompare(b.label, 'pl')),
   }
 }
