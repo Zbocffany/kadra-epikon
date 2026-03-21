@@ -6,6 +6,8 @@ import type {
   AdminMatchParticipantPersonOption,
   PlayerPosition,
 } from '@/lib/db/matches'
+import type { AdminPersonBirthCityOption } from '@/lib/db/people'
+import type { AdminCountryOption } from '@/lib/db/cities'
 import AddPersonModal from './AddPersonModal'
 
 const STARTERS_COUNT = 11
@@ -56,9 +58,21 @@ type PersonComboboxProps = {
   onChange: (personId: string) => void
   onPeopleUpdate: (newPerson: AdminMatchParticipantPersonOption) => void
   usedPersonIds?: string[]
+  cities: AdminPersonBirthCityOption[]
+  countries: AdminCountryOption[]
 }
 
-function PersonCombobox({ name, value, people, placeholder, onChange, onPeopleUpdate, usedPersonIds = [] }: PersonComboboxProps) {
+function PersonCombobox({
+  name,
+  value,
+  people,
+  placeholder,
+  onChange,
+  onPeopleUpdate,
+  usedPersonIds = [],
+  cities,
+  countries,
+}: PersonComboboxProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -197,6 +211,8 @@ function PersonCombobox({ name, value, people, placeholder, onChange, onPeopleUp
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={handleAddNewSuccess}
+        cities={cities}
+        countries={countries}
       />
     </>
   )
@@ -206,10 +222,14 @@ export default function MatchSquadForm({
   namePrefix,
   people: initialPeople,
   players,
+  cities,
+  countries,
 }: {
   namePrefix: string
   people: AdminMatchParticipantPersonOption[]
   players: AdminMatchParticipant[]
+  cities: AdminPersonBirthCityOption[]
+  countries: AdminCountryOption[]
 }) {
   const [rows, setRows] = useState<SquadRow[]>(() => buildInitialRows(players))
   const [people, setPeople] = useState<AdminMatchParticipantPersonOption[]>(initialPeople)
@@ -264,6 +284,8 @@ export default function MatchSquadForm({
                     onChange={(personId) => updateRow(index, { personId })}
                     onPeopleUpdate={handlePeopleUpdate}
                     usedPersonIds={rows.map((r, i) => i === index ? '' : r.personId).filter(Boolean)}
+                    cities={cities}
+                    countries={countries}
                   />
                 </td>
                 <td className="border-l border-neutral-800 bg-neutral-950 px-2 py-2">
@@ -305,6 +327,8 @@ export default function MatchSquadForm({
                       onChange={(personId) => updateRow(STARTERS_COUNT + index, { personId })}
                       onPeopleUpdate={handlePeopleUpdate}
                       usedPersonIds={rows.filter((_, i) => i !== STARTERS_COUNT + index).map(r => r.personId).filter(Boolean)}
+                      cities={cities}
+                      countries={countries}
                     />
                   </td>
                   <td className="border-l border-neutral-800 bg-neutral-950 px-2 py-2">

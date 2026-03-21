@@ -21,6 +21,8 @@ import {
   type MatchParticipantRole,
   type PlayerPosition,
 } from '@/lib/db/matches'
+import { getAdminPersonBirthCityOptions } from '@/lib/db/people'
+import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 
 type Params = DetailPageParams
@@ -204,12 +206,16 @@ function MatchTeamParticipantsSection({
   participants,
   people,
   isEdit,
+  cities,
+  countries,
 }: {
   namePrefix: string
   title: string
   participants: AdminMatchParticipant[]
   people: AdminMatchParticipantPersonOption[]
   isEdit: boolean
+  cities: any[]
+  countries: any[]
 }) {
   const players = participants.filter((participant) => participant.role === 'PLAYER')
   const coaches = participants.filter((participant) => participant.role === 'COACH')
@@ -225,6 +231,8 @@ function MatchTeamParticipantsSection({
               namePrefix={namePrefix}
               people={people}
               players={players}
+              cities={cities}
+              countries={countries}
             />
           </div>
 
@@ -235,6 +243,8 @@ function MatchTeamParticipantsSection({
                 namePrefix={namePrefix}
                 people={people}
                 coaches={coaches}
+                cities={cities}
+                countries={countries}
               />
             </div>
           </div>
@@ -262,9 +272,11 @@ export default async function AdminMatchDetailsPage({
     notFound()
   }
 
-  const [options, participants] = await Promise.all([
+  const [options, participants, cities, countries] = await Promise.all([
     getAdminMatchCreateOptions(),
     getAdminMatchParticipants(match),
+    getAdminPersonBirthCityOptions(),
+    getAdminCountriesOptions(),
   ])
 
   const isEdit = mode === 'edit'
@@ -564,6 +576,8 @@ export default async function AdminMatchDetailsPage({
               participants={participants.homeParticipants}
               people={participants.people}
               isEdit={true}
+              cities={cities}
+              countries={countries}
             />
             <MatchTeamParticipantsSection
               namePrefix="away_"
@@ -571,6 +585,8 @@ export default async function AdminMatchDetailsPage({
               participants={participants.awayParticipants}
               people={participants.people}
               isEdit={true}
+              cities={cities}
+              countries={countries}
             />
           </section>
 
@@ -633,6 +649,8 @@ export default async function AdminMatchDetailsPage({
           participants={participants.homeParticipants}
           people={participants.people}
           isEdit={false}
+          cities={cities}
+          countries={countries}
         />
         <MatchTeamParticipantsSection
           namePrefix="away_"
@@ -640,6 +658,8 @@ export default async function AdminMatchDetailsPage({
           participants={participants.awayParticipants}
           people={participants.people}
           isEdit={false}
+          cities={cities}
+          countries={countries}
         />
       </section>
     </DetailsPageContainer>

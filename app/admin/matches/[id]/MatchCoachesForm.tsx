@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react'
 import type { AdminMatchParticipant, AdminMatchParticipantPersonOption } from '@/lib/db/matches'
+import type { AdminPersonBirthCityOption } from '@/lib/db/people'
+import type { AdminCountryOption } from '@/lib/db/cities'
 import AddPersonModal from './AddPersonModal'
 
 function buildInitialRows(coaches: AdminMatchParticipant[]): string[] {
@@ -24,9 +26,21 @@ type PersonComboboxProps = {
   onChange: (personId: string) => void
   onPeopleUpdate: (newPerson: AdminMatchParticipantPersonOption) => void
   usedPersonIds?: string[]
+  cities: AdminPersonBirthCityOption[]
+  countries: AdminCountryOption[]
 }
 
-function PersonCombobox({ name, value, people, placeholder, onChange, onPeopleUpdate, usedPersonIds = [] }: PersonComboboxProps) {
+function PersonCombobox({
+  name,
+  value,
+  people,
+  placeholder,
+  onChange,
+  onPeopleUpdate,
+  usedPersonIds = [],
+  cities,
+  countries,
+}: PersonComboboxProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -165,6 +179,8 @@ function PersonCombobox({ name, value, people, placeholder, onChange, onPeopleUp
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onSuccess={handleAddNewSuccess}
+        cities={cities}
+        countries={countries}
       />
     </>
   )
@@ -174,10 +190,14 @@ export default function MatchCoachesForm({
   namePrefix,
   people: initialPeople,
   coaches,
+  cities,
+  countries,
 }: {
   namePrefix: string
   people: AdminMatchParticipantPersonOption[]
   coaches: AdminMatchParticipant[]
+  cities: AdminPersonBirthCityOption[]
+  countries: AdminCountryOption[]
 }) {
   const [rows, setRows] = useState<string[]>(() => buildInitialRows(coaches))
   const [people, setPeople] = useState<AdminMatchParticipantPersonOption[]>(initialPeople)
@@ -213,6 +233,8 @@ export default function MatchCoachesForm({
           onChange={(personId) => updateRow(index, personId)}
           onPeopleUpdate={handlePeopleUpdate}
           usedPersonIds={rows.filter((_, i) => i !== index).filter(Boolean)}
+          cities={cities}
+          countries={countries}
         />
       ))}
 

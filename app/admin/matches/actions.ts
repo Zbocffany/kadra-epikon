@@ -948,13 +948,20 @@ export async function deleteMatch(formData: FormData): Promise<void> {
 export async function addPerson(
   firstName: string,
   lastName: string,
-  nickname: string
+  nickname: string,
+  birthDate: string | null = null,
+  birthCityId: string | null = null,
+  birthCountryId: string | null = null,
+  isActive: boolean = true
 ): Promise<{ id: string; label: string; firstName: string; lastName: string; nickname: string }> {
   await requireAdminAccess()
 
   const firstNameTrimmed = firstName?.trim() || null
   const lastNameTrimmed = lastName?.trim() || null
   const nicknameTrimmed = nickname?.trim() || null
+  const birthDateTrimmed = birthDate?.trim() || null
+  const birthCityIdTrimmed = birthCityId?.trim() || null
+  const birthCountryIdTrimmed = birthCountryId?.trim() || null
 
   if (!firstNameTrimmed && !lastNameTrimmed && !nicknameTrimmed) {
     throw new Error('Podaj przynajmniej jedno z pól: imię, nazwisko lub przydomek.')
@@ -968,10 +975,10 @@ export async function addPerson(
     first_name: firstNameTrimmed,
     last_name: lastNameTrimmed,
     nickname: nicknameTrimmed,
-    birth_date: null,
-    birth_city_id: null,
-    birth_country_id: null,
-    is_active: true,
+    birth_date: birthDateTrimmed,
+    birth_city_id: birthCityIdTrimmed,
+    birth_country_id: birthCountryIdTrimmed,
+    is_active: isActive,
   })
 
   if (error) {
