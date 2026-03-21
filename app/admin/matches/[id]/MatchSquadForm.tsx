@@ -6,6 +6,7 @@ import type {
   AdminMatchParticipantPersonOption,
   PlayerPosition,
 } from '@/lib/db/matches'
+import AddPersonModal from './AddPersonModal'
 
 const STARTERS_COUNT = 11
 const BENCH_BASE_COUNT = 5
@@ -53,12 +54,13 @@ type PersonComboboxProps = {
   people: AdminMatchParticipantPersonOption[]
   placeholder: string
   onChange: (personId: string) => void
-  onAddNew?: (name: string) => void
+  onPeopleUpdate: (newPerson: AdminMatchParticipantPersonOption) => void
 }
 
-function PersonCombobox({ name, value, people, placeholder, onChange, onAddNew }: PersonComboboxProps) {
+function PersonCombobox({ name, value, people, placeholder, onChange, onPeopleUpdate }: PersonComboboxProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
+  const [isModalOpen, setIsModalOpen] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -102,89 +104,95 @@ function PersonCombobox({ name, value, people, placeholder, onChange, onAddNew }
     setIsOpen(false)
   }
 
-  function handleAddNew() {
-    if (onAddNew && searchText.trim()) {
-      onAddNew(searchText.trim())
-      setSearchText('')
-      setIsOpen(false)
-    }
+  function handleAddNewSuccess(newPerson: AdminMatchParticipantPersonOption) {
+    onPeopleUpdate(newPerson)
+    handleSelect(newPerson.id)
+    setIsModalOpen(false)
   }
 
   return (
-    <div ref={containerRef} className="relative">
-      <input
-        ref={inputRef}
-        type="hidden"
-        name={name}
-        value={value}
-      />
-      <div className="relative w-full">
+    <>
+      <div ref={containerRef} className="relative">
         <input
-          type="text"
-          value={isOpen ? searchText : displayLabel}
-          onChange={(e) => {
-            setSearchText(e.target.value)
-            setIsOpen(true)
-          }}
-          onFocus={() => {
-            setIsOpen(true)
-            setSearchText('')
-          }}
-          onBlur={() => {
-            if (!selectedPerson) {
-              setSearchText('')
-            }
-          }}
-          placeholder={placeholder}
-          className={`w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm ${
-            value ? 'text-neutral-100' : 'text-neutral-500'
-          }`}
+          ref={inputRef}
+          type="hidden"
+          name={name}
+          value={value}
         />
-        <div className="pointer-events-none absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-1 pr-2">
-          {isOpen && searchText && filteredPeople.length === 0 && onAddNew && (
-            <button
-              type="button"
-              onClick={handleAddNew}
-              className="pointer-events-auto inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-700 text-white hover:bg-neutral-600"
-              title="Dodaj nowego piłkarza"
-            >
-              <span className="text-xs font-bold">+</span>
-            </button>
-          )}
-          <span className="text-neutral-500">▼</span>
-        </div>
-      </div>
-      {isOpen && (
-        <div className="absolute top-full z-10 mt-1 max-h-80 w-full overflow-y-auto rounded-md border border-neutral-700 bg-neutral-900 shadow-lg">
-          {filteredPeople.length > 0 ? (
-            filteredPeople.map((person) => (
+        <div className="relative w-full">
+          <input
+            type="text"
+            value={isOpen ? searchText : displayLabel}
+            onChange={(e) => {
+              setSearchText(e.target.value)
+              setIsOpen(true)
+            }}
+            onFocus={() => {
+              setIsOpen(true)
+              setSearchText('')
+            }}
+            onBlur={() => {
+              if (!selectedPerson) {
+                setSearchText('')
+              }
+            }}
+            placeholder={placeholder}
+            className={`w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm ${
+              value ? 'text-neutral-100' : 'text-neutral-500'
+            }`}
+          />
+          <div className="pointer-events-none absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-1 pr-2">
+            {isOpen && searchText && filteredPeople.length === 0 && (
               <button
-                key={person.id}
                 type="button"
-                onClick={() => handleSelect(person.id)}
-                className="w-full border-b border-neutral-800 px-3 py-2 text-left text-sm text-neutral-100 hover:bg-neutral-800 last:border-b-0"
+                onClick={() => setIsModalOpen(true)}
+                className="pointer-events-auto inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-700 text-white hover:bg-neutral-600"
+                title="Dodaj nowego piłkarza"
               >
-                {person.label}
+                <span className="text-xs font-bold">+</span>
               </button>
-            ))
-          ) : searchText ? (
-            <div className="px-3 py-2 text-sm text-neutral-400">
-              Brak wyników
-            </div>
-          ) : (
-            <div className="px-3 py-2 text-sm text-neutral-500">
-              Wpisz, aby wyszukać...
-            </div>
-          )}
+            )}
+            <span className="text-neutral-500">▼</span>
+          </div>
         </div>
-      )}
-    </div>
+        {isOpen && (
+          <div className="absolute top-full z-10 mt-1 max-h-80 w-full overflow-y-auto rounded-md border border-neutral-700 bg-neutral-900 shadow-lg">
+            {filteredPeople.length > 0 ? (
+              filteredPeople.map((person) => (
+                <button
+                  key={person.id}
+                  type="button"
+                  onClick={() => handleSelect(person.id)}
+                  className="w-full border-b border-neutral-800 px-3 py-2 text-left text-sm text-neutral-100 hover:bg-neutral-800 last:border-b-0"
+                >
+                  {person.label}
+                </button>
+              ))
+            ) : searchText ? (
+              <div className="px-3 py-2 text-sm text-neutral-400">
+                Brak wyników
+              </div>
+            ) : (
+              <div className="px-3 py-2 text-sm text-neutral-500">
+                Wpisz, aby wyszukać...
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <AddPersonModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={handleAddNewSuccess}
+      />
+    </>
   )
 }
 
 export default function MatchSquadForm({
   namePrefix,
-  people,
+  people: initialPeople,
   players,
 }: {
   namePrefix: string
@@ -192,6 +200,7 @@ export default function MatchSquadForm({
   players: AdminMatchParticipant[]
 }) {
   const [rows, setRows] = useState<SquadRow[]>(() => buildInitialRows(players))
+  const [people, setPeople] = useState<AdminMatchParticipantPersonOption[]>(initialPeople)
 
   function updateRow(index: number, patch: Partial<SquadRow>) {
     setRows((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)))
@@ -206,6 +215,10 @@ export default function MatchSquadForm({
       if (prev.length <= STARTERS_COUNT) return prev
       return prev.slice(0, -1)
     })
+  }
+
+  function handlePeopleUpdate(newPerson: AdminMatchParticipantPersonOption) {
+    setPeople((prev) => [...prev, newPerson].sort((a, b) => a.label.localeCompare(b.label, 'pl')))
   }
 
   return (
@@ -237,6 +250,7 @@ export default function MatchSquadForm({
                     people={people}
                     placeholder={`Podstawowy ${index + 1}`}
                     onChange={(personId) => updateRow(index, { personId })}
+                    onPeopleUpdate={handlePeopleUpdate}
                   />
                 </td>
                 <td className="border-l border-neutral-800 bg-neutral-950 px-2 py-2">
@@ -276,6 +290,7 @@ export default function MatchSquadForm({
                       people={people}
                       placeholder={`Rezerwowy ${index + 1}`}
                       onChange={(personId) => updateRow(STARTERS_COUNT + index, { personId })}
+                      onPeopleUpdate={handlePeopleUpdate}
                     />
                   </td>
                   <td className="border-l border-neutral-800 bg-neutral-950 px-2 py-2">

@@ -944,3 +944,50 @@ export async function deleteMatch(formData: FormData): Promise<void> {
   const label = match?.match_date ?? id
   redirectWithAdded('/admin/matches', `Usunięto mecz: ${label}`)
 }
+
+export async function addPerson(
+  firstName: string,
+  lastName: string,
+  nickname: string
+): Promise<{ id: string; label: string; firstName: string; lastName: string; nickname: string }> {
+  await requireAdminAccess()
+
+  const firstNameTrimmed = firstName?.trim() || null
+  const lastNameTrimmed = lastName?.trim() || null
+  const nicknameTrimmed = nickname?.trim() || null
+
+  if (!firstNameTrimmed && !lastNameTrimmed && !nicknameTrimmed) {
+    throw new Error('Podaj przynajmniej jedno z pól: imię, nazwisko lub przydomek.')
+  }
+
+  const supabase = createServiceRoleClient()
+  const personId = crypto.randomUUID()
+
+  const { error } = await supabase.from('tbl_People').insert({
+    id: personId,
+    first_name: firstNameTrimmed,
+    last_name: lastNameTrimmed,
+    nickname: nicknameTrimmed,
+    birth_date: null,
+    birth_city_id: null,
+    birth_country_id: null,
+    is_active: true,
+  })
+
+  if (error) {
+    console.error('Error adding person:', error)
+    throw new Error('Nie udało się dodać nowej osoby. Spróbuj ponownie.')
+  }
+
+  const fullName = firstNameTrimmed && lastNameTrimmed
+    ? `${firstNameTrimmed} ${lastNameTrimmed}`
+    : firstNameTrimmed || lastNameTrimmed || nicknameTrimmed || '—'
+
+  return {
+    id: personId,
+    label: fullName,
+    firstName: firstNameTrimmed || '',
+    lastName: lastNameTrimmed || '',
+    nickname: nicknameTrimmed || '',
+  }
+}
