@@ -2,6 +2,7 @@
 
 import { useState, ReactNode, useEffect, useRef } from 'react'
 import { useUnsavedChanges } from '@/hooks/useUnsavedChanges'
+import UnsavedChangesDialog from '@/components/admin/UnsavedChangesDialog'
 
 type EditMatchFormWrapperProps = {
   children: ReactNode
@@ -10,6 +11,8 @@ type EditMatchFormWrapperProps = {
 
 export default function EditMatchFormWrapper({ children, onFormChange }: EditMatchFormWrapperProps) {
   const [isDirty, setIsDirty] = useState(false)
+  const [showDialog, setShowDialog] = useState(false)
+  const [pendingHref, setPendingHref] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
   // Handle beforeunload (browser back button, refresh, closing tab)
@@ -53,20 +56,41 @@ export default function EditMatchFormWrapper({ children, onFormChange }: EditMat
         return
       }
 
-      // Ask for confirmation
-      if (!window.confirm('Masz niezapisane zmiany. Czy na pewno chcesz opuścić tę stronę bez zapisania?')) {
-        e.preventDefault()
-        e.stopPropagation()
-      }
+      // Show dialog instead of confirm
+      e.preventDefault()
+      e.stopPropagation()
+      setPendingHref(link.href)
+      setShowDialog(true)
     }
 
     document.addEventListener('click', handleClick, true)
     return () => document.removeEventListener('click', handleClick, true)
   }, [isDirty])
 
+  const handleDialogConfirm = () => {
+    if (pendingHref) {
+      // Navigate to the pending href
+      window.location.href = pendingHref
+    }
+    setShowDialog(false)
+    setPendingHref(null)
+  }
+
+  const handleDialogCancel = () => {
+    setShowDialog(false)
+    setPendingHref(null)
+  }
+
   return (
-    <div ref={containerRef}>
-      {children}
-    </div>
+    <>
+      <div ref={containerRef}>
+        {children}
+      </div>
+      <UnsavedChangesDialog
+        isOpen={showDialog}
+        onConfirm={handleDialogConfirm}
+        onCancel={handleDialogCancel}
+      />
+    </>
   )
 }
