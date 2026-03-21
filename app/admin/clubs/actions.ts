@@ -2,9 +2,12 @@
 
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { requireAdminAccess } from '@/lib/auth/admin'
+import type { InlineCreateState } from '@/lib/types/admin'
 import {
   getTrimmedNullable,
   getTrimmedString,
+  inlineError,
+  inlineSuccess,
   redirectWithAdded,
   redirectWithError,
   redirectWithSaved,
@@ -23,6 +26,49 @@ async function ensureClubTeamExists(clubId: string): Promise<void> {
   if (error) {
     throw new Error('Nie udało się zarejestrować drużyny dla klubu.')
   }
+}
+
+export async function createClubInline(
+  prevState: InlineCreateState,
+  formData: FormData
+): Promise<InlineCreateState> {
+  await requireAdminAccess()
+  const name = getTrimmedString(formData, 'name')
+  const clubCityId = getTrimmedNullable(formData, 'club_city_id')
+
+  if (!name) {
+    return inlineError(prevState, 'Nazwa klubu jest wymagana.')
+  }
+
+  const supabase = createServiceRoleClient()
+  const clubId = crypto.randomUUID()
+  const teamId = crypto.randomUUID()
+
+  const { error: clubError } = await supabase.from('tbl_Clubs').insert({
+    id: clubId,
+    name,
+    club_city_id: clubCityId,
+  })
+
+  if (clubError) {
+    if (clubError.code === '23505') {
+      return inlineError(prevState, `Klub o nazwie "${name}" już istnieje.`)
+    }
+    return inlineError(prevState, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
+  }
+
+  const { error: teamError } = await supabase.from('tbl_Teams').insert({
+    id: teamId,
+    country_id: null,
+    club_id: clubId,
+  })
+
+  if (teamError) {
+    await supabase.from('tbl_Clubs').delete().eq('id', clubId)
+    return inlineError(prevState, 'Nie udało się utworzyć drużyny dla klubu.')
+  }
+
+  return inlineSuccess(prevState, teamId, name)
 }
 
 export async function createClub(formData: FormData): Promise<void> {
