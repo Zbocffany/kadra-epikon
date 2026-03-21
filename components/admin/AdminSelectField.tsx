@@ -278,34 +278,56 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
               +
             </button>
           )}
-        </div>
 
-        {isOpen && filteredOptions.length > 0 && (
-          <select
-            value={value}
-            onChange={(e) => {
-              const id = e.target.value
-              setValue(id)
-              onSelectedIdChange?.(id)
-              const selected = allOptions.find((opt) => opt.id === id)
-              if (selected) setQuery(getDisplayLabel(selected))
-              setIsOpen(false)
-            }}
-            size={Math.min(6, Math.max(3, filteredOptions.length))}
-            className="rounded-lg border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none"
-          >
-            {!required && <option value="">— brak —</option>}
-            {required && <option value="">— wybierz —</option>}
-            {filteredOptions.map((opt, index) => (
-              <option key={opt.id} value={opt.id} className={index === highlightedIndex ? 'bg-neutral-800' : ''}>
-                {getDisplayLabel(opt)}
-              </option>
-            ))}
-          </select>
-        )}
-        {isOpen && query.trim() !== '' && filteredOptions.length === 0 && (
-          <p className="text-xs text-neutral-500 px-1">{emptyResultsMessage}</p>
-        )}
+          {isOpen && (
+            <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900 shadow-xl">
+              {filteredOptions.length > 0 ? (
+                <>
+                  {!required && (
+                    <button
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => {
+                        setValue('')
+                        onSelectedIdChange?.('')
+                        setQuery('')
+                        setIsOpen(false)
+                      }}
+                      className={`w-full border-b border-neutral-800 px-3 py-2 text-left text-sm ${
+                        value === '' ? 'bg-neutral-800 text-neutral-100' : 'text-neutral-300 hover:bg-neutral-800'
+                      }`}
+                    >
+                      — brak —
+                    </button>
+                  )}
+                  {filteredOptions.map((opt, index) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onMouseEnter={() => setHighlightedIndex(index)}
+                      onClick={() => {
+                        setValue(opt.id)
+                        onSelectedIdChange?.(opt.id)
+                        setQuery(getDisplayLabel(opt))
+                        setIsOpen(false)
+                      }}
+                      className={`w-full border-b border-neutral-800 px-3 py-2 text-left text-sm last:border-b-0 ${
+                        index === highlightedIndex ? 'bg-neutral-800 text-neutral-100' : 'text-neutral-200 hover:bg-neutral-800'
+                      }`}
+                    >
+                      {getDisplayLabel(opt)}
+                    </button>
+                  ))}
+                </>
+              ) : query.trim() !== '' ? (
+                <p className="px-3 py-2 text-xs text-neutral-500">{emptyResultsMessage}</p>
+              ) : (
+                <p className="px-3 py-2 text-xs text-neutral-500">Wpisz, aby wyszukać...</p>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex items-center justify-between gap-2">
