@@ -293,7 +293,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
                         setQuery('')
                         setIsOpen(false)
                       }}
-                      className={`w-full border-b border-neutral-800 px-3 py-2 text-left text-sm ${
+                      className={`w-full border-b border-neutral-800 px-3 py-1.5 text-left text-sm ${
                         value === '' ? 'bg-neutral-800 text-neutral-100' : 'text-neutral-300 hover:bg-neutral-800'
                       }`}
                     >
@@ -312,7 +312,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
                         setQuery(getDisplayLabel(opt))
                         setIsOpen(false)
                       }}
-                      className={`w-full border-b border-neutral-800 px-3 py-2 text-left text-sm last:border-b-0 ${
+                      className={`w-full border-b border-neutral-800 px-3 py-1.5 text-left text-sm last:border-b-0 ${
                         index === highlightedIndex ? 'bg-neutral-800 text-neutral-100' : 'text-neutral-200 hover:bg-neutral-800'
                       }`}
                     >
@@ -321,9 +321,9 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
                   ))}
                 </>
               ) : query.trim() !== '' ? (
-                <p className="px-3 py-2 text-xs text-neutral-500">{emptyResultsMessage}</p>
+                <p className="px-3 py-1.5 text-xs text-neutral-500">{emptyResultsMessage}</p>
               ) : (
-                <p className="px-3 py-2 text-xs text-neutral-500">Wpisz, aby wyszukać...</p>
+                <p className="px-3 py-1.5 text-xs text-neutral-500">Wpisz, aby wyszukać...</p>
               )}
             </div>
           )}
