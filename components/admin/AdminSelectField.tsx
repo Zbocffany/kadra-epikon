@@ -144,6 +144,17 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
     setAllOptions(options)
   }, [options])
 
+  // Prefill first input field with search query when dialog opens
+  useEffect(() => {
+    if (!dialogOpen || !inlineFormRef.current || !query.trim()) return
+    
+    const inputs = inlineFormRef.current.querySelectorAll<HTMLInputElement>('input[name]')
+    if (inputs.length > 0) {
+      inputs[0].value = query
+      inputs[0].focus()
+    }
+  }, [dialogOpen, query])
+
   useEffect(() => {
     const id = selectedId ?? ''
     setValue(id)
@@ -219,11 +230,17 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
                 setIsOpen(true)
               }
 
-              if (filteredOptions.length === 0) {
-                return
-              }
-
               if (e.key === 'Enter') {
+                if (filteredOptions.length === 0) {
+                  // No matches: Enter opens create dialog if there's a search query
+                  if (query.trim() !== '') {
+                    e.preventDefault()
+                    setIsOpen(false)
+                    setDialogOpen(true)
+                  }
+                  return
+                }
+
                 if (highlightedIndex < 0 || highlightedIndex >= filteredOptions.length) {
                   return
                 }
@@ -234,6 +251,10 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
                 onSelectedIdChange?.(option.id)
                 setQuery(getDisplayLabel(option))
                 setIsOpen(false)
+                return
+              }
+
+              if (filteredOptions.length === 0) {
                 return
               }
 
