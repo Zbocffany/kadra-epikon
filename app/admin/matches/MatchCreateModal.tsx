@@ -2,6 +2,11 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { createCityInline } from '@/app/admin/cities/actions'
+import { createStadiumInline } from '@/app/admin/stadiums/actions'
+import AdminSelectField from '@/components/admin/AdminSelectField'
+import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
+import type { AdminCountryOption } from '@/lib/db/cities'
 import type {
   AdminCityOption,
   AdminCompetitionOption,
@@ -13,6 +18,7 @@ type MatchCreateModalProps = {
   competitions: AdminCompetitionOption[]
   teams: AdminTeamOption[]
   cities: AdminCityOption[]
+  countries: AdminCountryOption[]
   stadiums: AdminStadiumOption[]
   createAction: (formData: FormData) => Promise<void>
 }
@@ -21,6 +27,7 @@ export default function MatchCreateModal({
   competitions,
   teams,
   cities,
+  countries,
   stadiums,
   createAction,
 }: MatchCreateModalProps) {
@@ -96,43 +103,172 @@ export default function MatchCreateModal({
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="match_stadium_id" className="text-sm font-medium text-neutral-300">
-                Stadion
-              </label>
-              <select
-                id="match_stadium_id"
+              <AdminSelectField
                 name="match_stadium_id"
-                value={selectedStadiumId}
-                onChange={(event) => handleStadiumChange(event.target.value)}
-                className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-              >
-                <option value="">— brak —</option>
-                {stadiums.map((stadium) => (
-                  <option key={stadium.id} value={stadium.id}>
-                    {stadium.label}
-                  </option>
-                ))}
-              </select>
+                label="Stadion"
+                selectedId={selectedStadiumId}
+                options={stadiums.map((stadium) => ({ id: stadium.id, label: stadium.label }))}
+                displayKey="label"
+                placeholder="Wpisz, aby filtrowac stadiony..."
+                addButtonLabel="+ Dodaj stadion"
+                addDialogTitle="Nowy stadion"
+                emptyResultsMessage="Brak wyników - możesz dodać nowy stadion poniżej."
+                createAction={createStadiumInline}
+                onSelectedIdChange={handleStadiumChange}
+                inlineForm={(
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="inline_match_stadium_name" className="text-xs text-neutral-400">
+                        Nazwa stadionu
+                      </label>
+                      <input
+                        id="inline_match_stadium_name"
+                        name="name"
+                        type="text"
+                        required
+                        className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <AdminSelectField
+                        name="stadium_city_id"
+                        label="Miasto"
+                        required
+                        options={cities.map((city) => ({ id: city.id, label: city.name }))}
+                        displayKey="label"
+                        placeholder="Wpisz, aby filtrowac miasta..."
+                        addButtonLabel="+ Dodaj miasto"
+                        addDialogTitle="Nowe miasto"
+                        emptyResultsMessage="Brak wyników - możesz dodać nowe miasto poniżej."
+                        createAction={createCityInline}
+                        inlineForm={(
+                          <div className="space-y-3">
+                            <div className="flex flex-col gap-1.5">
+                              <label htmlFor="inline_match_stadium_city_name" className="text-xs text-neutral-400">
+                                Nazwa miasta
+                              </label>
+                              <input
+                                id="inline_match_stadium_city_name"
+                                name="city_name"
+                                type="text"
+                                required
+                                className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                              />
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                              <label htmlFor="inline_match_stadium_city_country" className="text-xs text-neutral-400">
+                                Kraj
+                              </label>
+                              <select
+                                id="inline_match_stadium_city_country"
+                                name="country_id"
+                                required
+                                className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                              >
+                                <option value="">- wybierz -</option>
+                                {countries.map((country) => (
+                                  <option key={country.id} value={country.id}>
+                                    {country.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="flex flex-col gap-1.5">
+                              <label htmlFor="inline_match_stadium_city_voivodeship" className="text-xs text-neutral-400">
+                                Wojewodztwo (tylko Polska)
+                              </label>
+                              <select
+                                id="inline_match_stadium_city_voivodeship"
+                                name="voivodeship"
+                                className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                              >
+                                <option value="">- brak -</option>
+                                {VOIVODESHIP_OPTIONS.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
+                      />
+                    </div>
+                  </div>
+                )}
+              />
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="match_city_id" className="text-sm font-medium text-neutral-300">
-                Miasto meczu
-              </label>
-              <select
-                id="match_city_id"
+              <AdminSelectField
                 name="match_city_id"
-                value={selectedCityId}
-                onChange={(event) => setSelectedCityId(event.target.value)}
-                className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-              >
-                <option value="">— brak —</option>
-                {cities.map((city) => (
-                  <option key={city.id} value={city.id}>
-                    {city.name}
-                  </option>
-                ))}
-              </select>
+                label="Miasto meczu"
+                selectedId={selectedCityId}
+                options={cities.map((city) => ({ id: city.id, label: city.name }))}
+                displayKey="label"
+                placeholder="Wpisz, aby filtrowac miasta..."
+                addButtonLabel="+ Dodaj miasto"
+                addDialogTitle="Nowe miasto"
+                emptyResultsMessage="Brak wyników - możesz dodać nowe miasto poniżej."
+                createAction={createCityInline}
+                onSelectedIdChange={setSelectedCityId}
+                inlineForm={(
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="inline_match_city_name" className="text-xs text-neutral-400">
+                        Nazwa miasta
+                      </label>
+                      <input
+                        id="inline_match_city_name"
+                        name="city_name"
+                        type="text"
+                        required
+                        className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="inline_match_city_country" className="text-xs text-neutral-400">
+                        Kraj
+                      </label>
+                      <select
+                        id="inline_match_city_country"
+                        name="country_id"
+                        required
+                        className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                      >
+                        <option value="">- wybierz -</option>
+                        {countries.map((country) => (
+                          <option key={country.id} value={country.id}>
+                            {country.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor="inline_match_city_voivodeship" className="text-xs text-neutral-400">
+                        Wojewodztwo (tylko Polska)
+                      </label>
+                      <select
+                        id="inline_match_city_voivodeship"
+                        name="voivodeship"
+                        className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                      >
+                        <option value="">- brak -</option>
+                        {VOIVODESHIP_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+              />
               <p className="text-xs text-neutral-500">
                 Wybór stadionu automatycznie ustawia miasto meczu.
               </p>
