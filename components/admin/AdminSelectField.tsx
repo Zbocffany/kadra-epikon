@@ -183,8 +183,6 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   const defaultPlaceholder =
     placeholder || `Wpisz, aby filtrowac ${label.toLowerCase()}...`
   const shouldShowQuickAdd = isOpen && query.trim() !== '' && filteredOptions.length === 0
-  const selectedLabel = allOptions.find((o) => o.id === value)
-  const selectedDisplay = selectedLabel ? getDisplayLabel(selectedLabel) : '—'
 
   return (
     <div className="flex flex-col gap-2">
@@ -328,10 +326,6 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
             </div>
           )}
         </div>
-      </div>
-
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-neutral-500">Wybrane: {selectedDisplay}</p>
       </div>
 
       {dialogOpen && (
