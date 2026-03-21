@@ -14,9 +14,10 @@ export default function EditMatchFormWrapper({ children, onFormChange }: EditMat
   const [showDialog, setShowDialog] = useState(false)
   const [pendingHref, setPendingHref] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const bypassBeforeUnloadRef = useRef(false)
 
   // Handle beforeunload (browser back button, refresh, closing tab)
-  useUnsavedChanges(isDirty)
+  useUnsavedChanges(isDirty, () => bypassBeforeUnloadRef.current)
 
   // Listen for form changes
   useEffect(() => {
@@ -69,14 +70,16 @@ export default function EditMatchFormWrapper({ children, onFormChange }: EditMat
 
   const handleDialogConfirm = () => {
     if (pendingHref) {
-      // Navigate to the pending href
-      window.location.href = pendingHref
+      // User confirmed leaving via UI dialog, so skip browser beforeunload warning.
+      bypassBeforeUnloadRef.current = true
+      window.location.assign(pendingHref)
     }
     setShowDialog(false)
     setPendingHref(null)
   }
 
   const handleDialogCancel = () => {
+    bypassBeforeUnloadRef.current = false
     setShowDialog(false)
     setPendingHref(null)
   }
