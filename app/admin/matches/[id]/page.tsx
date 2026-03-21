@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import MatchCoachesForm from './MatchCoachesForm'
 import MatchSquadForm from './MatchSquadForm'
+import EditMatchFormWrapper from './EditMatchFormWrapper'
 import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
 import { deleteMatch, saveMatchFull } from '../actions'
 import { getMatchStatusLabel, MATCH_STATUS_OPTIONS } from '../matchStatusLabels'
@@ -507,8 +508,9 @@ export default async function AdminMatchDetailsPage({
 
   if (isEdit) {
     return (
-      <DetailsPageContainer maxWidthClass="max-w-6xl">
-        <form action={saveMatchFull}>
+      <EditMatchFormWrapper>
+        <DetailsPageContainer maxWidthClass="max-w-6xl">
+          <form action={saveMatchFull}>
           <input type="hidden" name="id" value={match.id} />
 
           <div className="mb-6">
@@ -595,6 +597,7 @@ export default async function AdminMatchDetailsPage({
           </div>
         </form>
       </DetailsPageContainer>
+    </EditMatchFormWrapper>
     )
   }
 
