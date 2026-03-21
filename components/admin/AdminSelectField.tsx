@@ -182,6 +182,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
 
   const defaultPlaceholder =
     placeholder || `Wpisz, aby filtrowac ${label.toLowerCase()}...`
+  const shouldShowQuickAdd = isOpen && query.trim() !== '' && filteredOptions.length === 0
   const selectedLabel = allOptions.find((o) => o.id === value)
   const selectedDisplay = selectedLabel ? getDisplayLabel(selectedLabel) : '—'
 
@@ -194,72 +195,90 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
       <input type="hidden" name={name} value={value} />
 
       <div ref={wrapperRef} onBlur={handleWrapperBlur} className="flex flex-col gap-2">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value)
-            setIsOpen(true)
-          }}
-          onFocus={() => setIsOpen(true)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.preventDefault()
-              setIsOpen(false)
-              const selected = allOptions.find((opt) => opt.id === value)
-              setQuery(selected ? getDisplayLabel(selected) : '')
-              return
-            }
-
-            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') {
-              return
-            }
-
-            if (!isOpen) {
+        <div className="relative">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value)
               setIsOpen(true)
-            }
+            }}
+            onFocus={() => setIsOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                setIsOpen(false)
+                const selected = allOptions.find((opt) => opt.id === value)
+                setQuery(selected ? getDisplayLabel(selected) : '')
+                return
+              }
 
-            if (filteredOptions.length === 0) {
-              return
-            }
+              if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter') {
+                return
+              }
 
-            if (e.key === 'Enter') {
-              if (highlightedIndex < 0 || highlightedIndex >= filteredOptions.length) {
+              if (!isOpen) {
+                setIsOpen(true)
+              }
+
+              if (filteredOptions.length === 0) {
+                return
+              }
+
+              if (e.key === 'Enter') {
+                if (highlightedIndex < 0 || highlightedIndex >= filteredOptions.length) {
+                  return
+                }
+
+                e.preventDefault()
+                const option = filteredOptions[highlightedIndex]
+                setValue(option.id)
+                onSelectedIdChange?.(option.id)
+                setQuery(getDisplayLabel(option))
+                setIsOpen(false)
                 return
               }
 
               e.preventDefault()
-              const option = filteredOptions[highlightedIndex]
-              setValue(option.id)
-              onSelectedIdChange?.(option.id)
-              setQuery(getDisplayLabel(option))
-              setIsOpen(false)
-              return
-            }
+              const isArrowDown = e.key === 'ArrowDown'
+              const maxIndex = filteredOptions.length - 1
 
-            e.preventDefault()
-            const isArrowDown = e.key === 'ArrowDown'
-            const maxIndex = filteredOptions.length - 1
+              let nextIndex = highlightedIndex
+              if (nextIndex < 0) {
+                nextIndex = isArrowDown ? 0 : maxIndex
+              } else {
+                nextIndex = isArrowDown
+                  ? Math.min(nextIndex + 1, maxIndex)
+                  : Math.max(nextIndex - 1, 0)
+              }
 
-            let nextIndex = highlightedIndex
-            if (nextIndex < 0) {
-              nextIndex = isArrowDown ? 0 : maxIndex
-            } else {
-              nextIndex = isArrowDown
-                ? Math.min(nextIndex + 1, maxIndex)
-                : Math.max(nextIndex - 1, 0)
-            }
+              setHighlightedIndex(nextIndex)
+              const option = filteredOptions[nextIndex]
+              if (option) {
+                setValue(option.id)
+                onSelectedIdChange?.(option.id)
+              }
+            }}
+            placeholder={defaultPlaceholder}
+            className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+          />
 
-            setHighlightedIndex(nextIndex)
-            const option = filteredOptions[nextIndex]
-            if (option) {
-              setValue(option.id)
-              onSelectedIdChange?.(option.id)
-            }
-          }}
-          placeholder={defaultPlaceholder}
-          className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
-        />
+          {shouldShowQuickAdd && (
+            <button
+              type="button"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => {
+                setIsOpen(false)
+                setDialogOpen(true)
+              }}
+              className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-neutral-700 text-sm font-bold text-white hover:bg-neutral-600"
+              aria-label={addButtonLabel}
+              title={addButtonLabel}
+            >
+              +
+            </button>
+          )}
+        </div>
 
         {isOpen && filteredOptions.length > 0 && (
           <select
@@ -291,17 +310,6 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
 
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs text-neutral-500">Wybrane: {selectedDisplay}</p>
-        <button
-          type="button"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => {
-            setIsOpen(false)
-            setDialogOpen(true)
-          }}
-          className="rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-        >
-          {addButtonLabel}
-        </button>
       </div>
 
       {dialogOpen && (
