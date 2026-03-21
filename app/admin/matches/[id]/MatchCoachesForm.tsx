@@ -109,18 +109,18 @@ function PersonCombobox({ name, value, people, placeholder, onChange, onPeopleUp
               value ? 'text-neutral-100' : 'text-neutral-500'
             }`}
           />
-          <div className="pointer-events-none absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-1 pr-3">
+          <div className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-1 pr-3">
             {isOpen && searchText && filteredPeople.length === 0 && (
               <button
                 type="button"
                 onClick={() => setIsModalOpen(true)}
-                className="pointer-events-auto inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-700 text-white hover:bg-neutral-600"
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-700 text-white hover:bg-neutral-600 active:bg-neutral-600"
                 title="Dodaj nowego pracownika"
               >
                 <span className="text-xs font-bold">+</span>
               </button>
             )}
-            <span className="text-neutral-500">▼</span>
+            <span className="pointer-events-none text-neutral-500">▼</span>
           </div>
         </div>
         {isOpen && (
