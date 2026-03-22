@@ -116,6 +116,30 @@ function EditorialStatusBadge({ status }: { status: AdminMatchDetails['editorial
   )
 }
 
+function ResultTypeBadge({ resultType }: { resultType: AdminMatchDetails['result_type'] }) {
+  const styles: Record<string, string> = {
+    REGULAR: 'bg-neutral-800 text-neutral-300 ring-neutral-700',
+    EXTRA_TIME: 'bg-blue-900/50 text-blue-300 ring-blue-700',
+    PENALTIES: 'bg-amber-900/50 text-amber-300 ring-amber-700',
+    WALKOVER: 'bg-orange-900/50 text-orange-300 ring-orange-700',
+  }
+
+  if (!resultType) {
+    return (
+      <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset bg-neutral-800 text-neutral-500 ring-neutral-700">
+        Brak danych
+      </span>
+    )
+  }
+
+  const cls = styles[resultType] ?? 'bg-neutral-800 text-neutral-300 ring-neutral-700'
+  return (
+    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${cls}`}>
+      {getResultTypeLabel(resultType)}
+    </span>
+  )
+}
+
 function MatchRefereesSection({
   referees,
 }: {
@@ -515,10 +539,6 @@ export default async function AdminMatchDetailsPage({
       <MatchDetailCard label="Miasto meczu">
         <MatchFieldValue value={cityName} />
       </MatchDetailCard>
-
-      <MatchDetailCard label="Sposób zakończenia meczu" spanTwo>
-        <MatchFieldValue value={getResultTypeLabel(match.result_type)} />
-      </MatchDetailCard>
     </div>
   )
 
@@ -644,6 +664,7 @@ export default async function AdminMatchDetailsPage({
         subtitle={competitionName}
         headerRight={(
           <div className="flex items-center gap-2">
+            <ResultTypeBadge resultType={match.result_type} />
             <MatchStatusBadge status={match.match_status} />
             <EditorialStatusBadge status={match.editorial_status} />
           </div>
