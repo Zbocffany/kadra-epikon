@@ -127,6 +127,21 @@ type PersonTeamPeriodRow = {
   valid_to: string | null
 }
 
+type PersonCountryAssignmentRow = {
+  person_id: string
+  country_id: string
+}
+
+type PersonBirthCountryRow = {
+  id: string
+  birth_country_id: string | null
+}
+
+type CountryCodeRow = {
+  id: string
+  fifa_code: string | null
+}
+
 type MatchListRow = {
   id: string
   match_date: string
@@ -409,15 +424,46 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
         .in('person_id', personIds)
     : { data: [] as PersonTeamPeriodRow[], error: null }
 
-  const { data: personCountries, error: personCountriesError } = refereePersonIds.length
+  const [
+    { data: personCountries, error: personCountriesError },
+    { data: refereeBirthCountries, error: refereeBirthCountriesError },
+  ] = refereePersonIds.length
+    ? await Promise.all([
+        supabase
+          .from('tbl_Person_Countries')
+          .select('person_id, country_id')
+          .in('person_id', refereePersonIds)
+          .order('country_id', { ascending: true }),
+        supabase
+          .from('tbl_People')
+          .select('id, birth_country_id')
+          .in('id', refereePersonIds),
+      ])
+    : [
+        { data: [] as PersonCountryAssignmentRow[], error: null },
+        { data: [] as PersonBirthCountryRow[], error: null },
+      ]
+
+  const personCountryRows = (personCountries ?? []) as PersonCountryAssignmentRow[]
+  const refereeBirthCountryRows = (refereeBirthCountries ?? []) as PersonBirthCountryRow[]
+  const refereeCountryIds = [...new Set([
+    ...personCountryRows.map((row) => row.country_id),
+    ...refereeBirthCountryRows
+      .map((row) => row.birth_country_id)
+      .filter((countryId): countryId is string => Boolean(countryId)),
+  ])]
+
+  const { data: countries, error: countriesError } = refereeCountryIds.length
     ? await supabase
-        .from('tbl_Person_Countries')
-        .select('person_id, country_id(fifa_code)')
-        .in('person_id', refereePersonIds)
-    : { data: [], error: null }
+        .from('tbl_Countries')
+        .select('id, fifa_code')
+        .in('id', refereeCountryIds)
+    : { data: [] as CountryCodeRow[], error: null }
 
   if (periodsError) throw new Error(`tbl_Person_Team_Periods: ${periodsError.message}`)
   if (personCountriesError) throw new Error(`tbl_Person_Countries: ${personCountriesError.message}`)
+  if (refereeBirthCountriesError) throw new Error(`tbl_People (birth_country_id): ${refereeBirthCountriesError.message}`)
+  if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
 
   const periodsByPerson = new Map<string, PersonTeamPeriodRow[]>()
   for (const period of (periods ?? []) as PersonTeamPeriodRow[]) {
@@ -426,11 +472,23 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
     periodsByPerson.set(period.person_id, existing)
   }
 
-  const personCountryMap = new Map<string, string | null>()
-  for (const row of (personCountries ?? []) as Array<{ person_id: string; country_id: { fifa_code: string } | null }>) {
-    if (row.country_id?.fifa_code) {
-      personCountryMap.set(row.person_id, row.country_id.fifa_code)
-    }
+  const countryCodeMap = new Map(
+    ((countries ?? []) as CountryCodeRow[])
+      .filter((row): row is { id: string; fifa_code: string } => Boolean(row.fifa_code))
+      .map((row) => [row.id, row.fifa_code])
+  )
+
+  const personCountryMap = new Map<string, string>()
+  for (const row of personCountryRows) {
+    if (personCountryMap.has(row.person_id)) continue
+    const code = countryCodeMap.get(row.country_id)
+    if (code) personCountryMap.set(row.person_id, code)
+  }
+  for (const row of refereeBirthCountryRows) {
+    if (personCountryMap.has(row.id)) continue
+    if (!row.birth_country_id) continue
+    const code = countryCodeMap.get(row.birth_country_id)
+    if (code) personCountryMap.set(row.id, code)
   }
 
   const personNameMap = new Map(peopleRows.map((person) => [person.id, buildPersonDisplayName(person)]))
