@@ -175,6 +175,13 @@ function MatchTeamParticipantsView({
                   <td className="bg-neutral-950 px-3 py-2 text-sm text-neutral-100">{player.person_name}</td>
                 </tr>
               ))}
+              {bench.length > 0 && (
+                <tr className="border-t-2 border-neutral-700">
+                  <td colSpan={3} className="bg-neutral-950 px-3 py-3 text-xs font-semibold uppercase tracking-widest text-neutral-500">
+                    Ławka rezerwowych
+                  </td>
+                </tr>
+              )}
               {bench.map((player, index) => (
                 <tr key={player.id} className="border-t border-neutral-800">
                   <td className="bg-neutral-900/40 px-3 py-2 text-sm text-neutral-600">{starters.length + index + 1}</td>
