@@ -10,6 +10,7 @@ import AdminSelectField from '@/components/admin/AdminSelectField'
 import AdminListLayout from '@/components/admin/AdminListLayout'
 import AdminTable from '@/components/admin/AdminTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
+import AdminCancelLink from '@/components/admin/AdminCancelLink'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
 
@@ -233,12 +234,12 @@ export default async function AdminCitiesPage({ searchParams }: { searchParams: 
                     >
                       Dodaj miasto
                     </button>
-                    <Link
+                    <AdminCancelLink
                       href="/admin/cities"
                       className="rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-300 hover:bg-neutral-800"
                     >
-                      Zamknij
-                    </Link>
+                      Anuluj
+                    </AdminCancelLink>
                   </div>
                 </form>
               </div>

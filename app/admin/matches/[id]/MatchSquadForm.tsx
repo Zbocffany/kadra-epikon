@@ -1,14 +1,19 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import type {
   AdminMatchParticipant,
   AdminMatchParticipantPersonOption,
+  AdminTeamOption,
   PlayerPosition,
 } from '@/lib/db/matches'
 import type { AdminPersonBirthCityOption } from '@/lib/db/people'
 import type { AdminCountryOption } from '@/lib/db/cities'
-import AddPersonModal from './AddPersonModal'
+import AdminSelectField from '@/components/admin/AdminSelectField'
+import { createClubInline } from '@/app/admin/clubs/actions'
+import { createCityInline } from '@/app/admin/cities/actions'
+import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
+import PersonPickerField, { MATCH_PERSON_CREATED_EVENT } from './PersonPickerField'
 
 const STARTERS_COUNT = 11
 const BENCH_BASE_COUNT = 5
@@ -21,9 +26,17 @@ const PLAYER_POSITION_OPTIONS: Array<{ value: PlayerPosition; label: string }> =
   { value: 'ATTACKER', label: 'Napastnik' },
 ]
 
+const POSITION_SORT_ORDER: Record<string, number> = {
+  GOALKEEPER: 0,
+  DEFENDER: 1,
+  MIDFIELDER: 2,
+  ATTACKER: 3,
+}
+
 type SquadRow = {
   personId: string
   position: PlayerPosition | ''
+  clubTeamId: string
 }
 
 function sortPlayersForForm(players: AdminMatchParticipant[]): AdminMatchParticipant[] {
@@ -41,226 +54,236 @@ function buildInitialRows(players: AdminMatchParticipant[]): SquadRow[] {
     .map((participant) => ({
       personId: participant.person_id,
       position: participant.player_position ?? '',
+      clubTeamId: participant.club_team_id ?? '',
     }))
 
   while (rows.length < BASE_ROWS) {
-    rows.push({ personId: '', position: '' })
+    rows.push({ personId: '', position: '', clubTeamId: '' })
   }
 
   return rows
-}
-
-type PersonComboboxProps = {
-  name: string
-  value: string
-  people: AdminMatchParticipantPersonOption[]
-  placeholder: string
-  onChange: (personId: string) => void
-  onPeopleUpdate: (newPerson: AdminMatchParticipantPersonOption) => void
-  usedPersonIds?: string[]
-  cities: AdminPersonBirthCityOption[]
-  countries: AdminCountryOption[]
-}
-
-function PersonCombobox({
-  name,
-  value,
-  people,
-  placeholder,
-  onChange,
-  onPeopleUpdate,
-  usedPersonIds = [],
-  cities,
-  countries,
-}: PersonComboboxProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [searchText, setSearchText] = useState('')
-  const [isModalOpen, setIsModalOpen] = useState(false)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  // Get display label for selected value
-  const selectedPerson = people.find((p) => p.id === value)
-  const displayLabel = selectedPerson?.label ?? ''
-
-  // Filter and sort results with priority on last name prefix match
-  const filteredPeople = searchText.trim()
-    ? people.filter((person) => {
-        const query = searchText.toLowerCase()
-        return (
-          person.firstName.toLowerCase().includes(query) ||
-          person.lastName.toLowerCase().includes(query) ||
-          person.nickname.toLowerCase().includes(query)
-        )
-      })
-      .sort((a, b) => {
-        const query = searchText.toLowerCase()
-        const aLastNameMatch = a.lastName.toLowerCase().startsWith(query)
-        const bLastNameMatch = b.lastName.toLowerCase().startsWith(query)
-        if (aLastNameMatch !== bLastNameMatch) return aLastNameMatch ? -1 : 1
-        return a.label.localeCompare(b.label, 'pl')
-      })
-    : []
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
-
-  function handleSelect(personId: string) {
-    // Check for duplicates
-    if (usedPersonIds.includes(personId) && personId !== value) {
-      alert('Ten piłkarz jest już przypisany do innego miejsca w składzie.')
-      return
-    }
-    onChange(personId)
-    setSearchText('')
-    setIsOpen(false)
-  }
-
-  function handleAddNewSuccess(newPerson: AdminMatchParticipantPersonOption) {
-    onPeopleUpdate(newPerson)
-    handleSelect(newPerson.id)
-    setIsModalOpen(false)
-  }
-
-  return (
-    <>
-      <div ref={containerRef} className="relative">
-        <input
-          ref={inputRef}
-          type="hidden"
-          name={name}
-          value={value}
-        />
-        <div className="relative w-full">
-          <input
-            type="text"
-            value={isOpen ? searchText : displayLabel}
-            onChange={(e) => {
-              setSearchText(e.target.value)
-              setIsOpen(true)
-            }}
-            onFocus={() => {
-              setIsOpen(true)
-              setSearchText('')
-            }}
-            onBlur={() => {
-              setTimeout(() => {
-                if (!selectedPerson) {
-                  setSearchText('')
-                }
-                setIsOpen(false)
-              }, 100)
-            }}
-            placeholder={placeholder}
-            className={`w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm ${
-              value ? 'text-neutral-100' : 'text-neutral-500'
-            }`}
-          />
-          <div className="absolute right-0 top-1/2 flex -translate-y-1/2 items-center gap-1 pr-2">
-            {isOpen && searchText && filteredPeople.length === 0 && (
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  setIsModalOpen(true)
-                }}
-                className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-neutral-700 text-white hover:bg-neutral-600 active:bg-neutral-600"
-                title="Dodaj nowego piłkarza"
-              >
-                <span className="text-xs font-bold">+</span>
-              </button>
-            )}
-            <span className="pointer-events-none text-neutral-500">▼</span>
-          </div>
-        </div>
-        {isOpen && (
-          <div className="absolute top-full z-10 mt-1 max-h-80 w-full overflow-y-auto rounded-md border border-neutral-700 bg-neutral-900 shadow-lg">
-            {filteredPeople.length > 0 ? (
-              filteredPeople.map((person) => (
-                <button
-                  key={person.id}
-                  type="button"
-                  onClick={() => handleSelect(person.id)}
-                  className="w-full border-b border-neutral-800 px-3 py-2 text-left text-sm text-neutral-100 hover:bg-neutral-800 last:border-b-0"
-                >
-                  {person.label}
-                </button>
-              ))
-            ) : searchText ? (
-              <div className="px-3 py-2 text-sm text-neutral-400">
-                Brak wyników
-              </div>
-            ) : (
-              <div className="px-3 py-2 text-sm text-neutral-500">
-                Wpisz, aby wyszukać...
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <AddPersonModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={handleAddNewSuccess}
-        cities={cities}
-        countries={countries}
-      />
-    </>
-  )
 }
 
 export default function MatchSquadForm({
   namePrefix,
   people: initialPeople,
   players,
+  clubTeams: initialClubTeams,
+  latestPlayerClubTeamByPersonId,
   cities,
   countries,
 }: {
   namePrefix: string
   people: AdminMatchParticipantPersonOption[]
   players: AdminMatchParticipant[]
+  clubTeams: AdminTeamOption[]
+  latestPlayerClubTeamByPersonId: Record<string, string | null>
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
 }) {
   const [rows, setRows] = useState<SquadRow[]>(() => buildInitialRows(players))
   const [people, setPeople] = useState<AdminMatchParticipantPersonOption[]>(initialPeople)
+  const [clubTeams, setClubTeams] = useState<AdminTeamOption[]>(initialClubTeams)
+  const [cityOptions, setCityOptions] = useState<AdminPersonBirthCityOption[]>(cities)
+  const [isTouched, setIsTouched] = useState(false)
+
+  const prioritizedClubTeams = useMemo(() => {
+    const normalizedNoClubLabel = 'brak klubu'
+    const noClub = clubTeams.find(
+      (team) => team.label.trim().toLowerCase() === normalizedNoClubLabel
+    )
+    const rest = clubTeams
+      .filter((team) => team.id !== noClub?.id)
+      .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
+
+    return noClub ? [noClub, ...rest] : rest
+  }, [clubTeams])
+
+  useEffect(() => {
+    setClubTeams(initialClubTeams)
+  }, [initialClubTeams])
+
+  useEffect(() => {
+    setCityOptions(cities)
+  }, [cities])
 
   function updateRow(index: number, patch: Partial<SquadRow>) {
+    setIsTouched(true)
     setRows((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)))
   }
 
   function addBenchRow() {
-    setRows((prev) => [...prev, { personId: '', position: '' }])
+    setIsTouched(true)
+    setRows((prev) => [...prev, { personId: '', position: '', clubTeamId: '' }])
   }
 
   function removeBenchRow() {
+    setIsTouched(true)
     setRows((prev) => {
       if (prev.length <= STARTERS_COUNT) return prev
       return prev.slice(0, -1)
     })
   }
 
+  function sortByPosition() {
+    setIsTouched(true)
+    setRows((prev) => {
+      const starters = prev.slice(0, STARTERS_COUNT)
+      const bench = prev.slice(STARTERS_COUNT)
+
+      const sortFn = (a: SquadRow, b: SquadRow) => {
+        const aOrder = a.position ? (POSITION_SORT_ORDER[a.position] ?? 99) : 99
+        const bOrder = b.position ? (POSITION_SORT_ORDER[b.position] ?? 99) : 99
+        return aOrder - bOrder
+      }
+
+      return [...starters.sort(sortFn), ...bench.sort(sortFn)]
+    })
+  }
+
   function handlePeopleUpdate(newPerson: AdminMatchParticipantPersonOption) {
-    setPeople((prev) => [...prev, newPerson].sort((a, b) => a.label.localeCompare(b.label, 'pl')))
+    setPeople((prev) => {
+      if (prev.some((person) => person.id === newPerson.id)) {
+        return prev
+      }
+
+      return [...prev, newPerson].sort((a, b) => a.label.localeCompare(b.label, 'pl'))
+    })
+  }
+
+  useEffect(() => {
+    function handlePersonCreated(event: Event) {
+      const customEvent = event as CustomEvent<AdminMatchParticipantPersonOption>
+      const createdPerson = customEvent.detail
+
+      if (!createdPerson) return
+      handlePeopleUpdate(createdPerson)
+    }
+
+    window.addEventListener(MATCH_PERSON_CREATED_EVENT, handlePersonCreated)
+    return () => window.removeEventListener(MATCH_PERSON_CREATED_EVENT, handlePersonCreated)
+  }, [])
+
+  function handleClubOptionCreated(newClubTeam: AdminTeamOption) {
+    setClubTeams((prev) => {
+      if (prev.some((team) => team.id === newClubTeam.id)) return prev
+      return [...prev, newClubTeam].sort((a, b) => a.label.localeCompare(b.label, 'pl'))
+    })
+  }
+
+  function handleCityOptionCreated(option: { id: string; label?: string }) {
+    setCityOptions((prev) => {
+      if (prev.some((city) => city.id === option.id)) return prev
+      return [
+        ...prev,
+        {
+          id: option.id,
+          city_name: option.label ?? '—',
+          current_country_id: null,
+          current_country_name: null,
+        },
+      ].sort((a, b) => a.city_name.localeCompare(b.city_name, 'pl'))
+    })
+  }
+
+  function renderCreateClubInlineForm(scope: string) {
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`${scope}_club_name`} className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+            Nazwa klubu
+          </label>
+          <input
+            id={`${scope}_club_name`}
+            name="name"
+            type="text"
+            required
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+          />
+        </div>
+
+        <AdminSelectField
+          name="club_city_id"
+          label="Miasto klubu (opcjonalnie)"
+          required={false}
+          emptyOptionLabel="— brak —"
+          options={cityOptions.map((city) => ({ id: city.id, label: city.city_name }))}
+          displayKey="label"
+          placeholder="Wpisz, aby filtrowac miasta..."
+          addButtonLabel="+ Dodaj miasto"
+          addDialogTitle="Nowe miasto"
+          emptyResultsMessage="Brak wyników - możesz dodać nowe miasto poniżej."
+          createAction={createCityInline}
+          onOptionCreated={handleCityOptionCreated}
+          inlineForm={(
+            <div className="space-y-3">
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor={`${scope}_city_name`} className="text-xs text-neutral-400">
+                  Nazwa miasta
+                </label>
+                <input
+                  id={`${scope}_city_name`}
+                  name="city_name"
+                  type="text"
+                  required
+                  className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor={`${scope}_city_country`} className="text-xs text-neutral-400">
+                  Kraj
+                </label>
+                <select
+                  id={`${scope}_city_country`}
+                  name="country_id"
+                  required
+                  className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                >
+                  <option value="">- wybierz -</option>
+                  {countries.map((country) => (
+                    <option key={country.id} value={country.id}>
+                      {country.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor={`${scope}_city_voivodeship`} className="text-xs text-neutral-400">
+                  Wojewodztwo (tylko Polska)
+                </label>
+                <select
+                  id={`${scope}_city_voivodeship`}
+                  name="voivodeship"
+                  className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                >
+                  <option value="">- brak -</option>
+                  {VOIVODESHIP_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+        />
+      </div>
+    )
   }
 
   return (
     <div className="space-y-4">
+      <input type="hidden" name={`${namePrefix}squad_touched`} value={isTouched ? '1' : '0'} />
+
       {/* Skład podstawowy */}
-      <div className="overflow-hidden rounded-lg border border-neutral-800">
+      <div className="overflow-visible rounded-lg border border-neutral-800">
         <table className="w-full table-fixed">
           <colgroup>
             <col />
-            <col className="w-[180px]" />
+            <col className="w-[150px]" />
+            <col className="w-[190px]" />
           </colgroup>
           <thead>
             <tr>
@@ -270,20 +293,31 @@ export default function MatchSquadForm({
               <th className="border-b border-l border-neutral-800 bg-neutral-900 px-3 py-2 text-left text-xs font-semibold uppercase tracking-widest text-neutral-500">
                 Pozycja
               </th>
+              <th className="border-b border-l border-neutral-800 bg-neutral-900 px-3 py-2 text-left text-xs font-semibold uppercase tracking-widest text-neutral-500">
+                Klub
+              </th>
             </tr>
           </thead>
           <tbody>
             {rows.slice(0, STARTERS_COUNT).map((row, index) => (
               <tr key={`starter-${index}`} className="border-t border-neutral-800 first:border-t-0">
                 <td className="bg-neutral-950 px-2 py-2">
-                  <PersonCombobox
+                  <PersonPickerField
                     name={`${namePrefix}player_person_id`}
                     value={row.personId}
                     people={people}
                     placeholder={`Podstawowy ${index + 1}`}
-                    onChange={(personId) => updateRow(index, { personId })}
+                    onChange={(personId) => {
+                      const suggestedClubTeamId = latestPlayerClubTeamByPersonId[personId] ?? null
+                      updateRow(index, {
+                        personId,
+                        clubTeamId: row.clubTeamId || suggestedClubTeamId || '',
+                      })
+                    }}
                     onPeopleUpdate={handlePeopleUpdate}
                     usedPersonIds={rows.map((r, i) => i === index ? '' : r.personId).filter(Boolean)}
+                    duplicateMessage="Ten piłkarz jest już przypisany do innego miejsca w składzie."
+                    addButtonTitle="Dodaj nowego piłkarza"
                     cities={cities}
                     countries={countries}
                   />
@@ -295,11 +329,31 @@ export default function MatchSquadForm({
                     onChange={(event) => updateRow(index, { position: event.target.value as PlayerPosition | '' })}
                     className={`w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm ${row.position ? 'text-neutral-100' : 'text-neutral-500'}`}
                   >
-                    <option value="" className="text-neutral-500">— wybierz pozycję —</option>
+                    <option value="" className="text-neutral-500">Brak danych</option>
                     {PLAYER_POSITION_OPTIONS.map((pos) => (
                       <option key={pos.value} value={pos.value}>{pos.label}</option>
                     ))}
                   </select>
+                </td>
+                <td className="border-l border-neutral-800 bg-neutral-950 px-2 py-2">
+                  <AdminSelectField
+                    name={`${namePrefix}player_club_team_id`}
+                    label="Klub"
+                    hideLabel
+                    required={false}
+                    emptyOptionLabel="Brak danych"
+                    selectedId={row.clubTeamId || null}
+                    options={prioritizedClubTeams}
+                    displayKey="label"
+                    placeholder="Brak danych"
+                    addButtonLabel="Dodaj klub"
+                    addDialogTitle="Dodaj nowy klub"
+                    emptyResultsMessage="Brak klubów"
+                    createAction={createClubInline}
+                    onSelectedIdChange={(clubTeamId) => updateRow(index, { clubTeamId })}
+                    onOptionCreated={handleClubOptionCreated}
+                    inlineForm={renderCreateClubInlineForm(`starter_${index}`)}
+                  />
                 </td>
               </tr>
             ))}
@@ -309,24 +363,33 @@ export default function MatchSquadForm({
 
       {/* Rezerwa */}
       {rows.length > STARTERS_COUNT && (
-        <div className="overflow-hidden rounded-lg border border-neutral-800">
+        <div className="overflow-visible rounded-lg border border-neutral-800">
           <table className="w-full table-fixed">
             <colgroup>
               <col />
-              <col className="w-[180px]" />
+              <col className="w-[150px]" />
+              <col className="w-[190px]" />
             </colgroup>
             <tbody>
               {rows.slice(STARTERS_COUNT).map((row, index) => (
                 <tr key={`bench-${index}`} className="border-t border-neutral-800 first:border-t-0">
                   <td className="bg-neutral-950 px-2 py-2">
-                    <PersonCombobox
+                    <PersonPickerField
                       name={`${namePrefix}player_person_id`}
                       value={row.personId}
                       people={people}
                       placeholder={`Rezerwowy ${index + 1}`}
-                      onChange={(personId) => updateRow(STARTERS_COUNT + index, { personId })}
+                      onChange={(personId) => {
+                        const suggestedClubTeamId = latestPlayerClubTeamByPersonId[personId] ?? null
+                        updateRow(STARTERS_COUNT + index, {
+                          personId,
+                          clubTeamId: row.clubTeamId || suggestedClubTeamId || '',
+                        })
+                      }}
                       onPeopleUpdate={handlePeopleUpdate}
                       usedPersonIds={rows.filter((_, i) => i !== STARTERS_COUNT + index).map(r => r.personId).filter(Boolean)}
+                      duplicateMessage="Ten piłkarz jest już przypisany do innego miejsca w składzie."
+                      addButtonTitle="Dodaj nowego piłkarza"
                       cities={cities}
                       countries={countries}
                     />
@@ -338,11 +401,31 @@ export default function MatchSquadForm({
                       onChange={(event) => updateRow(STARTERS_COUNT + index, { position: event.target.value as PlayerPosition | '' })}
                       className={`w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm ${row.position ? 'text-neutral-100' : 'text-neutral-500'}`}
                     >
-                      <option value="" className="text-neutral-500">— wybierz pozycję —</option>
+                      <option value="" className="text-neutral-500">Brak danych</option>
                       {PLAYER_POSITION_OPTIONS.map((pos) => (
                         <option key={pos.value} value={pos.value}>{pos.label}</option>
                       ))}
                     </select>
+                  </td>
+                  <td className="border-l border-neutral-800 bg-neutral-950 px-2 py-2">
+                    <AdminSelectField
+                      name={`${namePrefix}player_club_team_id`}
+                      label="Klub"
+                      hideLabel
+                      required={false}
+                      emptyOptionLabel="Brak danych"
+                      selectedId={row.clubTeamId || null}
+                      options={prioritizedClubTeams}
+                      displayKey="label"
+                      placeholder="Brak danych"
+                      addButtonLabel="Dodaj klub"
+                      addDialogTitle="Dodaj nowy klub"
+                      emptyResultsMessage="Brak klubów"
+                      createAction={createClubInline}
+                      onSelectedIdChange={(clubTeamId) => updateRow(STARTERS_COUNT + index, { clubTeamId })}
+                      onOptionCreated={handleClubOptionCreated}
+                      inlineForm={renderCreateClubInlineForm(`bench_${index}`)}
+                    />
                   </td>
                 </tr>
               ))}
@@ -351,7 +434,7 @@ export default function MatchSquadForm({
         </div>
       )}
 
-      <div className="flex gap-2">
+      <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={addBenchRow}
@@ -370,6 +453,14 @@ export default function MatchSquadForm({
           title="Usuń ostatniego rezerwowego"
         >
           −
+        </button>
+        <button
+          type="button"
+          onClick={sortByPosition}
+          className="inline-flex h-8 items-center gap-1.5 rounded-full border border-neutral-700 bg-neutral-950 px-3 text-xs font-semibold text-neutral-300 hover:bg-neutral-800"
+          title="Sortuj zawodników według pozycji (Bramkarz → Obrońca → Pomocnik → Napastnik)"
+        >
+          Sortuj wg pozycji
         </button>
       </div>
     </div>

@@ -42,7 +42,6 @@ export async function createClubInline(
 
   const supabase = createServiceRoleClient()
   const clubId = crypto.randomUUID()
-  const teamId = crypto.randomUUID()
 
   const { error: clubError } = await supabase.from('tbl_Clubs').insert({
     id: clubId,
@@ -57,18 +56,21 @@ export async function createClubInline(
     return inlineError(prevState, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
-  const { error: teamError } = await supabase.from('tbl_Teams').insert({
-    id: teamId,
-    country_id: null,
-    club_id: clubId,
-  })
+  // The DB trigger (trg_tbl_clubs_create_team) auto-creates the team row on insert.
+  // We query the actual team ID instead of generating our own, which would be wrong.
+  const { data: teamData, error: teamQueryError } = await supabase
+    .from('tbl_Teams')
+    .select('id')
+    .eq('club_id', clubId)
+    .single()
 
-  if (teamError) {
+  if (teamQueryError || !teamData?.id) {
+    console.error('Team lookup error after club insert:', teamQueryError)
     await supabase.from('tbl_Clubs').delete().eq('id', clubId)
-    return inlineError(prevState, 'Nie udało się utworzyć drużyny dla klubu.')
+    return inlineError(prevState, 'Nie udało się pobrać drużyny dla nowego klubu.')
   }
 
-  return inlineSuccess(prevState, teamId, name)
+  return inlineSuccess(prevState, teamData.id, name)
 }
 
 export async function createClub(formData: FormData): Promise<void> {
@@ -100,6 +102,7 @@ export async function createClub(formData: FormData): Promise<void> {
     await ensureClubTeamExists(id)
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Nie udało się utworzyć drużyny dla klubu.'
+    console.error('ensureClubTeamExists error:', err)
     redirectWithError('/admin/clubs', message)
   }
 

@@ -63,6 +63,16 @@ export async function createStadiumInline(
   const supabase = createServiceRoleClient()
   const id = crypto.randomUUID()
 
+  const { data: city, error: cityError } = await supabase
+    .from('tbl_Cities')
+    .select('city_name')
+    .eq('id', stadiumCityId)
+    .maybeSingle()
+
+  if (cityError || !city) {
+    return inlineError(prevState, 'Wybrano nieprawidłowe miasto stadionu.')
+  }
+
   const { error } = await supabase.from('tbl_Stadiums').insert({
     id,
     name,
@@ -77,7 +87,9 @@ export async function createStadiumInline(
     return inlineError(prevState, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
-  return inlineSuccess(prevState, id, name)
+  const label = city.city_name ? `${name} (${city.city_name})` : name
+
+  return inlineSuccess(prevState, id, label)
 }
 
 export async function updateStadium(formData: FormData): Promise<void> {

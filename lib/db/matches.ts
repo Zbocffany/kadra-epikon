@@ -7,6 +7,14 @@ export type MatchStatus =
   | 'ABANDONED'
   | 'CANCELLED'
 
+export type ResultType =
+  | 'REGULAR_TIME'
+  | 'EXTRA_TIME'
+  | 'PENALTIES'
+  | 'EXTRA_TIME_AND_PENALTIES'
+  | 'GOLDEN_GOAL'
+  | 'WALKOVER'
+
 export type EditorialStatus =
   | 'DRAFT'
   | 'PARTIAL'
@@ -26,6 +34,7 @@ export type AdminMatch = {
   match_date: string
   match_time: string | null
   match_status: MatchStatus
+  result_type: ResultType | null
   editorial_status: EditorialStatus
   competition_name: string
   home_team_name: string
@@ -92,6 +101,17 @@ type MatchParticipantRow = {
   club_team_id: string | null
 }
 
+type PlayerClubSuggestionRow = {
+  person_id: string
+  club_team_id: string | null
+  match_id: string
+}
+
+type MatchDateRow = {
+  id: string
+  match_date: string
+}
+
 type MatchParticipantPersonRow = {
   id: string
   first_name: string | null
@@ -111,6 +131,7 @@ type MatchListRow = {
   match_date: string
   match_time: string | null
   match_status: MatchStatus
+  result_type: ResultType | null
   editorial_status: EditorialStatus
   competition_id: string
   home_team_id: string
@@ -222,7 +243,7 @@ export async function getAdminMatches(): Promise<AdminMatch[]> {
   const { data: matches, error: matchError } = await supabase
     .from('tbl_Matches')
     .select(
-      'id, match_date, match_time, match_status, editorial_status, competition_id, home_team_id, away_team_id'
+      'id, match_date, match_time, match_status, result_type, editorial_status, competition_id, home_team_id, away_team_id'
     )
     .order('match_date', { ascending: false })
     .order('match_time', { ascending: false })
@@ -244,7 +265,7 @@ export async function getAdminMatchesPage(
   const { data: matches, error: matchError, count } = await supabase
     .from('tbl_Matches')
     .select(
-      'id, match_date, match_time, match_status, editorial_status, competition_id, home_team_id, away_team_id',
+      'id, match_date, match_time, match_status, result_type, editorial_status, competition_id, home_team_id, away_team_id',
       { count: 'exact' }
     )
     .order('match_date', { ascending: false })
@@ -293,6 +314,7 @@ async function mapAdminMatches(
     match_date: m.match_date,
     match_time: m.match_time ?? null,
     match_status: m.match_status,
+    result_type: m.result_type,
     editorial_status: m.editorial_status,
     competition_name: compMap.get(m.competition_id) ?? '—',
     home_team_name: teamNameMap.get(m.home_team_id) ?? '—',
@@ -306,7 +328,7 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
   const { data: match, error: matchError } = await supabase
     .from('tbl_Matches')
     .select(
-      'id, match_date, match_time, match_status, editorial_status, competition_id, home_team_id, away_team_id, match_city_id, match_stadium_id'
+      'id, match_date, match_time, match_status, result_type, editorial_status, competition_id, home_team_id, away_team_id, match_city_id, match_stadium_id'
     )
     .eq('id', id)
     .maybeSingle()
@@ -330,6 +352,7 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
     match_date: match.match_date,
     match_time: match.match_time ?? null,
     match_status: match.match_status,
+    result_type: match.result_type,
     editorial_status: match.editorial_status,
     competition_name: competition?.name ?? '—',
     home_team_name: teamNameMap.get(match.home_team_id) ?? '—',
@@ -511,4 +534,97 @@ export async function getAdminMatchCreateOptions(): Promise<{
     cities: cityOptions,
     stadiums: stadiumOptions,
   }
+}
+
+export async function getAdminClubTeamOptions(): Promise<AdminTeamOption[]> {
+  const supabase = createServiceRoleClient()
+
+  const { data: clubTeams, error } = await supabase
+    .from('tbl_Teams')
+    .select('id, club_id')
+    .not('club_id', 'is', null)
+
+  if (error) throw new Error(`tbl_Teams: ${error.message}`)
+
+  const teamIds = (clubTeams ?? []).map((team) => team.id)
+  const teamDisplayMap = await getTeamDisplayMap(teamIds)
+
+  return teamIds
+    .map((id) => ({ id, label: teamDisplayMap.get(id) ?? '—' }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
+}
+
+export async function getLatestPlayerClubTeamByPersonIds(
+  personIds: string[],
+  options?: { excludeMatchId?: string }
+): Promise<Record<string, string | null>> {
+  const supabase = createServiceRoleClient()
+
+  if (!personIds.length) {
+    return {}
+  }
+
+  let participantsQuery = supabase
+    .from('tbl_Match_Participants')
+    .select('person_id, club_team_id, match_id')
+    .eq('role', 'PLAYER')
+    .in('person_id', personIds)
+
+  if (options?.excludeMatchId) {
+    participantsQuery = participantsQuery.neq('match_id', options.excludeMatchId)
+  }
+
+  const { data: participantRows, error: participantsError } = await participantsQuery
+
+  if (participantsError) {
+    throw new Error(`tbl_Match_Participants: ${participantsError.message}`)
+  }
+
+  const rows = (participantRows ?? []) as PlayerClubSuggestionRow[]
+  if (!rows.length) {
+    return {}
+  }
+
+  const matchIds = [...new Set(rows.map((row) => row.match_id))]
+  const { data: matches, error: matchesError } = await supabase
+    .from('tbl_Matches')
+    .select('id, match_date')
+    .in('id', matchIds)
+
+  if (matchesError) {
+    throw new Error(`tbl_Matches: ${matchesError.message}`)
+  }
+
+  const matchDateMap = new Map((matches ?? []).map((match: MatchDateRow) => [match.id, match.match_date]))
+
+  const bestByPerson = new Map<string, { clubTeamId: string | null; matchDate: string; matchId: string }>()
+  for (const row of rows) {
+    const matchDate = matchDateMap.get(row.match_id)
+    if (!matchDate) continue
+
+    const current = bestByPerson.get(row.person_id)
+    if (!current) {
+      bestByPerson.set(row.person_id, {
+        clubTeamId: row.club_team_id,
+        matchDate,
+        matchId: row.match_id,
+      })
+      continue
+    }
+
+    const isNewer = matchDate > current.matchDate
+      || (matchDate === current.matchDate && row.match_id > current.matchId)
+
+    if (isNewer) {
+      bestByPerson.set(row.person_id, {
+        clubTeamId: row.club_team_id,
+        matchDate,
+        matchId: row.match_id,
+      })
+    }
+  }
+
+  return Object.fromEntries(
+    [...bestByPerson.entries()].map(([personId, value]) => [personId, value.clubTeamId])
+  )
 }

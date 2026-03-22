@@ -2,22 +2,21 @@
  * Pseudo-club constants for handling missing or unknown player club data
  *
  * Schema Design:
- * - NULL = Player has NO CLUB (e.g., retired, between clubs, unattached)
- * - UNKNOWN_CLUB_TEAM_ID = Player club data is UNKNOWN/MISSING (can't determine)
+ * - NULL = Player club data is UNKNOWN/MISSING (can't determine)
+ * - Team linked to UNKNOWN_CLUB_ID = Player has NO CLUB (e.g., retired, between clubs, unattached)
  *
  * Both NULL and UNKNOWN team IDs are valid in tbl_Match_Participants.club_team_id
  */
 
-// UUIDs of the pseudo "Unknown Club" record (must match migration 025 & seed 007)
+// UUID of pseudo club record (must match seed 007)
 export const UNKNOWN_CLUB_ID = '00000000-0000-0000-0000-000000000001'
-export const UNKNOWN_CLUB_TEAM_ID = '00000000-0000-0000-0000-000000000002'
-export const UNKNOWN_CLUB_NAME = 'Brak danych'
+export const UNKNOWN_CLUB_NAME = 'Brak klubu'
 
 /**
- * Check if a team_id belongs to the pseudo "Unknown Club"
+ * Check if a club name is the pseudo "Brak klubu" value
  */
-export function isUnknownClubTeam(teamId: string | null | undefined): boolean {
-  return teamId === UNKNOWN_CLUB_TEAM_ID
+export function isUnknownClubName(clubName: string | null | undefined): boolean {
+  return (clubName ?? '').trim().toLowerCase() === UNKNOWN_CLUB_NAME.toLowerCase()
 }
 
 /**
@@ -27,7 +26,7 @@ export function formatPlayerClubStatus(
   clubTeamId: string | null | undefined,
   clubName?: string | null
 ): string {
-  if (!clubTeamId) return 'Brak klubu'
-  if (isUnknownClubTeam(clubTeamId)) return UNKNOWN_CLUB_NAME
+  if (!clubTeamId) return 'Brak danych'
+  if (isUnknownClubName(clubName)) return UNKNOWN_CLUB_NAME
   return clubName || '—'
 }

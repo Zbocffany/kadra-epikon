@@ -44,6 +44,53 @@ function ensureAnyName(firstName: string | null, lastName: string | null, nickna
   return Boolean(firstName || lastName || nickname)
 }
 
+async function syncPersonRepresentedCountries(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  personId: string,
+  representedCountryIds: string[]
+): Promise<void> {
+  const uniqueCountryIds = [...new Set(representedCountryIds.filter(Boolean))]
+
+  if (uniqueCountryIds.length > 0) {
+    const { data: existingCountries, error: existingCountriesError } = await supabase
+      .from('tbl_Countries')
+      .select('id')
+      .in('id', uniqueCountryIds)
+
+    if (existingCountriesError) {
+      throw new Error('Błąd odczytu krajów reprezentacji. Spróbuj ponownie.')
+    }
+
+    if ((existingCountries ?? []).length !== uniqueCountryIds.length) {
+      throw new Error('Wybrano nieprawidłowy kraj reprezentacji.')
+    }
+  }
+
+  const { error: deleteLinksError } = await supabase
+    .from('tbl_Person_Countries')
+    .delete()
+    .eq('person_id', personId)
+
+  if (deleteLinksError) {
+    throw new Error('Nie udało się zapisać krajów reprezentacji.')
+  }
+
+  if (uniqueCountryIds.length === 0) {
+    return
+  }
+
+  const { error: insertLinksError } = await supabase
+    .from('tbl_Person_Countries')
+    .insert(uniqueCountryIds.map((countryId) => ({
+      person_id: personId,
+      country_id: countryId,
+    })))
+
+  if (insertLinksError) {
+    throw new Error('Nie udało się zapisać krajów reprezentacji.')
+  }
+}
+
 export async function createPerson(formData: FormData): Promise<void> {
   await requireAdminAccess()
   const firstName = getTrimmedNullable(formData, 'first_name')
@@ -52,6 +99,10 @@ export async function createPerson(formData: FormData): Promise<void> {
   const birthDate = getTrimmedNullable(formData, 'birth_date')
   const birthCityId = getTrimmedNullable(formData, 'birth_city_id')
   const birthCountryRaw = getTrimmedNullable(formData, 'birth_country_id')
+  const representedCountryIds = formData
+    .getAll('represented_country_ids')
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter(Boolean)
   const isActive = getTrimmedString(formData, 'is_active') === 'on'
 
   if (!ensureAnyName(firstName, lastName, nickname)) {
@@ -68,8 +119,10 @@ export async function createPerson(formData: FormData): Promise<void> {
     redirectWithError('/admin/people', message)
   }
 
+  const personId = crypto.randomUUID()
+
   const { error } = await supabase.from('tbl_People').insert({
-    id: crypto.randomUUID(),
+    id: personId,
     first_name: firstName,
     last_name: lastName,
     nickname,
@@ -81,6 +134,13 @@ export async function createPerson(formData: FormData): Promise<void> {
 
   if (error) {
     redirectWithError('/admin/people', 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
+  }
+
+  try {
+    await syncPersonRepresentedCountries(supabase, personId, representedCountryIds)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Nie udało się zapisać krajów reprezentacji.'
+    redirectWithError('/admin/people', message)
   }
 
   const label = [firstName, lastName].filter(Boolean).join(' ').trim() || nickname || 'osoba'
@@ -96,6 +156,10 @@ export async function updatePerson(formData: FormData): Promise<void> {
   const birthDate = getTrimmedNullable(formData, 'birth_date')
   const birthCityId = getTrimmedNullable(formData, 'birth_city_id')
   const birthCountryRaw = getTrimmedNullable(formData, 'birth_country_id')
+  const representedCountryIds = formData
+    .getAll('represented_country_ids')
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .filter(Boolean)
   const isActive = getTrimmedString(formData, 'is_active') === 'on'
 
   if (!id) {
@@ -131,6 +195,13 @@ export async function updatePerson(formData: FormData): Promise<void> {
 
   if (error) {
     redirectWithError(`/admin/people/${id}`, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
+  }
+
+  try {
+    await syncPersonRepresentedCountries(supabase, id, representedCountryIds)
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Nie udało się zapisać krajów reprezentacji.'
+    redirectWithError(`/admin/people/${id}`, message)
   }
 
   redirectWithSaved(`/admin/people/${id}`)

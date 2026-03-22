@@ -13,21 +13,25 @@ export type AdminSelectOption = {
 interface AdminSelectFieldProps<T extends AdminSelectOption = AdminSelectOption> {
   name: string
   label: string
+  hideLabel?: boolean
   selectedId?: string | null
+  disabled?: boolean
   required?: boolean
+  emptyOptionLabel?: string
   options: T[]
   displayKey: keyof Pick<T, 'label' | 'short_name'>
   placeholder?: string
-  addButtonLabel: string
-  addDialogTitle: string
-  emptyResultsMessage: string
-  createAction: (prevState: InlineCreateState, formData: FormData) => Promise<InlineCreateState>
+  addButtonLabel?: string
+  addDialogTitle?: string
+  emptyResultsMessage?: string
+  createAction?: (prevState: InlineCreateState, formData: FormData) => Promise<InlineCreateState>
   onSelectedIdChange?: (selectedId: string) => void
+  onOptionCreated?: (option: T) => void
   /**
    * Custom form content to render inside the inline create dialog.
    * The dialog handles open/close buttons, so only render the form fields.
    */
-  inlineForm: ReactNode
+  inlineForm?: ReactNode
 }
 
 /**
@@ -61,8 +65,11 @@ interface AdminSelectFieldProps<T extends AdminSelectOption = AdminSelectOption>
 export default function AdminSelectField<T extends AdminSelectOption = AdminSelectOption>({
   name,
   label,
+  hideLabel,
   selectedId,
+  disabled,
   required,
+  emptyOptionLabel,
   options,
   displayKey,
   placeholder,
@@ -71,6 +78,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   emptyResultsMessage,
   createAction,
   onSelectedIdChange,
+  onOptionCreated,
   inlineForm,
 }: AdminSelectFieldProps<T>) {
   const [allOptions, setAllOptions] = useState<T[]>(options)
@@ -105,7 +113,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   }
 
   function handleInlineCreate() {
-    if (!inlineFormRef.current || isPending) return
+    if (!createAction || !inlineFormRef.current || isPending) return
     const elems = inlineFormRef.current.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
       'input[name], select[name]'
     )
@@ -123,13 +131,14 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
       if (result.ok && result.id && result.label) {
         const newId = result.id
         const newLabel = result.label
+        const nextOpt = { id: newId, [displayKey]: newLabel } as T
         setAllOptions((prev) => {
           if (prev.some((opt) => opt.id === newId)) return prev
-          const nextOpt = { id: newId, [displayKey]: newLabel } as T
           const next = [...prev, nextOpt]
           next.sort((a, b) => getDisplayLabel(a).localeCompare(getDisplayLabel(b), 'pl'))
           return next
         })
+        onOptionCreated?.(nextOpt)
         setValue(newId)
         onSelectedIdChange?.(newId)
         setQuery(newLabel)
@@ -182,6 +191,13 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   }, [allOptions, query])
 
   useEffect(() => {
+    if (disabled) {
+      setIsOpen(false)
+      setDialogOpen(false)
+    }
+  }, [disabled])
+
+  useEffect(() => {
     if (!isOpen || filteredOptions.length === 0) {
       setHighlightedIndex(-1)
       return
@@ -193,27 +209,42 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
 
   const defaultPlaceholder =
     placeholder || `Wpisz, aby filtrowac ${label.toLowerCase()}...`
-  const shouldShowQuickAdd = isOpen && query.trim() !== '' && filteredOptions.length === 0
+  const canCreateInline = Boolean(createAction)
+  const shouldShowQuickAdd = !disabled && canCreateInline && isOpen && query.trim() !== '' && filteredOptions.length === 0
+  const resolvedEmptyOptionLabel = emptyOptionLabel ?? '— brak —'
+  const closedDisplayValue = !isOpen && value === '' && query.trim() === ''
+    ? resolvedEmptyOptionLabel
+    : query
+  const isEmptyClosedDisplay = !isOpen && value === ''
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-sm font-medium text-neutral-300">
-        {label}
-        {required ? ' *' : ''}
-      </label>
-      <input type="hidden" name={name} value={value} />
+      {!hideLabel && (
+        <label className="text-sm font-medium text-neutral-300">
+          {label}
+          {required ? ' *' : ''}
+        </label>
+      )}
+      <input type="hidden" name={name} value={value} disabled={disabled} />
 
       <div ref={wrapperRef} onBlur={handleWrapperBlur} className="flex flex-col gap-2">
         <div className="relative">
           <input
             type="text"
-            value={query}
+            value={isOpen ? query : closedDisplayValue}
+            disabled={disabled}
             onChange={(e) => {
+              if (disabled) return
               setQuery(e.target.value)
               setIsOpen(true)
             }}
-            onFocus={() => setIsOpen(true)}
+            onFocus={() => {
+              if (disabled) return
+              setIsOpen(true)
+            }}
             onKeyDown={(e) => {
+              if (disabled) return
+
               if (e.key === 'Escape') {
                 e.preventDefault()
                 setIsOpen(false)
@@ -233,7 +264,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
               if (e.key === 'Enter') {
                 if (filteredOptions.length === 0) {
                   // No matches: Enter opens create dialog if there's a search query
-                  if (query.trim() !== '') {
+                  if (canCreateInline && query.trim() !== '') {
                     e.preventDefault()
                     setIsOpen(false)
                     setDialogOpen(true)
@@ -279,26 +310,27 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
               }
             }}
             placeholder={defaultPlaceholder}
-            className="w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            className={`w-full rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm ${isEmptyClosedDisplay ? 'text-neutral-500' : 'text-neutral-100'} placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500 disabled:cursor-not-allowed disabled:opacity-60`}
           />
 
           {shouldShowQuickAdd && (
             <button
               type="button"
+              disabled={disabled}
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => {
                 setIsOpen(false)
                 setDialogOpen(true)
               }}
               className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-full bg-neutral-700 text-sm font-bold text-white hover:bg-neutral-600"
-              aria-label={addButtonLabel}
-              title={addButtonLabel}
+              aria-label={addButtonLabel ?? 'Dodaj nową opcję'}
+              title={addButtonLabel ?? 'Dodaj nową opcję'}
             >
               +
             </button>
           )}
 
-          {isOpen && (
+          {isOpen && !disabled && (
             <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900 shadow-xl">
               {filteredOptions.length > 0 ? (
                 <>
@@ -316,7 +348,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
                         value === '' ? 'bg-neutral-800 text-neutral-100' : 'text-neutral-300 hover:bg-neutral-800'
                       }`}
                     >
-                      — brak —
+                      {resolvedEmptyOptionLabel}
                     </button>
                   )}
                   {filteredOptions.map((opt, index) => (
@@ -340,7 +372,9 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
                   ))}
                 </>
               ) : query.trim() !== '' ? (
-                <p className="px-3 py-1.5 text-xs text-neutral-500">{emptyResultsMessage}</p>
+                <p className="px-3 py-1.5 text-xs text-neutral-500">
+                  {emptyResultsMessage ?? 'Brak wyników.'}
+                </p>
               ) : (
                 <p className="px-3 py-1.5 text-xs text-neutral-500">Wpisz, aby wyszukać...</p>
               )}
@@ -349,7 +383,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
         </div>
       </div>
 
-      {dialogOpen && (
+      {canCreateInline && dialogOpen && !disabled && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center px-4 py-6">
           <div
             className="absolute inset-0 bg-black/70"
@@ -357,7 +391,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
           />
 
           <div className="relative z-[71] w-full max-w-xl rounded-xl border border-neutral-700 bg-neutral-950 p-5 shadow-2xl">
-            <p className="mb-3 text-sm font-semibold text-neutral-100">{addDialogTitle}</p>
+            <p className="mb-3 text-sm font-semibold text-neutral-100">{addDialogTitle ?? 'Nowa opcja'}</p>
 
             {createError && (
               <div className="mb-3 rounded-md border border-red-800 bg-red-950/50 px-3 py-2 text-xs text-red-300">

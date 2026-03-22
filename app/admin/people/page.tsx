@@ -10,7 +10,9 @@ import type { AdminPersonBirthCityOption, AdminPersonListItem } from '@/lib/db/p
 import AdminListLayout from '@/components/admin/AdminListLayout'
 import AdminTable from '@/components/admin/AdminTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
+import AdminCancelLink from '@/components/admin/AdminCancelLink'
 import PersonBirthplaceFields from '@/components/admin/PersonBirthplaceFields'
+import PersonRepresentedCountriesFields from '@/components/admin/PersonRepresentedCountriesFields'
 import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
 
 type SearchParams = Promise<RawSearchParams>
@@ -22,6 +24,8 @@ function PeopleCreateFields({
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
 }) {
+  const syncScope = 'admin-people-create'
+
   return (
     <>
       <div className="grid gap-4 sm:grid-cols-3">
@@ -65,6 +69,15 @@ function PeopleCreateFields({
           countries={countries}
           createCityAction={createCityInline}
           createCountryAction={createCountryInline}
+          syncScope={syncScope}
+        />
+      </div>
+
+      <div className="mt-4">
+        <PersonRepresentedCountriesFields
+          countries={countries}
+          createCountryAction={createCountryInline}
+          syncScope={syncScope}
         />
       </div>
 
@@ -145,16 +158,40 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
       className: 'text-neutral-400',
     },
     {
-      key: 'birth_country',
-      label: 'Kraj ur.',
-      render: (person) => person.birth_country_name ?? '—',
+      key: 'country',
+      label: 'Kraj',
+      render: (person) => person.represented_country_names.length
+        ? person.represented_country_names.join(' / ')
+        : '—',
       className: 'text-neutral-400',
     },
     {
       key: 'active',
       label: 'Aktywna',
-      render: (person) => (person.is_active ? 'Tak' : 'Nie'),
-      className: 'text-neutral-400',
+      render: (person) => person.is_active ? (
+        <span
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-500 bg-emerald-500/15 text-emerald-400"
+          title="Aktywna"
+          aria-label="Aktywna"
+        >
+          <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+            <path
+              d="M4.5 10.5L8.25 14.25L15.5 7"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+      ) : (
+        <span
+          className="inline-flex h-5 w-5 rounded-full border-2 border-red-500"
+          title="Nieaktywna"
+          aria-label="Nieaktywna"
+        />
+      ),
+      className: 'text-neutral-400 text-center',
     },
   ]
 
@@ -220,12 +257,12 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
                     >
                       Dodaj osobę
                     </button>
-                    <Link
+                    <AdminCancelLink
                       href="/admin/people"
                       className="rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-300 hover:bg-neutral-800"
                     >
-                      Zamknij
-                    </Link>
+                      Anuluj
+                    </AdminCancelLink>
                   </div>
                 </form>
               </div>

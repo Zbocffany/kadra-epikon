@@ -18,6 +18,7 @@ import {
 } from '@/lib/db/countries'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
+import AdminCancelLink from '@/components/admin/AdminCancelLink'
 import {
   DetailsPageContainer,
   DetailsPageHeader,
@@ -506,12 +507,12 @@ export default async function AdminCountryDetailsPage({
                   >
                     Zapisz zdarzenie
                   </button>
-                  <Link
+                  <AdminCancelLink
                     href={`/admin/countries/${id}`}
                     className="rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-300 hover:bg-neutral-800"
                   >
-                    Zamknij
-                  </Link>
+                    Anuluj
+                  </AdminCancelLink>
                 </div>
               </div>
             </form>

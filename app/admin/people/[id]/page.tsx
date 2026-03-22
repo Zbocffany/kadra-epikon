@@ -17,6 +17,7 @@ import {
 import { DetailsFieldCard, DetailsFieldValue } from '@/components/admin/DetailsFieldCard'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 import PersonBirthplaceFields from '@/components/admin/PersonBirthplaceFields'
+import PersonRepresentedCountriesFields from '@/components/admin/PersonRepresentedCountriesFields'
 
 type Params = DetailPageParams
 type SearchParams = DetailPageSearchParams
@@ -49,6 +50,7 @@ export default async function AdminPersonDetailsPage({
 
   const displayName = getPersonDisplayName(person)
   const isEdit = mode === 'edit'
+  const syncScope = `admin-people-edit-${person.id}`
   const fields = (
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
       <DetailsFieldCard label="Imię">
@@ -130,6 +132,7 @@ export default async function AdminPersonDetailsPage({
             defaultBirthDate={person.birth_date}
             defaultCityId={person.birth_city_id}
             defaultCountryId={person.birth_country_id}
+            syncScope={syncScope}
           />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
@@ -142,6 +145,22 @@ export default async function AdminPersonDetailsPage({
               <p className="mt-2 text-lg font-semibold text-neutral-100">{person.birth_country_name ?? '—'}</p>
             </div>
           </div>
+        )}
+      </DetailsFieldCard>
+
+      <DetailsFieldCard label="Reprezentowane kraje" spanTwo>
+        {isEdit ? (
+          <PersonRepresentedCountriesFields
+            countries={countries}
+            createCountryAction={createCountryInline}
+            defaultCountryIds={person.represented_country_ids}
+            defaultBirthCountryId={person.birth_country_id}
+            syncScope={syncScope}
+          />
+        ) : (
+          <DetailsFieldValue
+            value={person.represented_country_names.length ? person.represented_country_names.join(', ') : '—'}
+          />
         )}
       </DetailsFieldCard>
 

@@ -19,6 +19,7 @@ type MatchInput = {
   matchStadiumId: string | null
   matchCityIdRaw: string | null
   matchStatus: 'SCHEDULED' | 'FINISHED' | 'ABANDONED' | 'CANCELLED'
+  resultType: 'REGULAR_TIME' | 'EXTRA_TIME' | 'PENALTIES' | 'EXTRA_TIME_AND_PENALTIES' | 'GOLDEN_GOAL' | 'WALKOVER' | null
   editorialStatus: 'DRAFT' | 'PARTIAL' | 'COMPLETE' | 'VERIFIED'
 }
 
@@ -26,6 +27,14 @@ type MatchParticipantRole = 'PLAYER' | 'COACH' | 'REFEREE'
 type PlayerPosition = 'GOALKEEPER' | 'DEFENDER' | 'MIDFIELDER' | 'ATTACKER'
 
 const MATCH_STATUSES = ['SCHEDULED', 'FINISHED', 'ABANDONED', 'CANCELLED'] as const
+const RESULT_TYPES = [
+  'REGULAR_TIME',
+  'EXTRA_TIME',
+  'PENALTIES',
+  'EXTRA_TIME_AND_PENALTIES',
+  'GOLDEN_GOAL',
+  'WALKOVER',
+] as const
 const EDITORIAL_STATUSES = ['DRAFT', 'PARTIAL', 'COMPLETE', 'VERIFIED'] as const
 const MATCH_PARTICIPANT_ROLES = ['PLAYER', 'COACH', 'REFEREE'] as const
 const PLAYER_POSITIONS = ['GOALKEEPER', 'DEFENDER', 'MIDFIELDER', 'ATTACKER'] as const
@@ -87,6 +96,11 @@ function readMatchInput(
     )
     : readEnumValueOrDefault(formData, 'editorial_status', EDITORIAL_STATUSES, 'DRAFT')
 
+  const resultTypeRaw = getTrimmedNullable(formData, 'result_type')
+  const resultType = resultTypeRaw && RESULT_TYPES.includes(resultTypeRaw as (typeof RESULT_TYPES)[number])
+    ? resultTypeRaw as MatchInput['resultType']
+    : null
+
   return {
     matchDate: getTrimmedString(formData, 'match_date'),
     matchTime: getTrimmedNullable(formData, 'match_time'),
@@ -96,6 +110,7 @@ function readMatchInput(
     matchStadiumId: getTrimmedNullable(formData, 'match_stadium_id'),
     matchCityIdRaw: getTrimmedNullable(formData, 'match_city_id'),
     matchStatus,
+    resultType: matchStatus === 'FINISHED' ? resultType : null,
     editorialStatus,
   }
 }
@@ -125,6 +140,10 @@ function validateMatchInputOrRedirect(input: MatchInput, redirectPath: string): 
       redirectPath,
       'Status redakcji "VERIFIED" można ustawić tylko dla meczu zakończonego, przerwanego lub odwołanego.'
     )
+  }
+
+  if (input.matchStatus === 'FINISHED' && !input.resultType) {
+    redirectWithError(redirectPath, 'Dla meczu zakończonego wybierz sposób zakończenia meczu.')
   }
 }
 
@@ -588,7 +607,6 @@ async function saveSquadForTeam(
   supabase: ReturnType<typeof createServiceRoleClient>,
   formData: FormData,
   matchId: string,
-  matchDate: string,
   teamId: string,
   prefix: string,
   redirectPath: string
@@ -599,38 +617,58 @@ async function saveSquadForTeam(
   const playerPositionsRaw = formData
     .getAll(`${prefix}player_position`)
     .map((v) => (typeof v === 'string' ? v.trim() : ''))
+  const playerClubTeamIdsRaw = formData
+    .getAll(`${prefix}player_club_team_id`)
+    .map((v) => (typeof v === 'string' ? v.trim() : ''))
 
-  if (playerPersonIds.length !== playerPositionsRaw.length) {
+  if (
+    playerPersonIds.length !== playerPositionsRaw.length
+    || playerPersonIds.length !== playerClubTeamIdsRaw.length
+  ) {
     redirectWithError(redirectPath, 'Wystąpił błąd formularza składu. Odśwież stronę i spróbuj ponownie.')
   }
 
-  // If all starter rows are empty, skip saving (preserve existing squad)
-  const anyStarterFilled = playerPersonIds.slice(0, STARTERS_COUNT).some(Boolean)
-  if (!anyStarterFilled) return
+  const anySquadFieldFilled = playerPersonIds.some(Boolean)
+    || playerPositionsRaw.some(Boolean)
+    || playerClubTeamIdsRaw.some(Boolean)
 
-  const rows: Array<{ personId: string; playerPosition: PlayerPosition; isStarting: boolean }> = []
+  if (!anySquadFieldFilled) {
+    const { error: deleteError } = await supabase
+      .from('tbl_Match_Participants')
+      .delete()
+      .eq('match_id', matchId)
+      .eq('team_id', teamId)
+      .eq('role', 'PLAYER')
+
+    if (deleteError) {
+      redirectWithError(redirectPath, 'Nie udało się usunąć poprzedniego składu drużyny.')
+    }
+
+    return
+  }
+
+  const rows: Array<{
+    personId: string
+    playerPosition: PlayerPosition
+    isStarting: boolean
+    clubTeamId: string | null
+  }> = []
 
   for (let i = 0; i < playerPersonIds.length; i += 1) {
     const personId = playerPersonIds[i] ?? ''
     const positionRaw = playerPositionsRaw[i] ?? ''
+    const clubTeamIdRaw = playerClubTeamIdsRaw[i] ?? ''
     const position = PLAYER_POSITIONS.includes(positionRaw as PlayerPosition) ? positionRaw as PlayerPosition : null
     const isStarter = i < STARTERS_COUNT
+    const clubTeamId = clubTeamIdRaw || null
 
-    if (isStarter && (!personId || !position)) {
-      redirectWithError(redirectPath, 'Uzupełnij wszystkie 11 pól podstawowego składu (zawodnik i pozycja).')
-    }
-
-    if (!personId && !position) continue
+    if (!personId && !position && !clubTeamId) continue
 
     if (!personId || !position) {
       redirectWithError(redirectPath, 'W każdym uzupełnionym wierszu wybierz zawodnika i pozycję.')
     }
 
-    rows.push({ personId, playerPosition: position, isStarting: isStarter })
-  }
-
-  if (rows.filter((r) => r.isStarting).length < STARTERS_COUNT) {
-    redirectWithError(redirectPath, 'Skład musi zawierać 11 zawodników podstawowych.')
+    rows.push({ personId, playerPosition: position, isStarting: isStarter, clubTeamId })
   }
 
   const uniquePlayerIds = [...new Set(rows.map((r) => r.personId))]
@@ -645,6 +683,23 @@ async function saveSquadForTeam(
 
   if ((existingPeople ?? []).length !== uniquePlayerIds.length) {
     redirectWithError(redirectPath, 'Skład zawiera nieprawidłowego zawodnika.')
+  }
+
+  const uniqueClubTeamIds = [...new Set(rows.map((r) => r.clubTeamId).filter((id): id is string => Boolean(id)))]
+  if (uniqueClubTeamIds.length > 0) {
+    const { data: existingClubTeams, error: clubTeamsError } = await supabase
+      .from('tbl_Teams')
+      .select('id, club_id')
+      .in('id', uniqueClubTeamIds)
+
+    if (clubTeamsError) {
+      redirectWithError(redirectPath, 'Wystąpił błąd serwera podczas weryfikacji klubów zawodników.')
+    }
+
+    const validClubTeamRows = (existingClubTeams ?? []).filter((team) => team.club_id)
+    if (validClubTeamRows.length !== uniqueClubTeamIds.length) {
+      redirectWithError(redirectPath, 'Skład zawiera nieprawidłowy klub zawodnika.')
+    }
   }
 
   const { error: deleteError } = await supabase
@@ -668,14 +723,6 @@ async function saveSquadForTeam(
   }> = []
 
   for (const row of rows) {
-    let clubTeamId: string | null = null
-    try {
-      clubTeamId = await resolveClubTeamIdForParticipant(supabase, row.personId, matchDate)
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Nie udało się wyliczyć klubu zawodnika.'
-      redirectWithError(redirectPath, msg)
-    }
-
     inserts.push({
       id: crypto.randomUUID(),
       match_id: matchId,
@@ -684,7 +731,7 @@ async function saveSquadForTeam(
       role: 'PLAYER',
       is_starting: row.isStarting,
       player_position: row.playerPosition,
-      club_team_id: clubTeamId,
+      club_team_id: row.clubTeamId,
     })
   }
 
@@ -796,6 +843,7 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
       match_stadium_id: input.matchStadiumId,
       match_city_id: matchCityId,
       match_status: input.matchStatus,
+      result_type: input.resultType,
       editorial_status: input.editorialStatus,
     })
     .eq('id', id)
@@ -809,6 +857,8 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
   const matchDate = updatedMatch.match_date
   const homeTeamId = updatedMatch.home_team_id
   const awayTeamId = updatedMatch.away_team_id
+  const saveHomeSquad = getTrimmedString(formData, 'home_squad_touched') === '1'
+  const saveAwaySquad = getTrimmedString(formData, 'away_squad_touched') === '1'
 
   // Referee
   const refereePersonId = getTrimmedNullable(formData, 'referee_person_id')
@@ -827,8 +877,12 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
   }
 
   // Squads & coaches
-  await saveSquadForTeam(supabase, formData, id, matchDate, homeTeamId, 'home_', redirectPath)
-  await saveSquadForTeam(supabase, formData, id, matchDate, awayTeamId, 'away_', redirectPath)
+  if (saveHomeSquad) {
+    await saveSquadForTeam(supabase, formData, id, homeTeamId, 'home_', redirectPath)
+  }
+  if (saveAwaySquad) {
+    await saveSquadForTeam(supabase, formData, id, awayTeamId, 'away_', redirectPath)
+  }
   await saveCoachesForTeam(supabase, formData, id, matchDate, homeTeamId, 'home_', redirectPath)
   await saveCoachesForTeam(supabase, formData, id, matchDate, awayTeamId, 'away_', redirectPath)
 
@@ -903,6 +957,7 @@ export async function updateMatch(formData: FormData): Promise<void> {
       match_stadium_id: input.matchStadiumId,
       match_city_id: matchCityId,
       match_status: input.matchStatus,
+      result_type: input.resultType,
       editorial_status: input.editorialStatus,
     })
     .eq('id', id)
@@ -952,6 +1007,7 @@ export async function addPerson(
   birthDate: string | null = null,
   birthCityId: string | null = null,
   birthCountryId: string | null = null,
+  representedCountryIds: string[] = [],
   isActive: boolean = true
 ): Promise<{ id: string; label: string; firstName: string; lastName: string; nickname: string }> {
   await requireAdminAccess()
@@ -962,6 +1018,7 @@ export async function addPerson(
   const birthDateTrimmed = birthDate?.trim() || null
   const birthCityIdTrimmed = birthCityId?.trim() || null
   const birthCountryIdTrimmed = birthCountryId?.trim() || null
+  const representedCountryIdsTrimmed = [...new Set(representedCountryIds.map((id) => id?.trim()).filter(Boolean))]
 
   if (!firstNameTrimmed && !lastNameTrimmed && !nicknameTrimmed) {
     throw new Error('Podaj przynajmniej jedno z pól: imię, nazwisko lub przydomek.')
@@ -984,6 +1041,34 @@ export async function addPerson(
   if (error) {
     console.error('Error adding person:', error)
     throw new Error('Nie udało się dodać nowej osoby. Spróbuj ponownie.')
+  }
+
+  if (representedCountryIdsTrimmed.length > 0) {
+    const { data: existingCountries, error: existingCountriesError } = await supabase
+      .from('tbl_Countries')
+      .select('id')
+      .in('id', representedCountryIdsTrimmed)
+
+    if (existingCountriesError) {
+      throw new Error('Błąd odczytu krajów reprezentacji. Spróbuj ponownie.')
+    }
+
+    if ((existingCountries ?? []).length !== representedCountryIdsTrimmed.length) {
+      throw new Error('Wybrano nieprawidłowy kraj reprezentacji.')
+    }
+
+    const { error: representedCountriesError } = await supabase
+      .from('tbl_Person_Countries')
+      .insert(
+        representedCountryIdsTrimmed.map((countryId) => ({
+          person_id: personId,
+          country_id: countryId,
+        }))
+      )
+
+    if (representedCountriesError) {
+      throw new Error('Nie udało się zapisać krajów reprezentacji.')
+    }
   }
 
   const fullName = firstNameTrimmed && lastNameTrimmed

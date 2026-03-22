@@ -4,20 +4,31 @@ import type { ReactNode } from 'react'
 import MatchCoachesForm from './MatchCoachesForm'
 import MatchSquadForm from './MatchSquadForm'
 import EditMatchFormWrapper from './EditMatchFormWrapper'
+import EditMatchLocationFields from './EditMatchLocationFields'
+import RefereePersonField from './RefereePersonField'
 import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
+import AdminSelectField from '@/components/admin/AdminSelectField'
 import { deleteMatch, saveMatchFull } from '../actions'
+import { createCityInline } from '@/app/admin/cities/actions'
+import { createClubInline } from '@/app/admin/clubs/actions'
+import { createStadiumInline } from '@/app/admin/stadiums/actions'
 import { getMatchStatusLabel, MATCH_STATUS_OPTIONS } from '../matchStatusLabels'
+import { getResultTypeLabel, RESULT_TYPE_OPTIONS } from '../resultTypeLabels'
+import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import {
   DetailsPageContainer,
   DetailsPageContent,
   DetailsPageHeader,
 } from '@/components/admin/DetailsPageLayout'
 import {
+  getAdminClubTeamOptions,
+  getLatestPlayerClubTeamByPersonIds,
   getAdminMatchCreateOptions,
   getAdminMatchDetails,
   getAdminMatchParticipants,
   type AdminMatchParticipant,
   type AdminMatchParticipantPersonOption,
+  type AdminTeamOption,
   type MatchParticipantRole,
   type PlayerPosition,
 } from '@/lib/db/matches'
@@ -92,6 +103,10 @@ function renderParticipantClub(participant: AdminMatchParticipant) {
     return participant.club_team_name
   }
 
+  if (!participant.club_team_id) {
+    return 'Brak danych'
+  }
+
   if (participant.derived_club_team_name) {
     return `${participant.derived_club_team_name} (wyliczony)`
   }
@@ -126,13 +141,29 @@ function MatchRefereesSection({
 function PositionBadge({ position, bench = false }: { position: PlayerPosition | null; bench?: boolean }) {
   const label = getPlayerPositionLabel(position)
   const letter = label?.[0] ?? '–'
+
+  const STARTER_COLORS: Partial<Record<PlayerPosition, string>> = {
+    GOALKEEPER: 'border border-orange-400 bg-gradient-to-b from-orange-400 to-orange-600 text-white',
+    DEFENDER:   'border border-red-400    bg-gradient-to-b from-red-400    to-red-600    text-white',
+    MIDFIELDER: 'border border-blue-400   bg-gradient-to-b from-blue-400   to-blue-600   text-white',
+    ATTACKER:   'border border-green-400  bg-gradient-to-b from-green-400  to-green-600  text-white',
+  }
+  const BENCH_COLORS: Partial<Record<PlayerPosition, string>> = {
+    GOALKEEPER: 'border border-orange-700 bg-gradient-to-b from-orange-900 to-orange-950 text-orange-400',
+    DEFENDER:   'border border-red-700    bg-gradient-to-b from-red-900    to-red-950    text-red-400',
+    MIDFIELDER: 'border border-blue-700   bg-gradient-to-b from-blue-900   to-blue-950   text-blue-400',
+    ATTACKER:   'border border-green-700  bg-gradient-to-b from-green-900  to-green-950  text-green-400',
+  }
+
+  const colorClass = position
+    ? (bench ? BENCH_COLORS[position] : STARTER_COLORS[position]) ?? 'border border-neutral-400 bg-gradient-to-b from-neutral-500 to-neutral-800 text-white'
+    : bench
+      ? 'border border-neutral-500 bg-gradient-to-b from-neutral-700 to-neutral-900 text-neutral-400'
+      : 'border border-neutral-400 bg-gradient-to-b from-neutral-500 to-neutral-800 text-white'
+
   return (
     <span
-      className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-black ${
-        bench
-          ? 'border border-neutral-500 bg-gradient-to-b from-neutral-700 to-neutral-900 text-neutral-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_1px_3px_rgba(0,0,0,0.6)]'
-          : 'border border-neutral-400 bg-gradient-to-b from-neutral-500 to-neutral-800 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.25),0_1px_3px_rgba(0,0,0,0.6)]'
-      }`}
+      className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_1px_3px_rgba(0,0,0,0.6)] ${colorClass}`}
       title={label ?? undefined}
     >
       {letter}
@@ -145,8 +176,12 @@ function MatchTeamParticipantsView({
 }: {
   participants: AdminMatchParticipant[]
 }) {
-  const starters = participants.filter((p) => p.role === 'PLAYER' && p.is_starting)
-  const bench = participants.filter((p) => p.role === 'PLAYER' && !p.is_starting)
+  const positionOrder: Record<string, number> = { GOALKEEPER: 0, DEFENDER: 1, MIDFIELDER: 2, ATTACKER: 3 }
+  const sortByPos = (a: AdminMatchParticipant, b: AdminMatchParticipant) =>
+    (positionOrder[a.player_position ?? ''] ?? 99) - (positionOrder[b.player_position ?? ''] ?? 99)
+
+  const starters = participants.filter((p) => p.role === 'PLAYER' && p.is_starting).sort(sortByPos)
+  const bench = participants.filter((p) => p.role === 'PLAYER' && !p.is_starting).sort(sortByPos)
   const coaches = participants.filter((p) => p.role === 'COACH')
   const hasPlayers = starters.length > 0 || bench.length > 0
 
@@ -205,6 +240,8 @@ function MatchTeamParticipantsSection({
   title,
   participants,
   people,
+  clubTeams,
+  latestPlayerClubTeamByPersonId,
   isEdit,
   cities,
   countries,
@@ -213,6 +250,8 @@ function MatchTeamParticipantsSection({
   title: string
   participants: AdminMatchParticipant[]
   people: AdminMatchParticipantPersonOption[]
+  clubTeams: AdminTeamOption[]
+  latestPlayerClubTeamByPersonId: Record<string, string | null>
   isEdit: boolean
   cities: any[]
   countries: any[]
@@ -231,6 +270,8 @@ function MatchTeamParticipantsSection({
               namePrefix={namePrefix}
               people={people}
               players={players}
+              clubTeams={clubTeams}
+              latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
               cities={cities}
               countries={countries}
             />
@@ -272,12 +313,18 @@ export default async function AdminMatchDetailsPage({
     notFound()
   }
 
-  const [options, participants, cities, countries] = await Promise.all([
+  const [options, participants, cities, countries, clubTeams] = await Promise.all([
     getAdminMatchCreateOptions(),
     getAdminMatchParticipants(match),
     getAdminPersonBirthCityOptions(),
     getAdminCountriesOptions(),
+    getAdminClubTeamOptions(),
   ])
+
+  const latestPlayerClubTeamByPersonId = await getLatestPlayerClubTeamByPersonIds(
+    participants.people.map((person) => person.id),
+    { excludeMatchId: match.id }
+  )
 
   const isEdit = mode === 'edit'
   const competitionName =
@@ -296,13 +343,101 @@ export default async function AdminMatchDetailsPage({
     ? (options.cities.find((city) => city.id === match.match_city_id)?.name ?? '—')
     : '—'
 
+  function renderCreateCityInlineForm(scope: string) {
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`${scope}_city_name`} className="text-xs text-neutral-400">
+            Nazwa miasta
+          </label>
+          <input
+            id={`${scope}_city_name`}
+            name="city_name"
+            type="text"
+            required
+            className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`${scope}_city_country`} className="text-xs text-neutral-400">
+            Kraj
+          </label>
+          <select
+            id={`${scope}_city_country`}
+            name="country_id"
+            required
+            className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+          >
+            <option value="">- wybierz -</option>
+            {countries.map((country) => (
+              <option key={country.id} value={country.id}>
+                {country.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`${scope}_city_voivodeship`} className="text-xs text-neutral-400">
+            Wojewodztwo (tylko Polska)
+          </label>
+          <select
+            id={`${scope}_city_voivodeship`}
+            name="voivodeship"
+            className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+          >
+            <option value="">- brak -</option>
+            {VOIVODESHIP_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    )
+  }
+
+  function renderCreateClubInlineForm(scope: string) {
+    return (
+      <div className="space-y-3">
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor={`${scope}_club_name`} className="text-xs text-neutral-400">
+            Nazwa klubu
+          </label>
+          <input
+            id={`${scope}_club_name`}
+            name="name"
+            type="text"
+            required
+            className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+          />
+        </div>
+
+        <AdminSelectField
+          name="club_city_id"
+          label="Miasto klubu"
+          options={options.cities.map((city) => ({ id: city.id, label: city.name }))}
+          displayKey="label"
+          placeholder="Wpisz, aby filtrowac miasta..."
+          addButtonLabel="Dodaj miasto"
+          addDialogTitle="Nowe miasto"
+          emptyResultsMessage="Brak wyników - możesz dodać nowe miasto poniżej."
+          createAction={createCityInline}
+          inlineForm={renderCreateCityInlineForm(scope)}
+        />
+      </div>
+    )
+  }
+
   const fields = (
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
       <MatchDetailCard label="Data">
         {isEdit ? (
           <div className="flex flex-col gap-1.5">
             <label htmlFor="match_date" className="text-sm font-medium text-neutral-300">
-              Data meczu <span className="text-red-400">*</span>
+              DATA MECZU <span className="text-red-400">*</span>
             </label>
             <input
               id="match_date"
@@ -322,7 +457,7 @@ export default async function AdminMatchDetailsPage({
         {isEdit ? (
           <div className="flex flex-col gap-1.5">
             <label htmlFor="match_time" className="text-sm font-medium text-neutral-300">
-              Godzina
+              GODZINA MECZU
             </label>
             <input
               id="match_time"
@@ -339,25 +474,18 @@ export default async function AdminMatchDetailsPage({
 
       <MatchDetailCard label="Rozgrywki" spanTwo>
         {isEdit ? (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="competition_id" className="text-sm font-medium text-neutral-300">
-              Rozgrywki <span className="text-red-400">*</span>
-            </label>
-            <select
-              id="competition_id"
-              name="competition_id"
-              defaultValue={match.competition_id}
-              required
-              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-            >
-              <option value="">— wybierz —</option>
-              {options.competitions.map((competition) => (
-                <option key={competition.id} value={competition.id}>
-                  {competition.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          <AdminSelectField
+            name="competition_id"
+            label="Rozgrywki"
+            hideLabel
+            required
+            selectedId={match.competition_id}
+            options={options.competitions.map((competition) => ({ id: competition.id, label: competition.name }))}
+            displayKey="label"
+            placeholder="Wpisz, aby filtrowac rozgrywki..."
+            emptyResultsMessage="Brak wynikow."
+            inlineForm={null}
+          />
         ) : (
           <MatchFieldValue value={competitionName} />
         )}
@@ -365,25 +493,21 @@ export default async function AdminMatchDetailsPage({
 
       <MatchDetailCard label="Gospodarz">
         {isEdit ? (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="home_team_id" className="text-sm font-medium text-neutral-300">
-              Gospodarz <span className="text-red-400">*</span>
-            </label>
-            <select
-              id="home_team_id"
-              name="home_team_id"
-              defaultValue={match.home_team_id}
-              required
-              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-            >
-              <option value="">— wybierz —</option>
-              {options.teams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <AdminSelectField
+            name="home_team_id"
+            label="Gospodarz"
+            hideLabel
+            required
+            selectedId={match.home_team_id}
+            options={options.teams.map((team) => ({ id: team.id, label: team.label }))}
+            displayKey="label"
+            placeholder="Wpisz, aby filtrowac gospodarza..."
+            addButtonLabel="Dodaj klub"
+            addDialogTitle="Nowy klub"
+            emptyResultsMessage="Brak wyników - możesz dodać nowy klub poniżej."
+            createAction={createClubInline}
+            inlineForm={renderCreateClubInlineForm('inline_edit_home')}
+          />
         ) : (
           <MatchFieldValue value={homeTeamName} />
         )}
@@ -391,86 +515,49 @@ export default async function AdminMatchDetailsPage({
 
       <MatchDetailCard label="Gość">
         {isEdit ? (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="away_team_id" className="text-sm font-medium text-neutral-300">
-              Gość <span className="text-red-400">*</span>
-            </label>
-            <select
-              id="away_team_id"
-              name="away_team_id"
-              defaultValue={match.away_team_id}
-              required
-              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-            >
-              <option value="">— wybierz —</option>
-              {options.teams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <AdminSelectField
+            name="away_team_id"
+            label="Gość"
+            hideLabel
+            required
+            selectedId={match.away_team_id}
+            options={options.teams.map((team) => ({ id: team.id, label: team.label }))}
+            displayKey="label"
+            placeholder="Wpisz, aby filtrowac gościa..."
+            addButtonLabel="Dodaj klub"
+            addDialogTitle="Nowy klub"
+            emptyResultsMessage="Brak wyników - możesz dodać nowy klub poniżej."
+            createAction={createClubInline}
+            inlineForm={renderCreateClubInlineForm('inline_edit_away')}
+          />
         ) : (
           <MatchFieldValue value={awayTeamName} />
         )}
       </MatchDetailCard>
 
-      <MatchDetailCard label="Stadion">
-        {isEdit ? (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="match_stadium_id" className="text-sm font-medium text-neutral-300">
-              Stadion
-            </label>
-            <select
-              id="match_stadium_id"
-              name="match_stadium_id"
-              defaultValue={match.match_stadium_id ?? ''}
-              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-            >
-              <option value="">— brak —</option>
-              {options.stadiums.map((stadium) => (
-                <option key={stadium.id} value={stadium.id}>
-                  {stadium.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <MatchFieldValue value={stadiumName} />
-        )}
-      </MatchDetailCard>
+      {isEdit ? (
+        <EditMatchLocationFields
+          initialStadiumId={match.match_stadium_id}
+          initialCityId={match.match_city_id}
+          stadiums={options.stadiums}
+          cities={options.cities}
+          countries={countries}
+        />
+      ) : (
+        <>
+          <MatchDetailCard label="Stadion">
+            <MatchFieldValue value={stadiumName} />
+          </MatchDetailCard>
 
-      <MatchDetailCard label="Miasto meczu">
-        {isEdit ? (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="match_city_id" className="text-sm font-medium text-neutral-300">
-              Miasto meczu
-            </label>
-            <select
-              id="match_city_id"
-              name="match_city_id"
-              defaultValue={match.match_city_id ?? ''}
-              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-            >
-              <option value="">— brak —</option>
-              {options.cities.map((city) => (
-                <option key={city.id} value={city.id}>
-                  {city.name}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <MatchFieldValue value={cityName} />
-        )}
-      </MatchDetailCard>
+          <MatchDetailCard label="Miasto meczu">
+            <MatchFieldValue value={cityName} />
+          </MatchDetailCard>
+        </>
+      )}
 
       <MatchDetailCard label="Status meczu">
         {isEdit ? (
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="match_status" className="text-sm font-medium text-neutral-300">
-              Status meczu
-            </label>
             <select
               id="match_status"
               name="match_status"
@@ -489,12 +576,34 @@ export default async function AdminMatchDetailsPage({
         )}
       </MatchDetailCard>
 
+      <MatchDetailCard label="Sposób zakończenia meczu">
+        {isEdit ? (
+          <div className="flex flex-col gap-1.5">
+            <select
+              id="result_type"
+              name="result_type"
+              defaultValue={match.result_type ?? ''}
+              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+            >
+              <option value="">Brak danych</option>
+              {RESULT_TYPE_OPTIONS.map((resultType) => (
+                <option key={resultType.value} value={resultType.value}>
+                  {resultType.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-neutral-500">
+              Wymagane dla meczu zakończonego. Dla innych statusów zostanie wyczyszczone.
+            </p>
+          </div>
+        ) : (
+          <MatchFieldValue value={getResultTypeLabel(match.result_type)} />
+        )}
+      </MatchDetailCard>
+
       <MatchDetailCard label="Status redakcji" spanTwo>
         {isEdit ? (
           <div className="flex flex-col gap-1.5">
-            <label htmlFor="editorial_status" className="text-sm font-medium text-neutral-300">
-              Status redakcji
-            </label>
             <select
               id="editorial_status"
               name="editorial_status"
@@ -556,16 +665,14 @@ export default async function AdminMatchDetailsPage({
           <section className="mt-6 max-w-xl rounded-xl border border-neutral-800 bg-neutral-950 p-4 sm:p-5">
             <h2 className="text-lg font-semibold text-neutral-100">Sędzia</h2>
             <div className="mt-3">
-              <select
+              <RefereePersonField
                 name="referee_person_id"
-                defaultValue={currentReferee?.person_id ?? ''}
-                className="w-full rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-              >
-                <option value="">— brak sędziego —</option>
-                {participants.people.map((person) => (
-                  <option key={person.id} value={person.id}>{person.label}</option>
-                ))}
-              </select>
+                value={currentReferee?.person_id ?? ''}
+                people={participants.people}
+                placeholder="Wybierz lub wpisz sędziego..."
+                cities={cities}
+                countries={countries}
+              />
             </div>
           </section>
 
@@ -575,6 +682,8 @@ export default async function AdminMatchDetailsPage({
               title={match.home_team_name}
               participants={participants.homeParticipants}
               people={participants.people}
+              clubTeams={clubTeams}
+              latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
               isEdit={true}
               cities={cities}
               countries={countries}
@@ -584,6 +693,8 @@ export default async function AdminMatchDetailsPage({
               title={match.away_team_name}
               participants={participants.awayParticipants}
               people={participants.people}
+              clubTeams={clubTeams}
+              latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
               isEdit={true}
               cities={cities}
               countries={countries}
@@ -648,6 +759,8 @@ export default async function AdminMatchDetailsPage({
           title={match.home_team_name}
           participants={participants.homeParticipants}
           people={participants.people}
+          clubTeams={clubTeams}
+          latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
           isEdit={false}
           cities={cities}
           countries={countries}
@@ -657,6 +770,8 @@ export default async function AdminMatchDetailsPage({
           title={match.away_team_name}
           participants={participants.awayParticipants}
           people={participants.people}
+          clubTeams={clubTeams}
+          latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
           isEdit={false}
           cities={cities}
           countries={countries}

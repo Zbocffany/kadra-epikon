@@ -1,11 +1,14 @@
 ﻿'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import type { AdminPersonBirthCityOption } from '@/lib/db/people'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import type { InlineCreateState } from '@/lib/types/admin'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
+
+const BIRTH_COUNTRY_CHANGED_EVENT = 'person:birth-country-changed'
+const COUNTRY_CREATED_EVENT = 'person:country-created'
 
 type PersonBirthplaceFieldsProps = {
   cities: AdminPersonBirthCityOption[]
@@ -16,6 +19,7 @@ type PersonBirthplaceFieldsProps = {
   defaultBirthDate?: string | null
   defaultCityId?: string | null
   defaultCountryId?: string | null
+  syncScope?: string
 }
 
 export default function PersonBirthplaceFields({
@@ -27,6 +31,7 @@ export default function PersonBirthplaceFields({
   defaultBirthDate,
   defaultCityId,
   defaultCountryId,
+  syncScope,
 }: PersonBirthplaceFieldsProps) {
   const initialCountryId =
     (defaultCityId
@@ -56,6 +61,16 @@ export default function PersonBirthplaceFields({
   }
 
   const derivedCountryName = selectedCityId ? cityCountryNameMap.get(selectedCityId) ?? null : null
+
+  useEffect(() => {
+    if (!syncScope || typeof window === 'undefined') return
+
+    window.dispatchEvent(
+      new CustomEvent(BIRTH_COUNTRY_CHANGED_EVENT, {
+        detail: { scope: syncScope, countryId: selectedCountryId },
+      })
+    )
+  }, [selectedCountryId, syncScope])
 
   return (
     <div className="grid gap-4 sm:grid-cols-3">
@@ -154,6 +169,15 @@ export default function PersonBirthplaceFields({
           emptyResultsMessage="Brak wyników - możesz dodać nowy kraj poniżej."
           createAction={createCountryAction}
           onSelectedIdChange={setSelectedCountryId}
+          onOptionCreated={(option) => {
+            if (!syncScope || typeof window === 'undefined') return
+
+            window.dispatchEvent(
+              new CustomEvent(COUNTRY_CREATED_EVENT, {
+                detail: { scope: syncScope, country: { id: option.id, name: option.label ?? '—' } },
+              })
+            )
+          }}
           inlineForm={(
             <div className="space-y-3">
               <div className="flex flex-col gap-1.5">

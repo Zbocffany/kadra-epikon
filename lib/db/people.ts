@@ -19,9 +19,12 @@ export type AdminPersonListItem = {
   birth_country_id: string | null
   birth_city_name: string | null
   birth_country_name: string | null
+  represented_country_names: string[]
 }
 
-export type AdminPersonDetails = AdminPersonListItem
+export type AdminPersonDetails = AdminPersonListItem & {
+  represented_country_ids: string[]
+}
 
 export type AdminPersonBirthCityOption = {
   id: string
@@ -60,6 +63,85 @@ function buildDisplayName(person: Pick<AdminPersonListItem, 'first_name' | 'last
 
 export function getPersonDisplayName(person: Pick<AdminPersonListItem, 'first_name' | 'last_name' | 'nickname'>): string {
   return buildDisplayName(person)
+}
+
+async function getExplicitRepresentedCountryNamesByPersonId(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  personIds: string[]
+): Promise<Map<string, string[]>> {
+  if (!personIds.length) {
+    return new Map()
+  }
+
+  const { data: links, error: linksError } = await supabase
+    .from('tbl_Person_Countries')
+    .select('person_id, country_id')
+    .in('person_id', personIds)
+
+  if (linksError) {
+    throw new Error(`tbl_Person_Countries: ${linksError.message}`)
+  }
+
+  const countryIds = [...new Set((links ?? []).map((row) => row.country_id).filter(Boolean))]
+  if (!countryIds.length) {
+    return new Map()
+  }
+
+  const { data: countries, error: countriesError } = await supabase
+    .from('tbl_Countries')
+    .select('id, name')
+    .in('id', countryIds)
+
+  if (countriesError) {
+    throw new Error(`tbl_Countries: ${countriesError.message}`)
+  }
+
+  const countryNameById = new Map((countries ?? []).map((country) => [country.id, country.name]))
+  const map = new Map<string, string[]>()
+
+  for (const row of links ?? []) {
+    const countryName = countryNameById.get(row.country_id)
+    if (!countryName) continue
+
+    const existing = map.get(row.person_id) ?? []
+    if (!existing.includes(countryName)) {
+      existing.push(countryName)
+      existing.sort((a, b) => a.localeCompare(b, 'pl'))
+      map.set(row.person_id, existing)
+    }
+  }
+
+  return map
+}
+
+async function getExplicitRepresentedCountryIdsByPersonId(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  personIds: string[]
+): Promise<Map<string, string[]>> {
+  if (!personIds.length) {
+    return new Map()
+  }
+
+  const { data: links, error: linksError } = await supabase
+    .from('tbl_Person_Countries')
+    .select('person_id, country_id')
+    .in('person_id', personIds)
+
+  if (linksError) {
+    throw new Error(`tbl_Person_Countries: ${linksError.message}`)
+  }
+
+  const map = new Map<string, string[]>()
+
+  for (const row of links ?? []) {
+    const existing = map.get(row.person_id) ?? []
+    if (!existing.includes(row.country_id)) {
+      existing.push(row.country_id)
+      map.set(row.person_id, existing)
+    }
+  }
+
+  return map
 }
 
 export async function getAdminPersonBirthCityOptions(): Promise<AdminPersonBirthCityOption[]> {
@@ -150,6 +232,10 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
 
   const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
   const countryMap = new Map((countries ?? []).map((c) => [c.id, c.name]))
+  const representedCountryNamesByPersonId = await getExplicitRepresentedCountryNamesByPersonId(
+    supabase,
+    people.map((person) => person.id)
+  )
 
   return people
     .map((person) => ({
@@ -165,6 +251,16 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
       birth_country_name: person.birth_country_id
         ? (countryMap.get(person.birth_country_id) ?? null)
         : null,
+      represented_country_names: (() => {
+        const explicit = representedCountryNamesByPersonId.get(person.id) ?? []
+        if (explicit.length) return explicit
+
+        const fallback = person.birth_country_id
+          ? (countryMap.get(person.birth_country_id) ?? null)
+          : null
+
+        return fallback ? [fallback] : []
+      })(),
     }))
     .sort((a, b) => buildDisplayName(a).localeCompare(buildDisplayName(b), 'pl'))
 }
@@ -207,6 +303,10 @@ export async function getAdminPeoplePage(
 
   const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
   const countryMap = new Map((countries ?? []).map((c) => [c.id, c.name]))
+  const representedCountryNamesByPersonId = await getExplicitRepresentedCountryNamesByPersonId(
+    supabase,
+    people.map((person) => person.id)
+  )
 
   return {
     items: people.map((person) => ({
@@ -222,6 +322,16 @@ export async function getAdminPeoplePage(
       birth_country_name: person.birth_country_id
         ? (countryMap.get(person.birth_country_id) ?? null)
         : null,
+      represented_country_names: (() => {
+        const explicit = representedCountryNamesByPersonId.get(person.id) ?? []
+        if (explicit.length) return explicit
+
+        const fallback = person.birth_country_id
+          ? (countryMap.get(person.birth_country_id) ?? null)
+          : null
+
+        return fallback ? [fallback] : []
+      })(),
     })),
     total: count ?? 0,
   }
@@ -259,6 +369,12 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
   if (cityError) throw new Error(`tbl_Cities: ${cityError.message}`)
   if (countryError) throw new Error(`tbl_Countries: ${countryError.message}`)
 
+  const representedCountryNamesByPersonId = await getExplicitRepresentedCountryNamesByPersonId(supabase, [person.id])
+  const representedCountryIdsByPersonId = await getExplicitRepresentedCountryIdsByPersonId(supabase, [person.id])
+  const explicitRepresented = representedCountryNamesByPersonId.get(person.id) ?? []
+  const explicitRepresentedIds = representedCountryIdsByPersonId.get(person.id) ?? []
+  const fallbackRepresented = country?.name ?? null
+
   return {
     id: person.id,
     first_name: person.first_name,
@@ -270,5 +386,9 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     birth_country_id: person.birth_country_id,
     birth_city_name: city?.city_name ?? null,
     birth_country_name: country?.name ?? null,
+    represented_country_ids: explicitRepresentedIds,
+    represented_country_names: explicitRepresented.length
+      ? explicitRepresented
+      : (fallbackRepresented ? [fallbackRepresented] : []),
   }
 }

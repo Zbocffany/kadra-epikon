@@ -6,6 +6,16 @@ type DbError = {
   message: string
 }
 
+function withQueryParam(path: string, key: string, value: string): string {
+  const [pathWithSearch, hash = ''] = path.split('#', 2)
+  const [pathname, search = ''] = pathWithSearch.split('?', 2)
+  const params = new URLSearchParams(search)
+  params.set(key, value)
+
+  const nextPath = `${pathname}?${params.toString()}`
+  return hash ? `${nextPath}#${hash}` : nextPath
+}
+
 export function getTrimmedString(formData: FormData, key: string): string {
   const raw = formData.get(key)
   return typeof raw === 'string' ? raw.trim() : ''
@@ -17,15 +27,15 @@ export function getTrimmedNullable(formData: FormData, key: string): string | nu
 }
 
 export function redirectWithError(path: string, message: string): never {
-  redirect(`${path}?error=${encodeURIComponent(message)}`)
+  redirect(withQueryParam(path, 'error', message))
 }
 
 export function redirectWithAdded(path: string, value: string): never {
-  redirect(`${path}?added=${encodeURIComponent(value)}`)
+  redirect(withQueryParam(path, 'added', value))
 }
 
 export function redirectWithSaved(path: string): never {
-  redirect(`${path}?saved=1`)
+  redirect(withQueryParam(path, 'saved', '1'))
 }
 
 export function inlineError(prevState: InlineCreateState, message: string): InlineCreateState {
