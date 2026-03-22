@@ -416,6 +416,12 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
       .filter((participant) => participant.role === 'REFEREE')
       .map((participant) => participant.person_id)
   )]
+  const coachPersonIds = [...new Set(
+    participantRows
+      .filter((participant) => participant.role === 'COACH')
+      .map((participant) => participant.person_id)
+  )]
+  const participantsWithCountryCodeIds = [...new Set([...refereePersonIds, ...coachPersonIds])]
 
   const { data: periods, error: periodsError } = personIds.length
     ? await supabase
@@ -426,18 +432,20 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
 
   const [
     { data: personCountries, error: personCountriesError },
-    { data: refereeBirthCountries, error: refereeBirthCountriesError },
-  ] = refereePersonIds.length
+    { data: participantsBirthCountries, error: participantsBirthCountriesError },
+  ] = participantsWithCountryCodeIds.length
     ? await Promise.all([
-        supabase
-          .from('tbl_Person_Countries')
-          .select('person_id, country_id')
-          .in('person_id', refereePersonIds)
-          .order('country_id', { ascending: true }),
+        refereePersonIds.length
+          ? supabase
+              .from('tbl_Person_Countries')
+              .select('person_id, country_id')
+              .in('person_id', refereePersonIds)
+              .order('country_id', { ascending: true })
+          : Promise.resolve({ data: [] as PersonCountryAssignmentRow[], error: null }),
         supabase
           .from('tbl_People')
           .select('id, birth_country_id')
-          .in('id', refereePersonIds),
+          .in('id', participantsWithCountryCodeIds),
       ])
     : [
         { data: [] as PersonCountryAssignmentRow[], error: null },
@@ -445,24 +453,24 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
       ]
 
   const personCountryRows = (personCountries ?? []) as PersonCountryAssignmentRow[]
-  const refereeBirthCountryRows = (refereeBirthCountries ?? []) as PersonBirthCountryRow[]
-  const refereeCountryIds = [...new Set([
+  const participantsBirthCountryRows = (participantsBirthCountries ?? []) as PersonBirthCountryRow[]
+  const participantsCountryIds = [...new Set([
     ...personCountryRows.map((row) => row.country_id),
-    ...refereeBirthCountryRows
+    ...participantsBirthCountryRows
       .map((row) => row.birth_country_id)
       .filter((countryId): countryId is string => Boolean(countryId)),
   ])]
 
-  const { data: countries, error: countriesError } = refereeCountryIds.length
+  const { data: countries, error: countriesError } = participantsCountryIds.length
     ? await supabase
         .from('tbl_Countries')
         .select('id, fifa_code')
-        .in('id', refereeCountryIds)
+        .in('id', participantsCountryIds)
     : { data: [] as CountryCodeRow[], error: null }
 
   if (periodsError) throw new Error(`tbl_Person_Team_Periods: ${periodsError.message}`)
   if (personCountriesError) throw new Error(`tbl_Person_Countries: ${personCountriesError.message}`)
-  if (refereeBirthCountriesError) throw new Error(`tbl_People (birth_country_id): ${refereeBirthCountriesError.message}`)
+  if (participantsBirthCountriesError) throw new Error(`tbl_People (birth_country_id): ${participantsBirthCountriesError.message}`)
   if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
 
   const periodsByPerson = new Map<string, PersonTeamPeriodRow[]>()
@@ -484,7 +492,7 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
     const code = countryCodeMap.get(row.country_id)
     if (code) personCountryMap.set(row.person_id, code)
   }
-  for (const row of refereeBirthCountryRows) {
+  for (const row of participantsBirthCountryRows) {
     if (personCountryMap.has(row.id)) continue
     if (!row.birth_country_id) continue
     const code = countryCodeMap.get(row.birth_country_id)
@@ -524,7 +532,7 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
       derived_club_team_name: derivedClubTeamId
         ? (clubTeamNameMap.get(derivedClubTeamId) ?? '—')
         : null,
-      country_code: participant.role === 'REFEREE'
+      country_code: participant.role === 'REFEREE' || participant.role === 'COACH'
         ? personCountryMap.get(participant.person_id) ?? undefined
         : undefined,
     } satisfies AdminMatchParticipant

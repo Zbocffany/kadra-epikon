@@ -204,10 +204,11 @@ function MatchTeamParticipantsView({
       {coaches.length > 0 && (
         <div>
           <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">Sztab</p>
-          <ul className="mt-2 space-y-2">
+          <ul className="mt-2 flex flex-wrap gap-2">
             {coaches.map((coach) => (
-              <li key={coach.id} className="rounded-lg border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-sm text-neutral-200">
+              <li key={coach.id} className="inline-flex w-fit rounded-lg border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-sm text-neutral-200">
                 {coach.person_name}
+                {coach.country_code && <span className="text-neutral-400"> ({coach.country_code})</span>}
               </li>
             ))}
           </ul>
