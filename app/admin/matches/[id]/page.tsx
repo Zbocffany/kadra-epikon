@@ -663,6 +663,15 @@ export default async function AdminMatchDetailsPage({
                 <span className="font-bold text-neutral-200">{stadiumSummary}</span>
               </>
             ) : null}
+            {currentReferee ? (
+              <>
+                <br />
+                <span className="text-neutral-300">
+                  Sędzia: {currentReferee.person_name}
+                  {currentReferee.country_code ? ` (${currentReferee.country_code})` : ''}
+                </span>
+              </>
+            ) : null}
           </>
         )}
         headerRight={(
