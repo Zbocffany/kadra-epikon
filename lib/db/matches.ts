@@ -81,6 +81,7 @@ export type AdminMatchParticipant = {
   club_team_id: string | null
   club_team_name: string | null
   derived_club_team_name: string | null
+  country_code?: string | null
 }
 
 export type AdminMatchParticipantPersonOption = {
@@ -395,6 +396,11 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
   const participantRows = (participants ?? []) as MatchParticipantRow[]
   const peopleRows = (people ?? []) as MatchParticipantPersonRow[]
   const personIds = [...new Set(participantRows.map((participant) => participant.person_id))]
+  const refereePersonIds = [...new Set(
+    participantRows
+      .filter((participant) => participant.role === 'REFEREE')
+      .map((participant) => participant.person_id)
+  )]
 
   const { data: periods, error: periodsError } = personIds.length
     ? await supabase
@@ -403,13 +409,28 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
         .in('person_id', personIds)
     : { data: [] as PersonTeamPeriodRow[], error: null }
 
+  const { data: personCountries, error: personCountriesError } = refereePersonIds.length
+    ? await supabase
+        .from('tbl_Person_Countries')
+        .select('person_id, country_id(fifa_code)')
+        .in('person_id', refereePersonIds)
+    : { data: [], error: null }
+
   if (periodsError) throw new Error(`tbl_Person_Team_Periods: ${periodsError.message}`)
+  if (personCountriesError) throw new Error(`tbl_Person_Countries: ${personCountriesError.message}`)
 
   const periodsByPerson = new Map<string, PersonTeamPeriodRow[]>()
   for (const period of (periods ?? []) as PersonTeamPeriodRow[]) {
     const existing = periodsByPerson.get(period.person_id) ?? []
     existing.push(period)
     periodsByPerson.set(period.person_id, existing)
+  }
+
+  const personCountryMap = new Map<string, string | null>()
+  for (const row of (personCountries ?? []) as Array<{ person_id: string; country_id: { fifa_code: string } | null }>) {
+    if (row.country_id?.fifa_code) {
+      personCountryMap.set(row.person_id, row.country_id.fifa_code)
+    }
   }
 
   const personNameMap = new Map(peopleRows.map((person) => [person.id, buildPersonDisplayName(person)]))
@@ -445,6 +466,9 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
       derived_club_team_name: derivedClubTeamId
         ? (clubTeamNameMap.get(derivedClubTeamId) ?? '—')
         : null,
+      country_code: participant.role === 'REFEREE'
+        ? personCountryMap.get(participant.person_id) ?? undefined
+        : undefined,
     } satisfies AdminMatchParticipant
   })
 

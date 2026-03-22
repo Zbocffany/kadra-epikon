@@ -98,7 +98,10 @@ function MatchRefereesSection({
       <div className="mt-4">
         {referee ? (
           <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
-            <p className="text-sm font-semibold text-neutral-100">{referee.person_name}</p>
+            <p className="text-sm font-semibold text-neutral-100">
+              {referee.person_name}
+              {referee.country_code && <span className="text-neutral-400"> ({referee.country_code})</span>}
+            </p>
             <p className="mt-1 text-xs text-neutral-400">Sędzia główny</p>
           </div>
         ) : (
