@@ -67,10 +67,6 @@ function MatchDetailCard({
   )
 }
 
-function MatchFieldValue({ value }: { value: string }) {
-  return <p className="text-lg font-semibold text-neutral-100">{value}</p>
-}
-
 function getPlayerPositionLabel(playerPosition: PlayerPosition | null) {
   switch (playerPosition) {
     case 'GOALKEEPER':
@@ -374,6 +370,13 @@ export default async function AdminMatchDetailsPage({
   const cityName = match.match_city_id
     ? (options.cities.find((city) => city.id === match.match_city_id)?.name ?? '—')
     : '—'
+  const hasStadiumName = stadiumName !== '—'
+  const hasCityName = cityName !== '—'
+  const stadiumSummary = hasStadiumName
+    ? `${stadiumName}${hasCityName ? ` (${cityName})` : ''}`
+    : hasCityName
+      ? cityName
+      : null
 
   const fields = isEdit ? (
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -530,17 +533,7 @@ export default async function AdminMatchDetailsPage({
         </div>
       </MatchDetailCard>
     </div>
-  ) : (
-    <div className="mt-6 grid gap-4 sm:grid-cols-2">
-      <MatchDetailCard label="Stadion">
-        <MatchFieldValue value={stadiumName} />
-      </MatchDetailCard>
-
-      <MatchDetailCard label="Miasto meczu">
-        <MatchFieldValue value={cityName} />
-      </MatchDetailCard>
-    </div>
-  )
+  ) : null
 
   const matchTitle = `${match.home_team_name} vs ${match.away_team_name}`
   const matchDateTimeLabel = `${formatDate(match.match_date)}${match.match_time ? ` ${match.match_time.slice(0, 5)}` : ''}`
@@ -661,7 +654,17 @@ export default async function AdminMatchDetailsPage({
       <DetailsPageContent
         title={matchTitle}
         breadcrumb={matchDateTimeLabel}
-        subtitle={competitionName}
+        subtitle={(
+          <>
+            <span>{competitionName}</span>
+            {stadiumSummary ? (
+              <>
+                <br />
+                <span className="font-bold text-neutral-200">{stadiumSummary}</span>
+              </>
+            ) : null}
+          </>
+        )}
         headerRight={(
           <div className="flex items-center gap-2">
             <ResultTypeBadge resultType={match.result_type} />
