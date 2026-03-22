@@ -213,7 +213,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   const defaultPlaceholder =
     placeholder || `Wpisz, aby filtrowac ${label.toLowerCase()}...`
   const canCreateInline = Boolean(createAction)
-  const shouldShowQuickAdd = !disabled && canCreateInline && isOpen && query.trim() !== '' && filteredOptions.length === 0
+  const shouldShowQuickAdd = !disabled && canCreateInline && isOpen
   const resolvedEmptyOptionLabel = emptyOptionLabel ?? '— brak —'
   const closedDisplayValue = !isOpen && value === '' && query.trim() === ''
     ? resolvedEmptyOptionLabel
