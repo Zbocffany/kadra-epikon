@@ -100,7 +100,7 @@ function MatchRefereesSection({
           <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
             <p className="text-sm font-semibold text-neutral-100">
               {referee.person_name}
-              {referee.country_code && <span className="text-neutral-400"> ({referee.country_code})</span>}
+              {referee.country_code && <><span>{' '}</span><span className="font-semibold text-neutral-200">({referee.country_code})</span></>}
             </p>
             <p className="mt-1 text-xs text-neutral-400">Sędzia główny</p>
           </div>
@@ -206,9 +206,9 @@ function MatchTeamParticipantsView({
           <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">Sztab</p>
           <ul className="mt-2 flex flex-wrap gap-2">
             {coaches.map((coach) => (
-              <li key={coach.id} className="inline-flex w-fit rounded-lg border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-sm text-neutral-200">
+              <li key={coach.id} className="inline-flex w-fit rounded-lg border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-sm font-semibold text-neutral-200">
                 {coach.person_name}
-                {coach.country_code && <span className="text-neutral-400"> ({coach.country_code})</span>}
+                {coach.country_code && <><span>{' '}</span><span className="font-semibold text-neutral-200">({coach.country_code})</span></>}
               </li>
             ))}
           </ul>
