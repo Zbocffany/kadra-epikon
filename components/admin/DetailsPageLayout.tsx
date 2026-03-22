@@ -71,6 +71,9 @@ export function DetailsPageContent({
   editContent,
   viewContent,
 }: DetailsPageContentProps) {
+  void saved
+  void error
+
   return (
     <>
       <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-6">
@@ -78,18 +81,6 @@ export function DetailsPageContent({
           {breadcrumb}
         </p>
         <h1 className="mt-2 text-3xl font-bold tracking-tight">{title}</h1>
-
-        {saved && (
-          <div className="mt-6 rounded-lg border border-emerald-800 bg-emerald-950/50 px-5 py-4 text-sm text-emerald-300">
-            Zmiany zostały zapisane.
-          </div>
-        )}
-
-        {error && (
-          <div className="mt-6 rounded-lg border border-red-800 bg-red-950/50 px-5 py-4 text-sm text-red-300">
-            {error}
-          </div>
-        )}
 
         {isEdit ? editContent : viewContent}
       </div>
