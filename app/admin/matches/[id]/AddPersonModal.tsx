@@ -54,19 +54,18 @@ export default function AddPersonModal({
   )
 
   useEffect(() => {
-    if (!selectedCityId) return
-
-    const mappedCountryId = cityCountryMap.get(selectedCityId) ?? ''
-    setSelectedCountryId((prev) => (prev === mappedCountryId ? prev : mappedCountryId))
-  }, [selectedCityId, cityCountryMap])
-
-  useEffect(() => {
     if (isRepresentedCountryTouched) return
     setSelectedRepresentedCountryId(selectedCountryId)
   }, [selectedCountryId, isRepresentedCountryTouched])
 
   const handleCityChange = (cityId: string) => {
     setSelectedCityId(cityId)
+
+    const mappedCountryId = cityId ? (cityCountryMap.get(cityId) ?? '') : ''
+    setSelectedCountryId(mappedCountryId)
+    if (!isRepresentedCountryTouched) {
+      setSelectedRepresentedCountryId(mappedCountryId)
+    }
   }
 
   const handleBirthCountryChange = (countryId: string) => {
