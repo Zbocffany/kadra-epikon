@@ -165,6 +165,10 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   }, [dialogOpen, query])
 
   useEffect(() => {
+    if (selectedId === undefined) {
+      return
+    }
+
     const id = selectedId ?? ''
     setValue(id)
     if (!id) {

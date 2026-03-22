@@ -78,6 +78,7 @@ export default function MatchSquadForm({
   const [people, setPeople] = useState<AdminMatchParticipantPersonOption[]>(initialPeople)
   const [clubTeams, setClubTeams] = useState<AdminTeamOption[]>(initialClubTeams)
   const [cityOptions, setCityOptions] = useState<AdminPersonBirthCityOption[]>(cities)
+  const [countryOptions, setCountryOptions] = useState<AdminCountryOption[]>(countries)
   const [isTouched, setIsTouched] = useState(false)
 
   const prioritizedClubTeams = useMemo(() => {
@@ -99,6 +100,10 @@ export default function MatchSquadForm({
   useEffect(() => {
     setCityOptions(cities)
   }, [cities])
+
+  useEffect(() => {
+    setCountryOptions(countries)
+  }, [countries])
 
   function updateRow(index: number, patch: Partial<SquadRow>) {
     setIsTouched(true)
@@ -172,6 +177,14 @@ export default function MatchSquadForm({
           current_country_name: null,
         },
       ].sort((a, b) => a.city_name.localeCompare(b.city_name, 'pl'))
+    })
+  }
+
+  function handleCountryOptionCreated(option: { id: string; label?: string }) {
+    setCountryOptions((prev) => {
+      if (prev.some((country) => country.id === option.id)) return prev
+      return [...prev, { id: option.id, name: option.label ?? '—' }]
+        .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
     })
   }
 
@@ -257,8 +270,9 @@ export default function MatchSquadForm({
                     inlineForm={renderCreateClubInlineForm({
                       scope: `starter_${index}`,
                       cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.city_name })),
-                      countries,
+                      countries: countryOptions,
                       onCityOptionCreated: handleCityOptionCreated,
+                      onCountryOptionCreated: handleCountryOptionCreated,
                     })}
                   />
                 </td>
@@ -334,8 +348,9 @@ export default function MatchSquadForm({
                       inlineForm={renderCreateClubInlineForm({
                         scope: `bench_${index}`,
                         cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.city_name })),
-                        countries,
+                        countries: countryOptions,
                         onCityOptionCreated: handleCityOptionCreated,
+                        onCountryOptionCreated: handleCountryOptionCreated,
                       })}
                     />
                   </td>

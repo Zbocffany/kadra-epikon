@@ -25,6 +25,7 @@ export default function EditMatchLocationFields({
 }: EditMatchLocationFieldsProps) {
   const [stadiumOptions, setStadiumOptions] = useState<AdminStadiumOption[]>(stadiums)
   const [cityOptions, setCityOptions] = useState<AdminCityOption[]>(cities)
+  const [countryOptions, setCountryOptions] = useState<AdminCountryOption[]>(countries)
   const [selectedStadiumId, setSelectedStadiumId] = useState(initialStadiumId ?? '')
   const [selectedCityId, setSelectedCityId] = useState(initialCityId ?? '')
   const [pendingStadiumCityId, setPendingStadiumCityId] = useState('')
@@ -36,6 +37,18 @@ export default function EditMatchLocationFields({
   useEffect(() => {
     setCityOptions(cities)
   }, [cities])
+
+  useEffect(() => {
+    setCountryOptions(countries)
+  }, [countries])
+
+  function handleCountryOptionCreated(option: { id: string; label?: string }) {
+    setCountryOptions((prev) => {
+      if (prev.some((country) => country.id === option.id)) return prev
+      return [...prev, { id: option.id, name: option.label ?? '—' }]
+        .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+    })
+  }
 
   function handleStadiumChange(stadiumId: string) {
     setSelectedStadiumId(stadiumId)
@@ -91,7 +104,7 @@ export default function EditMatchLocationFields({
             inlineForm={renderCreateStadiumInlineForm({
               scope: 'inline_edit',
               cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.name })),
-              countries,
+              countries: countryOptions,
               onSelectedCityIdChange: setPendingStadiumCityId,
               onCityOptionCreated: (option) => {
                 setCityOptions((prev) => {
@@ -101,6 +114,7 @@ export default function EditMatchLocationFields({
                 })
                 setPendingStadiumCityId(option.id)
               },
+              onCountryOptionCreated: handleCountryOptionCreated,
             })}
           />
         </div>
@@ -129,7 +143,11 @@ export default function EditMatchLocationFields({
                   .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
               })
             }}
-            inlineForm={renderCreateCityInlineForm({ scope: 'inline_edit_match', countries })}
+            inlineForm={renderCreateCityInlineForm({
+              scope: 'inline_edit_match',
+              countries: countryOptions,
+              onCountryOptionCreated: handleCountryOptionCreated,
+            })}
           />
           <p className="mt-1 text-xs text-neutral-500">
             Miasto meczu uzupełnia się automatycznie na podstawie wybranego stadionu.

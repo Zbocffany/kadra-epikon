@@ -38,6 +38,7 @@ export default function MatchCreateModal({
 }: MatchCreateModalProps) {
   const [stadiumOptions, setStadiumOptions] = useState<AdminStadiumOption[]>(stadiums)
   const [cityOptions, setCityOptions] = useState<AdminCityOption[]>(cities)
+  const [countryOptions, setCountryOptions] = useState<AdminCountryOption[]>(countries)
   const [selectedStadiumId, setSelectedStadiumId] = useState('')
   const [selectedCityId, setSelectedCityId] = useState('')
   const [homeTeamId, setHomeTeamId] = useState('')
@@ -59,6 +60,18 @@ export default function MatchCreateModal({
   useEffect(() => {
     setCityOptions(cities)
   }, [cities])
+
+  useEffect(() => {
+    setCountryOptions(countries)
+  }, [countries])
+
+  const handleCountryOptionCreated = (option: { id: string; label?: string }) => {
+    setCountryOptions((prev) => {
+      if (prev.some((country) => country.id === option.id)) return prev
+      return [...prev, { id: option.id, name: option.label ?? '—' }]
+        .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+    })
+  }
 
   const handleStadiumChange = (stadiumId: string) => {
     setSelectedStadiumId(stadiumId)
@@ -156,7 +169,7 @@ export default function MatchCreateModal({
                 inlineForm={renderCreateStadiumInlineForm({
                   scope: 'inline_match',
                   cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.name })),
-                  countries,
+                  countries: countryOptions,
                   onSelectedCityIdChange: setPendingStadiumCityId,
                   onCityOptionCreated: (option) => {
                     setCityOptions((prev) => {
@@ -166,6 +179,7 @@ export default function MatchCreateModal({
                     })
                     setPendingStadiumCityId(option.id)
                   },
+                  onCountryOptionCreated: handleCountryOptionCreated,
                 })}
               />
             </div>
@@ -190,7 +204,11 @@ export default function MatchCreateModal({
                       .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
                   })
                 }}
-                inlineForm={renderCreateCityInlineForm({ scope: 'inline_match', countries })}
+                inlineForm={renderCreateCityInlineForm({
+                  scope: 'inline_match',
+                  countries: countryOptions,
+                  onCountryOptionCreated: handleCountryOptionCreated,
+                })}
               />
               <p className="text-xs text-neutral-500">
                 Wybór stadionu automatycznie ustawia miasto meczu.
@@ -219,8 +237,9 @@ export default function MatchCreateModal({
                 inlineForm={renderCreateClubInlineForm({
                   scope: 'inline_match_home',
                   cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.name })),
-                  countries,
+                  countries: countryOptions,
                   onCityOptionCreated: handleCityOptionCreated,
+                  onCountryOptionCreated: handleCountryOptionCreated,
                 })}
               />
             </div>
@@ -247,8 +266,9 @@ export default function MatchCreateModal({
                 inlineForm={renderCreateClubInlineForm({
                   scope: 'inline_match_away',
                   cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.name })),
-                  countries,
+                  countries: countryOptions,
                   onCityOptionCreated: handleCityOptionCreated,
+                  onCountryOptionCreated: handleCountryOptionCreated,
                 })}
               />
             </div>
