@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AdminPersonBirthCityOption } from '@/lib/db/people'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import { addPerson } from '@/app/admin/matches/actions'
@@ -34,7 +34,7 @@ export default function AddPersonModal({
   const [isRepresentedCountryTouched, setIsRepresentedCountryTouched] = useState(false)
   const [cityOptions, setCityOptions] = useState<AdminPersonBirthCityOption[]>(cities)
   const [countryOptions, setCountryOptions] = useState<AdminCountryOption[]>(countries)
-  const [pendingCityCountryId, setPendingCityCountryId] = useState('')
+  const pendingCityCountryIdRef = useRef('')
   const [isActive, setIsActive] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -61,11 +61,30 @@ export default function AddPersonModal({
   const handleCityChange = (cityId: string) => {
     setSelectedCityId(cityId)
 
-    const mappedCountryId = cityId ? (cityCountryMap.get(cityId) ?? '') : ''
-    setSelectedCountryId(mappedCountryId)
-    if (!isRepresentedCountryTouched) {
-      setSelectedRepresentedCountryId(mappedCountryId)
+    if (!cityId) {
+      setSelectedCountryId('')
+      if (!isRepresentedCountryTouched) {
+        setSelectedRepresentedCountryId('')
+      }
+      return
     }
+
+    const mappedCountryId = cityCountryMap.get(cityId)
+
+    // City can be freshly created and not yet present in cityCountryMap in this tick.
+    if (mappedCountryId === undefined) {
+      return
+    }
+
+    const nextCountryId = mappedCountryId ?? ''
+    setSelectedCountryId(nextCountryId)
+    if (!isRepresentedCountryTouched) {
+      setSelectedRepresentedCountryId(nextCountryId)
+    }
+  }
+
+  const handlePendingCityCountryChange = (countryId: string) => {
+    pendingCityCountryIdRef.current = countryId
   }
 
   const handleBirthCountryChange = (countryId: string) => {
@@ -200,7 +219,7 @@ export default function AddPersonModal({
             createAction={createCityInline}
             onSelectedIdChange={handleCityChange}
             onOptionCreated={(option) => {
-              const createdCountryId = pendingCityCountryId || null
+              const createdCountryId = pendingCityCountryIdRef.current || null
 
               setCityOptions((prev) => {
                 if (prev.some((city) => city.id === option.id)) {
@@ -224,9 +243,12 @@ export default function AddPersonModal({
 
               if (createdCountryId) {
                 setSelectedCountryId(createdCountryId)
+                if (!isRepresentedCountryTouched) {
+                  setSelectedRepresentedCountryId(createdCountryId)
+                }
               }
 
-              setPendingCityCountryId('')
+              pendingCityCountryIdRef.current = ''
             }}
             inlineForm={(
               <div className="space-y-3">
@@ -254,7 +276,7 @@ export default function AddPersonModal({
                   addDialogTitle="Nowy kraj"
                   emptyResultsMessage="Brak wyników - możesz dodać nowy kraj poniżej."
                   createAction={createCountryInline}
-                  onSelectedIdChange={setPendingCityCountryId}
+                  onSelectedIdChange={handlePendingCityCountryChange}
                   onOptionCreated={(option) => {
                     setCountryOptions((prev) => {
                       if (prev.some((country) => country.id === option.id)) {
@@ -265,7 +287,7 @@ export default function AddPersonModal({
                         .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
                     })
 
-                    setPendingCityCountryId(option.id)
+                    handlePendingCityCountryChange(option.id)
                   }}
                   inlineForm={(
                     <div className="space-y-3">
