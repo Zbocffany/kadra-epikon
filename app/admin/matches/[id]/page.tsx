@@ -25,6 +25,7 @@ import {
   getAdminMatchCreateOptions,
   getAdminMatchDetails,
   getAdminMatchParticipants,
+  type AdminMatchDetails,
   type AdminMatchParticipant,
   type AdminMatchParticipantPersonOption,
   type AdminTeamOption,
@@ -85,6 +86,36 @@ function getPlayerPositionLabel(playerPosition: PlayerPosition | null) {
   }
 }
 
+function MatchStatusBadge({ status }: { status: AdminMatchDetails['match_status'] }) {
+  const styles: Record<string, string> = {
+    SCHEDULED: 'bg-indigo-900/50 text-indigo-300 ring-indigo-700',
+    FINISHED: 'bg-neutral-800 text-neutral-300 ring-neutral-700',
+    ABANDONED: 'bg-orange-900/50 text-orange-300 ring-orange-700',
+    CANCELLED: 'bg-red-900/50 text-red-300 ring-red-700',
+  }
+  const cls = styles[status] ?? 'bg-neutral-800 text-neutral-400 ring-neutral-700'
+  return (
+    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${cls}`}>
+      {getMatchStatusLabel(status)}
+    </span>
+  )
+}
+
+function EditorialStatusBadge({ status }: { status: AdminMatchDetails['editorial_status'] }) {
+  const styles: Record<string, string> = {
+    DRAFT: 'bg-neutral-800 text-neutral-400 ring-neutral-600',
+    PARTIAL: 'bg-amber-900/50 text-amber-300 ring-amber-700',
+    COMPLETE: 'bg-blue-900/50 text-blue-300 ring-blue-700',
+    VERIFIED: 'bg-emerald-900/50 text-emerald-300 ring-emerald-700',
+  }
+  const cls = styles[status] ?? 'bg-neutral-800 text-neutral-400 ring-neutral-600'
+  return (
+    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${cls}`}>
+      {status}
+    </span>
+  )
+}
+
 function MatchRefereesSection({
   referees,
 }: {
@@ -100,7 +131,7 @@ function MatchRefereesSection({
           <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
             <p className="text-sm font-semibold text-neutral-100">
               {referee.person_name}
-              {referee.country_code && <><span>{' '}</span><span className="font-semibold text-neutral-200">({referee.country_code})</span></>}
+              {referee.country_code && <span className="font-semibold text-neutral-200">{'\u00A0'}({referee.country_code})</span>}
             </p>
             <p className="mt-1 text-xs text-neutral-400">Sędzia główny</p>
           </div>
@@ -208,7 +239,7 @@ function MatchTeamParticipantsView({
             {coaches.map((coach) => (
               <li key={coach.id} className="inline-flex w-fit rounded-lg border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-sm font-semibold text-neutral-200">
                 {coach.person_name}
-                {coach.country_code && <><span>{' '}</span><span className="font-semibold text-neutral-200">({coach.country_code})</span></>}
+                {coach.country_code && <span className="font-semibold text-neutral-200">{'\u00A0'}({coach.country_code})</span>}
               </li>
             ))}
           </ul>
@@ -313,12 +344,6 @@ export default async function AdminMatchDetailsPage({
   const competitionName =
     options.competitions.find((competition) => competition.id === match.competition_id)?.name
     ?? match.competition_name
-  const homeTeamName =
-    options.teams.find((team) => team.id === match.home_team_id)?.label
-    ?? match.home_team_name
-  const awayTeamName =
-    options.teams.find((team) => team.id === match.away_team_id)?.label
-    ?? match.away_team_name
   const stadiumName = match.match_stadium_id
     ? (options.stadiums.find((stadium) => stadium.id === match.match_stadium_id)?.label ?? '—')
     : '—'
@@ -326,208 +351,179 @@ export default async function AdminMatchDetailsPage({
     ? (options.cities.find((city) => city.id === match.match_city_id)?.name ?? '—')
     : '—'
 
-  const fields = (
+  const fields = isEdit ? (
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
       <MatchDetailCard label="Data">
-        {isEdit ? (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="match_date" className="text-sm font-medium text-neutral-300">
-              DATA MECZU <span className="text-red-400">*</span>
-            </label>
-            <input
-              id="match_date"
-              name="match_date"
-              type="date"
-              required
-              defaultValue={match.match_date}
-              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-            />
-          </div>
-        ) : (
-          <MatchFieldValue value={formatDate(match.match_date)} />
-        )}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="match_date" className="text-sm font-medium text-neutral-300">
+            DATA MECZU <span className="text-red-400">*</span>
+          </label>
+          <input
+            id="match_date"
+            name="match_date"
+            type="date"
+            required
+            defaultValue={match.match_date}
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+          />
+        </div>
       </MatchDetailCard>
 
       <MatchDetailCard label="Godzina">
-        {isEdit ? (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="match_time" className="text-sm font-medium text-neutral-300">
-              GODZINA MECZU
-            </label>
-            <input
-              id="match_time"
-              name="match_time"
-              type="time"
-              defaultValue={match.match_time ?? ''}
-              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-            />
-          </div>
-        ) : (
-          <MatchFieldValue value={match.match_time ? match.match_time.slice(0, 5) : '—'} />
-        )}
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="match_time" className="text-sm font-medium text-neutral-300">
+            GODZINA MECZU
+          </label>
+          <input
+            id="match_time"
+            name="match_time"
+            type="time"
+            defaultValue={match.match_time ?? ''}
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+          />
+        </div>
       </MatchDetailCard>
 
       <MatchDetailCard label="Rozgrywki" spanTwo>
-        {isEdit ? (
-          <AdminSelectField
-            name="competition_id"
-            label="Rozgrywki"
-            hideLabel
-            required
-            selectedId={match.competition_id}
-            options={options.competitions.map((competition) => ({ id: competition.id, label: competition.name }))}
-            displayKey="label"
-            placeholder="Wpisz, aby filtrować rozgrywki..."
-            emptyResultsMessage="Brak wyników."
-            inlineForm={null}
-          />
-        ) : (
-          <MatchFieldValue value={competitionName} />
-        )}
+        <AdminSelectField
+          name="competition_id"
+          label="Rozgrywki"
+          hideLabel
+          required
+          selectedId={match.competition_id}
+          options={options.competitions.map((competition) => ({ id: competition.id, label: competition.name }))}
+          displayKey="label"
+          placeholder="Wpisz, aby filtrować rozgrywki..."
+          emptyResultsMessage="Brak wyników."
+          inlineForm={null}
+        />
       </MatchDetailCard>
 
       <MatchDetailCard label="Gospodarz">
-        {isEdit ? (
-          <AdminSelectField
-            name="home_team_id"
-            label="Gospodarz"
-            hideLabel
-            required
-            selectedId={match.home_team_id}
-            options={options.teams.map((team) => ({ id: team.id, label: team.label }))}
-            displayKey="label"
-            placeholder="Wpisz, aby filtrować gospodarza..."
-            addButtonLabel="Dodaj klub"
-            addDialogTitle="Nowy klub"
-            emptyResultsMessage="Brak wyników - możesz dodać nowy klub poniżej."
-            createAction={createClubInline}
-            inlineForm={renderCreateClubInlineForm({
-              scope: 'inline_edit_home',
-              cityOptions: options.cities.map((city) => ({ id: city.id, label: city.name })),
-              countries,
-            })}
-          />
-        ) : (
-          <MatchFieldValue value={homeTeamName} />
-        )}
+        <AdminSelectField
+          name="home_team_id"
+          label="Gospodarz"
+          hideLabel
+          required
+          selectedId={match.home_team_id}
+          options={options.teams.map((team) => ({ id: team.id, label: team.label }))}
+          displayKey="label"
+          placeholder="Wpisz, aby filtrować gospodarza..."
+          addButtonLabel="Dodaj klub"
+          addDialogTitle="Nowy klub"
+          emptyResultsMessage="Brak wyników - możesz dodać nowy klub poniżej."
+          createAction={createClubInline}
+          inlineForm={renderCreateClubInlineForm({
+            scope: 'inline_edit_home',
+            cityOptions: options.cities.map((city) => ({ id: city.id, label: city.name })),
+            countries,
+          })}
+        />
       </MatchDetailCard>
 
       <MatchDetailCard label="Gość">
-        {isEdit ? (
-          <AdminSelectField
-            name="away_team_id"
-            label="Gość"
-            hideLabel
-            required
-            selectedId={match.away_team_id}
-            options={options.teams.map((team) => ({ id: team.id, label: team.label }))}
-            displayKey="label"
-            placeholder="Wpisz, aby filtrować gościa..."
-            addButtonLabel="Dodaj klub"
-            addDialogTitle="Nowy klub"
-            emptyResultsMessage="Brak wyników - możesz dodać nowy klub poniżej."
-            createAction={createClubInline}
-            inlineForm={renderCreateClubInlineForm({
-              scope: 'inline_edit_away',
-              cityOptions: options.cities.map((city) => ({ id: city.id, label: city.name })),
-              countries,
-            })}
-          />
-        ) : (
-          <MatchFieldValue value={awayTeamName} />
-        )}
+        <AdminSelectField
+          name="away_team_id"
+          label="Gość"
+          hideLabel
+          required
+          selectedId={match.away_team_id}
+          options={options.teams.map((team) => ({ id: team.id, label: team.label }))}
+          displayKey="label"
+          placeholder="Wpisz, aby filtrować gościa..."
+          addButtonLabel="Dodaj klub"
+          addDialogTitle="Nowy klub"
+          emptyResultsMessage="Brak wyników - możesz dodać nowy klub poniżej."
+          createAction={createClubInline}
+          inlineForm={renderCreateClubInlineForm({
+            scope: 'inline_edit_away',
+            cityOptions: options.cities.map((city) => ({ id: city.id, label: city.name })),
+            countries,
+          })}
+        />
       </MatchDetailCard>
 
-      {isEdit ? (
-        <EditMatchLocationFields
-          initialStadiumId={match.match_stadium_id}
-          initialCityId={match.match_city_id}
-          stadiums={options.stadiums}
-          cities={options.cities}
-          countries={countries}
-        />
-      ) : (
-        <>
-          <MatchDetailCard label="Stadion">
-            <MatchFieldValue value={stadiumName} />
-          </MatchDetailCard>
-
-          <MatchDetailCard label="Miasto meczu">
-            <MatchFieldValue value={cityName} />
-          </MatchDetailCard>
-        </>
-      )}
+      <EditMatchLocationFields
+        initialStadiumId={match.match_stadium_id}
+        initialCityId={match.match_city_id}
+        stadiums={options.stadiums}
+        cities={options.cities}
+        countries={countries}
+      />
 
       <MatchDetailCard label="Status meczu">
-        {isEdit ? (
-          <div className="flex flex-col gap-1.5">
-            <select
-              id="match_status"
-              name="match_status"
-              defaultValue={match.match_status}
-              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-            >
-              {MATCH_STATUS_OPTIONS.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <MatchFieldValue value={getMatchStatusLabel(match.match_status)} />
-        )}
+        <div className="flex flex-col gap-1.5">
+          <select
+            id="match_status"
+            name="match_status"
+            defaultValue={match.match_status}
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+          >
+            {MATCH_STATUS_OPTIONS.map((status) => (
+              <option key={status.value} value={status.value}>
+                {status.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </MatchDetailCard>
 
       <MatchDetailCard label="Sposób zakończenia meczu">
-        {isEdit ? (
-          <div className="flex flex-col gap-1.5">
-            <select
-              id="result_type"
-              name="result_type"
-              defaultValue={match.result_type ?? ''}
-              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-            >
-              <option value="">Brak danych</option>
-              {RESULT_TYPE_OPTIONS.map((resultType) => (
-                <option key={resultType.value} value={resultType.value}>
-                  {resultType.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-neutral-500">
-              Wymagane dla meczu zakończonego. Dla innych statusów zostanie wyczyszczone.
-            </p>
-          </div>
-        ) : (
-          <MatchFieldValue value={getResultTypeLabel(match.result_type)} />
-        )}
+        <div className="flex flex-col gap-1.5">
+          <select
+            id="result_type"
+            name="result_type"
+            defaultValue={match.result_type ?? ''}
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+          >
+            <option value="">Brak danych</option>
+            {RESULT_TYPE_OPTIONS.map((resultType) => (
+              <option key={resultType.value} value={resultType.value}>
+                {resultType.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-neutral-500">
+            Wymagane dla meczu zakończonego. Dla innych statusów zostanie wyczyszczone.
+          </p>
+        </div>
       </MatchDetailCard>
 
       <MatchDetailCard label="Status redakcji" spanTwo>
-        {isEdit ? (
-          <div className="flex flex-col gap-1.5">
-            <select
-              id="editorial_status"
-              name="editorial_status"
-              defaultValue={match.editorial_status}
-              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-            >
-              {EDITORIAL_STATUS_OPTIONS.map((status) => (
-                <option key={status.value} value={status.value}>
-                  {status.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <MatchFieldValue value={match.editorial_status} />
-        )}
+        <div className="flex flex-col gap-1.5">
+          <select
+            id="editorial_status"
+            name="editorial_status"
+            defaultValue={match.editorial_status}
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+          >
+            {EDITORIAL_STATUS_OPTIONS.map((status) => (
+              <option key={status.value} value={status.value}>
+                {status.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </MatchDetailCard>
+    </div>
+  ) : (
+    <div className="mt-6 grid gap-4 sm:grid-cols-2">
+      <MatchDetailCard label="Stadion">
+        <MatchFieldValue value={stadiumName} />
+      </MatchDetailCard>
+
+      <MatchDetailCard label="Miasto meczu">
+        <MatchFieldValue value={cityName} />
+      </MatchDetailCard>
+
+      <MatchDetailCard label="Sposób zakończenia meczu" spanTwo>
+        <MatchFieldValue value={getResultTypeLabel(match.result_type)} />
       </MatchDetailCard>
     </div>
   )
 
   const matchTitle = `${match.home_team_name} vs ${match.away_team_name}`
+  const matchDateTimeLabel = `${formatDate(match.match_date)}${match.match_time ? ` ${match.match_time.slice(0, 5)}` : ''}`
   const currentReferee = participants.referees[0] ?? null
 
   if (isEdit) {
@@ -644,7 +640,14 @@ export default async function AdminMatchDetailsPage({
 
       <DetailsPageContent
         title={matchTitle}
-        breadcrumb="Admin / Mecze"
+        breadcrumb={matchDateTimeLabel}
+        subtitle={competitionName}
+        headerRight={(
+          <div className="flex items-center gap-2">
+            <MatchStatusBadge status={match.match_status} />
+            <EditorialStatusBadge status={match.editorial_status} />
+          </div>
+        )}
         saved={saved}
         error={error}
         isEdit={false}

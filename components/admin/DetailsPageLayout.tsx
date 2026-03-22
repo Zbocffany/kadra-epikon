@@ -12,8 +12,10 @@ type DetailsPageHeaderProps = {
 }
 
 type DetailsPageContentProps = {
-  title: string
+  title: ReactNode
   breadcrumb: string
+  subtitle?: ReactNode
+  headerRight?: ReactNode
   saved?: string
   error?: string
   isEdit: boolean
@@ -65,6 +67,8 @@ export function DetailsPageHeader({
 export function DetailsPageContent({
   title,
   breadcrumb,
+  subtitle,
+  headerRight,
   saved,
   error,
   isEdit,
@@ -77,10 +81,18 @@ export function DetailsPageContent({
   return (
     <>
       <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-6">
-        <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
-          {breadcrumb}
-        </p>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight">{title}</h1>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
+              {breadcrumb}
+            </p>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">{title}</h1>
+            {subtitle ? (
+              <p className="mt-1 text-sm font-medium text-neutral-400">{subtitle}</p>
+            ) : null}
+          </div>
+          {headerRight ? <div className="shrink-0">{headerRight}</div> : null}
+        </div>
 
         {isEdit ? editContent : viewContent}
       </div>
