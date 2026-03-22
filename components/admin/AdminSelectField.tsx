@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState, useTransition, ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition, ReactNode } from 'react'
 import type { InlineCreateState } from '@/lib/types/admin'
 
 export type AdminSelectOption = {
@@ -107,10 +107,10 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
     }
   }
 
-  function getDisplayLabel(option: T): string {
+  const getDisplayLabel = useCallback((option: T): string => {
     const label = option[displayKey]
     return typeof label === 'string' ? label : String(option.label || option.short_name || '—')
-  }
+  }, [displayKey])
 
   function handleInlineCreate() {
     if (!createAction || !inlineFormRef.current || isPending) return
@@ -173,8 +173,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
       const selected = allOptions.find((opt) => opt.id === id)
       if (selected) setQuery(getDisplayLabel(selected))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId])
+  }, [allOptions, getDisplayLabel, selectedId])
 
   const filteredOptions = useMemo(() => {
     const q = query.trim().toLowerCase()
@@ -188,7 +187,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
       return getDisplayLabel(a).localeCompare(getDisplayLabel(b), 'pl')
     })
     return matches
-  }, [allOptions, query])
+  }, [allOptions, getDisplayLabel, query])
 
   useEffect(() => {
     if (disabled) {

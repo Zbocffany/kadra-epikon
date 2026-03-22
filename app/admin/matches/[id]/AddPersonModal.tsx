@@ -194,7 +194,7 @@ export default function AddPersonModal({
             emptyOptionLabel="- brak -"
             options={cityOptions.map((city) => ({ id: city.id, label: city.city_name }))}
             displayKey="label"
-            placeholder="Wpisz, aby filtrowac miasta..."
+            placeholder="Wpisz, aby filtrować miasta..."
             addButtonLabel="+ Dodaj miasto"
             addDialogTitle="Nowe miasto"
             emptyResultsMessage="Brak wyników - możesz dodać nowe miasto poniżej."
@@ -250,7 +250,7 @@ export default function AddPersonModal({
                   required
                   options={countryOptions.map((country) => ({ id: country.id, label: country.name }))}
                   displayKey="label"
-                  placeholder="Wpisz, aby filtrowac kraje..."
+                  placeholder="Wpisz, aby filtrować kraje..."
                   addButtonLabel="+ Dodaj kraj"
                   addDialogTitle="Nowy kraj"
                   emptyResultsMessage="Brak wyników - możesz dodać nowy kraj poniżej."
@@ -330,7 +330,7 @@ export default function AddPersonModal({
               emptyOptionLabel="- brak -"
               options={countryOptions.map((country) => ({ id: country.id, label: country.name }))}
               displayKey="label"
-              placeholder="Wpisz, aby filtrowac kraje..."
+              placeholder="Wpisz, aby filtrować kraje..."
               addButtonLabel="+ Dodaj kraj"
               addDialogTitle="Nowy kraj"
               emptyResultsMessage="Brak wyników - możesz dodać nowy kraj poniżej."
@@ -387,7 +387,7 @@ export default function AddPersonModal({
               emptyOptionLabel="- brak -"
               options={countryOptions.map((country) => ({ id: country.id, label: country.name }))}
               displayKey="label"
-              placeholder="Wpisz, aby filtrowac kraje..."
+              placeholder="Wpisz, aby filtrować kraje..."
               addButtonLabel="+ Dodaj kraj"
               addDialogTitle="Nowy kraj"
               emptyResultsMessage="Brak wyników - możesz dodać nowy kraj poniżej."

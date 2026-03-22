@@ -6,7 +6,6 @@ import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import { getAdminCities } from '@/lib/db/clubs'
-import type { AdminCity } from '@/lib/db/clubs'
 import { getAdminStadiumDetails } from '@/lib/db/stadiums'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import {

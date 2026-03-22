@@ -11,9 +11,9 @@ import type { AdminPersonBirthCityOption } from '@/lib/db/people'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import { createClubInline } from '@/app/admin/clubs/actions'
-import { createCityInline } from '@/app/admin/cities/actions'
-import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import PersonPickerField, { MATCH_PERSON_CREATED_EVENT } from './PersonPickerField'
+import { compareByPlayerPosition } from '../playerPositionSort'
+import { renderCreateClubInlineForm } from '../inlineCreateForms'
 
 const STARTERS_COUNT = 11
 const BENCH_BASE_COUNT = 5
@@ -25,13 +25,6 @@ const PLAYER_POSITION_OPTIONS: Array<{ value: PlayerPosition; label: string }> =
   { value: 'MIDFIELDER', label: 'Pomocnik' },
   { value: 'ATTACKER', label: 'Napastnik' },
 ]
-
-const POSITION_SORT_ORDER: Record<string, number> = {
-  GOALKEEPER: 0,
-  DEFENDER: 1,
-  MIDFIELDER: 2,
-  ATTACKER: 3,
-}
 
 type SquadRow = {
   personId: string
@@ -131,11 +124,7 @@ export default function MatchSquadForm({
       const starters = prev.slice(0, STARTERS_COUNT)
       const bench = prev.slice(STARTERS_COUNT)
 
-      const sortFn = (a: SquadRow, b: SquadRow) => {
-        const aOrder = a.position ? (POSITION_SORT_ORDER[a.position] ?? 99) : 99
-        const bOrder = b.position ? (POSITION_SORT_ORDER[b.position] ?? 99) : 99
-        return aOrder - bOrder
-      }
+      const sortFn = (a: SquadRow, b: SquadRow) => compareByPlayerPosition(a, b, (row) => row.position)
 
       return [...starters.sort(sortFn), ...bench.sort(sortFn)]
     })
@@ -184,93 +173,6 @@ export default function MatchSquadForm({
         },
       ].sort((a, b) => a.city_name.localeCompare(b.city_name, 'pl'))
     })
-  }
-
-  function renderCreateClubInlineForm(scope: string) {
-    return (
-      <div className="space-y-3">
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor={`${scope}_club_name`} className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
-            Nazwa klubu
-          </label>
-          <input
-            id={`${scope}_club_name`}
-            name="name"
-            type="text"
-            required
-            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
-          />
-        </div>
-
-        <AdminSelectField
-          name="club_city_id"
-          label="Miasto klubu (opcjonalnie)"
-          required={false}
-          emptyOptionLabel="— brak —"
-          options={cityOptions.map((city) => ({ id: city.id, label: city.city_name }))}
-          displayKey="label"
-          placeholder="Wpisz, aby filtrowac miasta..."
-          addButtonLabel="+ Dodaj miasto"
-          addDialogTitle="Nowe miasto"
-          emptyResultsMessage="Brak wyników - możesz dodać nowe miasto poniżej."
-          createAction={createCityInline}
-          onOptionCreated={handleCityOptionCreated}
-          inlineForm={(
-            <div className="space-y-3">
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor={`${scope}_city_name`} className="text-xs text-neutral-400">
-                  Nazwa miasta
-                </label>
-                <input
-                  id={`${scope}_city_name`}
-                  name="city_name"
-                  type="text"
-                  required
-                  className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                />
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor={`${scope}_city_country`} className="text-xs text-neutral-400">
-                  Kraj
-                </label>
-                <select
-                  id={`${scope}_city_country`}
-                  name="country_id"
-                  required
-                  className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                >
-                  <option value="">- wybierz -</option>
-                  {countries.map((country) => (
-                    <option key={country.id} value={country.id}>
-                      {country.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <label htmlFor={`${scope}_city_voivodeship`} className="text-xs text-neutral-400">
-                  Wojewodztwo (tylko Polska)
-                </label>
-                <select
-                  id={`${scope}_city_voivodeship`}
-                  name="voivodeship"
-                  className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                >
-                  <option value="">- brak -</option>
-                  {VOIVODESHIP_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-        />
-      </div>
-    )
   }
 
   return (
@@ -352,7 +254,12 @@ export default function MatchSquadForm({
                     createAction={createClubInline}
                     onSelectedIdChange={(clubTeamId) => updateRow(index, { clubTeamId })}
                     onOptionCreated={handleClubOptionCreated}
-                    inlineForm={renderCreateClubInlineForm(`starter_${index}`)}
+                    inlineForm={renderCreateClubInlineForm({
+                      scope: `starter_${index}`,
+                      cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.city_name })),
+                      countries,
+                      onCityOptionCreated: handleCityOptionCreated,
+                    })}
                   />
                 </td>
               </tr>
@@ -424,7 +331,12 @@ export default function MatchSquadForm({
                       createAction={createClubInline}
                       onSelectedIdChange={(clubTeamId) => updateRow(STARTERS_COUNT + index, { clubTeamId })}
                       onOptionCreated={handleClubOptionCreated}
-                      inlineForm={renderCreateClubInlineForm(`bench_${index}`)}
+                      inlineForm={renderCreateClubInlineForm({
+                        scope: `bench_${index}`,
+                        cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.city_name })),
+                        countries,
+                        onCityOptionCreated: handleCityOptionCreated,
+                      })}
                     />
                   </td>
                 </tr>

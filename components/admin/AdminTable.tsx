@@ -1,13 +1,13 @@
 import { ReactNode } from 'react'
 
-export interface AdminTableColumn<T = any> {
+export interface AdminTableColumn<T extends Record<string, unknown> = Record<string, unknown>> {
   key: string
   label: string
   render: (row: T, index: number) => ReactNode
   className?: string
 }
 
-interface AdminTableProps<T = any> {
+interface AdminTableProps<T extends Record<string, unknown> = Record<string, unknown>> {
   data: T[]
   columns: AdminTableColumn<T>[]
   emptyMessage: string

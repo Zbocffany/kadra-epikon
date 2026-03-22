@@ -39,12 +39,6 @@ export default function AdminStatusBar() {
   const [dismissedKey, setDismissedKey] = useState<string | null>(null)
 
   useEffect(() => {
-    if (statusKey && statusKey !== dismissedKey) {
-      setDismissedKey(null)
-    }
-  }, [dismissedKey, statusKey])
-
-  useEffect(() => {
     if (!status || status.tone !== 'success' || !statusKey) {
       return
     }
