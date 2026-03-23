@@ -1,14 +1,12 @@
 ﻿import { createCountry, createFederationInline } from './actions'
 import Link from 'next/link'
-import AdminPagination from '@/components/admin/AdminPagination'
-import { getAdminCountriesPage, getAdminFederations } from '@/lib/db/countries'
+import CountriesSearchTable from './CountriesSearchTable'
+import { getAdminCountries, getAdminFederations } from '@/lib/db/countries'
 import type { AdminCountry, AdminFederation } from '@/lib/db/countries'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import AdminListLayout from '@/components/admin/AdminListLayout'
-import AdminTable from '@/components/admin/AdminTable'
-import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import AdminCancelLink from '@/components/admin/AdminCancelLink'
-import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
+import type { RawSearchParams } from '@/lib/pagination'
 
 function CountryCreateFields({ federations }: { federations: AdminFederation[] }) {
   return (
@@ -111,65 +109,21 @@ type SearchParams = Promise<RawSearchParams>
 export default async function AdminCountriesPage({ searchParams }: { searchParams: SearchParams }) {
   const resolvedSearchParams = await searchParams
   const { error: formError, create } = resolvedSearchParams
-  const { page, pageSize } = parsePaginationParams(resolvedSearchParams)
 
   let countries: AdminCountry[] = []
-  let totalCountries = 0
   let federations: AdminFederation[] = []
   let fetchError: string | null = null
 
   try {
-    const [countriesPage, fetchedFederations] = await Promise.all([
-      getAdminCountriesPage(page, pageSize),
+    const [fetchedCountries, fetchedFederations] = await Promise.all([
+      getAdminCountries(),
       getAdminFederations(),
     ])
-    countries = countriesPage.items
-    totalCountries = countriesPage.total
+    countries = fetchedCountries
     federations = fetchedFederations
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
-
-  const pagination = getPaginationMeta(totalCountries, page, pageSize)
-  const indexOffset = pagination.from > 0 ? pagination.from - 1 : 0
-
-  const columns: AdminTableColumn<AdminCountry>[] = [
-    {
-      key: 'index',
-      label: '#',
-      render: (_, i) => indexOffset + i + 1,
-      className: 'text-neutral-500',
-    },
-    {
-      key: 'name',
-      label: 'Nazwa',
-      render: (country) => (
-        <Link
-          href={`/admin/countries/${country.id}`}
-          className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-        >
-          {country.name}
-        </Link>
-      ),
-      className: 'font-medium',
-    },
-    {
-      key: 'fifa_code',
-      label: 'FIFA',
-      render: (country) => country.fifa_code ?? '—',
-      className: 'text-neutral-300',
-    },
-    {
-      key: 'federation',
-      label: 'Federacja',
-      render: (country) => country.federation_short_name ?? '—',
-      className: 'text-neutral-400',
-    },
-  ]
-
-  const emptyMessage = !countries.length
-    ? 'Brak krajów w tabeli tbl_Countries. Uruchom seed db/seeds/002_UEFA_countries.sql.'
-    : 'Brak krajów.'
 
   const isCreateModalOpen = create === '1' || Boolean(formError)
 
@@ -177,8 +131,8 @@ export default async function AdminCountriesPage({ searchParams }: { searchParam
     <AdminListLayout
       title="Kraje"
       breadcrumb="Admin"
-      recordCount={totalCountries}
-      recordLabel={totalCountries === 1 ? 'kraj' : 'krajów'}
+      recordCount={countries.length}
+      recordLabel={countries.length === 1 ? 'kraj' : 'krajów'}
       fetchError={fetchError}
       headerActions={(
         <Link
@@ -191,23 +145,7 @@ export default async function AdminCountriesPage({ searchParams }: { searchParam
     >
       {!fetchError && (
         <>
-          <AdminTable data={countries} columns={columns} emptyMessage={emptyMessage} />
-          {countries.length > 0 && (
-            <AdminPagination
-              basePath="/admin/countries"
-              searchParams={resolvedSearchParams}
-              page={pagination.page}
-              pageSize={pagination.pageSize}
-              totalPages={pagination.totalPages}
-              totalItems={pagination.total}
-              from={pagination.from}
-              to={pagination.to}
-              itemLabel={pagination.total === 1 ? 'kraju' : 'krajów'}
-            />
-          )}
-          {countries.length > 0 && (
-            <p className="text-xs text-neutral-500">Kliknij nazwę kraju, aby przejść do strony szczegółów.</p>
-          )}
+          <CountriesSearchTable countries={countries} />
 
           {isCreateModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">

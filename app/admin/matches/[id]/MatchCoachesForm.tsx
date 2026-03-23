@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { AdminMatchParticipant, AdminMatchParticipantPersonOption } from '@/lib/db/matches'
 import type { AdminPersonBirthCityOption } from '@/lib/db/people'
 import type { AdminCountryOption } from '@/lib/db/cities'
+import type { AdminFederation } from '@/lib/db/countries'
 import PersonPickerField, { MATCH_PERSON_CREATED_EVENT } from './PersonPickerField'
 
 function buildInitialRows(coaches: AdminMatchParticipant[]): string[] {
@@ -24,12 +25,14 @@ export default function MatchCoachesForm({
   coaches,
   cities,
   countries,
+  federations,
 }: {
   namePrefix: string
   people: AdminMatchParticipantPersonOption[]
   coaches: AdminMatchParticipant[]
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
+  federations: AdminFederation[]
 }) {
   const [rows, setRows] = useState<string[]>(() => buildInitialRows(coaches))
   const [people, setPeople] = useState<AdminMatchParticipantPersonOption[]>(initialPeople)
@@ -88,6 +91,7 @@ export default function MatchCoachesForm({
           addButtonTitle="Dodaj nowego pracownika"
           cities={cities}
           countries={countries}
+          federations={federations}
         />
       ))}
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import type { AdminMatchParticipantPersonOption } from '@/lib/db/matches'
 import type { AdminPersonBirthCityOption } from '@/lib/db/people'
 import type { AdminCountryOption } from '@/lib/db/cities'
+import type { AdminFederation } from '@/lib/db/countries'
 import PersonPickerField, { MATCH_PERSON_CREATED_EVENT } from './PersonPickerField'
 
 type RefereePersonFieldProps = {
@@ -13,6 +14,7 @@ type RefereePersonFieldProps = {
   placeholder: string
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
+  federations: AdminFederation[]
 }
 
 export default function RefereePersonField({
@@ -22,6 +24,7 @@ export default function RefereePersonField({
   placeholder,
   cities,
   countries,
+  federations,
 }: RefereePersonFieldProps) {
   const [people, setPeople] = useState<AdminMatchParticipantPersonOption[]>(initialPeople)
   const [selectedPersonId, setSelectedPersonId] = useState(value)
@@ -68,6 +71,7 @@ export default function RefereePersonField({
       addButtonTitle="Dodaj nową osobę"
       cities={cities}
       countries={countries}
+      federations={federations}
     />
   )
 }

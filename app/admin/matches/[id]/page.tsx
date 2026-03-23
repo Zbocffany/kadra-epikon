@@ -33,6 +33,7 @@ import {
 } from '@/lib/db/matches'
 import { getAdminPersonBirthCityOptions, type AdminPersonBirthCityOption } from '@/lib/db/people'
 import { getAdminCountriesOptions, type AdminCountryOption } from '@/lib/db/cities'
+import { getAdminFederations, type AdminFederation } from '@/lib/db/countries'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 
 type Params = DetailPageParams
@@ -133,33 +134,6 @@ function ResultTypeBadge({ resultType }: { resultType: AdminMatchDetails['result
     <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${cls}`}>
       {getResultTypeLabel(resultType)}
     </span>
-  )
-}
-
-function MatchRefereesSection({
-  referees,
-}: {
-  referees: AdminMatchParticipant[]
-}) {
-  const referee = referees[0] ?? null
-
-  return (
-    <section className="mt-6 max-w-xl rounded-xl border border-neutral-800 bg-neutral-950 p-4 sm:p-5">
-      <h2 className="text-lg font-semibold text-neutral-100">Sędzia</h2>
-      <div className="mt-4">
-        {referee ? (
-          <div className="rounded-lg border border-neutral-800 bg-neutral-900/60 px-4 py-3">
-            <p className="text-sm font-semibold text-neutral-100">
-              {referee.person_name}
-              {referee.country_code && <span className="font-semibold text-neutral-200">{'\u00A0'}({referee.country_code})</span>}
-            </p>
-            <p className="mt-1 text-xs text-neutral-400">Sędzia główny</p>
-          </div>
-        ) : (
-          <p className="text-sm text-neutral-500">Brak przypisanego sędziego.</p>
-        )}
-      </div>
-    </section>
   )
 }
 
@@ -279,6 +253,7 @@ function MatchTeamParticipantsSection({
   isEdit,
   cities,
   countries,
+  federations,
 }: {
   namePrefix: string
   title: string
@@ -289,6 +264,7 @@ function MatchTeamParticipantsSection({
   isEdit: boolean
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
+  federations: AdminFederation[]
 }) {
   const players = participants.filter((participant) => participant.role === 'PLAYER')
   const coaches = participants.filter((participant) => participant.role === 'COACH')
@@ -308,6 +284,7 @@ function MatchTeamParticipantsSection({
               latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
               cities={cities}
               countries={countries}
+              federations={federations}
             />
           </div>
 
@@ -320,6 +297,7 @@ function MatchTeamParticipantsSection({
                 coaches={coaches}
                 cities={cities}
                 countries={countries}
+                federations={federations}
               />
             </div>
           </div>
@@ -347,11 +325,12 @@ export default async function AdminMatchDetailsPage({
     notFound()
   }
 
-  const [options, participants, cities, countries, clubTeams] = await Promise.all([
+  const [options, participants, cities, countries, federations, clubTeams] = await Promise.all([
     getAdminMatchCreateOptions(),
     getAdminMatchParticipants(match),
     getAdminPersonBirthCityOptions(),
     getAdminCountriesOptions(),
+    getAdminFederations(),
     getAdminClubTeamOptions(),
   ])
 
@@ -372,11 +351,21 @@ export default async function AdminMatchDetailsPage({
     : '—'
   const hasStadiumName = stadiumName !== '—'
   const hasCityName = cityName !== '—'
-  const stadiumSummary = hasStadiumName
-    ? `${stadiumName}${hasCityName ? ` (${cityName})` : ''}`
-    : hasCityName
-      ? cityName
-      : null
+  // Avoid repeating city if already present in stadium name
+  let stadiumSummary: string | null = null;
+  if (hasStadiumName) {
+    // Check if cityName is already in stadiumName (case-insensitive, ignore accents)
+    const normalize = (str: string) => str.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+    if (hasCityName && !normalize(stadiumName).includes(normalize(cityName))) {
+      stadiumSummary = `${stadiumName} (${cityName})`;
+    } else {
+      stadiumSummary = stadiumName;
+    }
+  } else if (hasCityName) {
+    stadiumSummary = cityName;
+  } else {
+    stadiumSummary = null;
+  }
 
   const fields = isEdit ? (
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -444,6 +433,7 @@ export default async function AdminMatchDetailsPage({
             scope: 'inline_edit_home',
             cityOptions: options.cities.map((city) => ({ id: city.id, label: city.name })),
             countries,
+            federations,
           })}
         />
       </MatchDetailCard>
@@ -466,6 +456,7 @@ export default async function AdminMatchDetailsPage({
             scope: 'inline_edit_away',
             cityOptions: options.cities.map((city) => ({ id: city.id, label: city.name })),
             countries,
+            federations,
           })}
         />
       </MatchDetailCard>
@@ -476,6 +467,7 @@ export default async function AdminMatchDetailsPage({
         stadiums={options.stadiums}
         cities={options.cities}
         countries={countries}
+        federations={federations}
       />
 
       <MatchDetailCard label="Status meczu">
@@ -584,6 +576,7 @@ export default async function AdminMatchDetailsPage({
                 placeholder="Wybierz lub wpisz sędziego..."
                 cities={cities}
                 countries={countries}
+                federations={federations}
               />
             </div>
           </section>
@@ -599,6 +592,7 @@ export default async function AdminMatchDetailsPage({
               isEdit={true}
               cities={cities}
               countries={countries}
+              federations={federations}
             />
             <MatchTeamParticipantsSection
               namePrefix="away_"
@@ -610,6 +604,7 @@ export default async function AdminMatchDetailsPage({
               isEdit={true}
               cities={cities}
               countries={countries}
+              federations={federations}
             />
           </section>
 
@@ -651,28 +646,45 @@ export default async function AdminMatchDetailsPage({
         deleteId={match.id}
       />
 
+
       <DetailsPageContent
         title={matchTitle}
-        breadcrumb={matchDateTimeLabel}
+        breadcrumb={
+          <div className="flex items-center gap-3">
+            <span>{matchDateTimeLabel}</span>
+            {competitionName && (
+              <span
+                className="inline-flex items-center rounded-md border border-neutral-400 px-2 py-0.5 font-bold text-xs text-white bg-black"
+                style={{ fontSize: '0.95em', fontWeight: 700 }}
+              >
+                {competitionName}
+              </span>
+            )}
+          </div>
+        }
         subtitle={(
-          <>
-            <span>{competitionName}</span>
+          <div className="mt-2">
             {stadiumSummary ? (
-              <>
-                <br />
-                <span className="font-bold text-neutral-200">{stadiumSummary}</span>
-              </>
+              <span
+                className={
+                  'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset bg-neutral-800 text-neutral-300 ring-neutral-700'
+                }
+              >
+                {stadiumSummary}
+              </span>
             ) : null}
+            {stadiumSummary && currentReferee ? <span className="block h-2" /> : null}
             {currentReferee ? (
-              <>
-                <br />
-                <span className="text-neutral-300">
-                  Sędzia: {currentReferee.person_name}
-                  {currentReferee.country_code ? ` (${currentReferee.country_code})` : ''}
-                </span>
-              </>
+              <span
+                className={
+                  'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset bg-neutral-800 text-neutral-300 ring-neutral-700'
+                }
+              >
+                Sędzia: {currentReferee.person_name}
+                {currentReferee.country_code ? ` (${currentReferee.country_code})` : ''}
+              </span>
             ) : null}
-          </>
+          </div>
         )}
         headerRight={(
           <div className="flex items-center gap-2">
@@ -688,10 +700,6 @@ export default async function AdminMatchDetailsPage({
         viewContent={fields}
       />
 
-      <MatchRefereesSection
-        referees={participants.referees}
-      />
-
       <section className="mt-6 grid gap-6 2xl:grid-cols-2">
         <MatchTeamParticipantsSection
           namePrefix="home_"
@@ -703,6 +711,7 @@ export default async function AdminMatchDetailsPage({
           isEdit={false}
           cities={cities}
           countries={countries}
+          federations={federations}
         />
         <MatchTeamParticipantsSection
           namePrefix="away_"
@@ -714,6 +723,7 @@ export default async function AdminMatchDetailsPage({
           isEdit={false}
           cities={cities}
           countries={countries}
+          federations={federations}
         />
       </section>
     </DetailsPageContainer>

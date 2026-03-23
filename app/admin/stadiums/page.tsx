@@ -1,20 +1,18 @@
 ﻿import Link from 'next/link'
 import { createStadium } from './actions'
+import StadiumsSearchTable from './StadiumsSearchTable'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import { getAdminCities } from '@/lib/db/clubs'
 import type { AdminCity } from '@/lib/db/clubs'
-import AdminPagination from '@/components/admin/AdminPagination'
-import { getAdminStadiumsPage } from '@/lib/db/stadiums'
+import { getAdminStadiums } from '@/lib/db/stadiums'
 import type { AdminStadiumListItem } from '@/lib/db/stadiums'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import AdminListLayout from '@/components/admin/AdminListLayout'
-import AdminTable from '@/components/admin/AdminTable'
-import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import AdminCancelLink from '@/components/admin/AdminCancelLink'
-import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
+import type { RawSearchParams } from '@/lib/pagination'
 
 type SearchParams = Promise<RawSearchParams>
 
@@ -107,67 +105,27 @@ function StadiumCreateFields({ cities, countries }: { cities: AdminCity[]; count
 export default async function AdminStadiumsPage({ searchParams }: { searchParams: SearchParams }) {
   const resolvedSearchParams = await searchParams
   const { error: formError, create } = resolvedSearchParams
-  const { page, pageSize } = parsePaginationParams(resolvedSearchParams)
 
   let stadiums: AdminStadiumListItem[] = []
-  let totalStadiums = 0
   let cities: AdminCity[] = []
   let countries: AdminCountryOption[] = []
   let fetchError: string | null = null
 
   try {
-    const [stadiumsPage, fetchedCities, fetchedCountries] = await Promise.all([
-      getAdminStadiumsPage(page, pageSize),
+    const [fetchedStadiums, fetchedCities, fetchedCountries] = await Promise.all([
+      getAdminStadiums(),
       getAdminCities(),
       getAdminCountriesOptions(),
     ])
-    stadiums = stadiumsPage.items
-    totalStadiums = stadiumsPage.total
+    stadiums = fetchedStadiums
     cities = fetchedCities
     countries = fetchedCountries
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
 
-  const pagination = getPaginationMeta(totalStadiums, page, pageSize)
-  const indexOffset = pagination.from > 0 ? pagination.from - 1 : 0
-
-  const columns: AdminTableColumn<AdminStadiumListItem>[] = [
-    {
-      key: 'index',
-      label: '#',
-      render: (_, i) => indexOffset + i + 1,
-      className: 'text-neutral-500',
-    },
-    {
-      key: 'name',
-      label: 'Stadion',
-      render: (stadium) => (
-        <Link
-          href={`/admin/stadiums/${stadium.id}`}
-          className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-        >
-          {stadium.name ?? '-'}
-        </Link>
-      ),
-      className: 'font-medium',
-    },
-    {
-      key: 'city',
-      label: 'Miasto',
-      render: (stadium) => stadium.city_name ?? '-',
-      className: 'text-neutral-300',
-    },
-    {
-      key: 'country',
-      label: 'Kraj',
-      render: (stadium) => stadium.country_name ?? '-',
-      className: 'text-neutral-400',
-    },
-  ]
-
   const pluralLabel = (() => {
-    const count = totalStadiums
+    const count = stadiums.length
     if (count === 1) return 'stadion'
     if (count < 5) return 'stadiony'
     return 'stadionów'
@@ -179,7 +137,7 @@ export default async function AdminStadiumsPage({ searchParams }: { searchParams
     <AdminListLayout
       title="Stadiony"
       breadcrumb="Admin"
-      recordCount={totalStadiums}
+      recordCount={stadiums.length}
       recordLabel={pluralLabel}
       fetchError={fetchError}
       headerActions={(
@@ -193,23 +151,7 @@ export default async function AdminStadiumsPage({ searchParams }: { searchParams
     >
       {!fetchError && (
         <>
-          <AdminTable data={stadiums} columns={columns} emptyMessage="Brak stadionów w bazie danych." />
-          {stadiums.length > 0 && (
-            <AdminPagination
-              basePath="/admin/stadiums"
-              searchParams={resolvedSearchParams}
-              page={pagination.page}
-              pageSize={pagination.pageSize}
-              totalPages={pagination.totalPages}
-              totalItems={pagination.total}
-              from={pagination.from}
-              to={pagination.to}
-              itemLabel={pagination.total === 1 ? 'stadionu' : 'stadionów'}
-            />
-          )}
-          {stadiums.length > 0 && (
-            <p className="text-xs text-neutral-500">Kliknij nazwę stadionu, aby przejść do strony szczegółów.</p>
-          )}
+          <StadiumsSearchTable stadiums={stadiums} />
 
           {isCreateModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">

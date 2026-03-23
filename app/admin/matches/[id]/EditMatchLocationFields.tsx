@@ -5,6 +5,7 @@ import AdminSelectField from '@/components/admin/AdminSelectField'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { createStadiumInline } from '@/app/admin/stadiums/actions'
 import type { AdminCountryOption } from '@/lib/db/cities'
+import type { AdminFederation } from '@/lib/db/countries'
 import type { AdminCityOption, AdminStadiumOption } from '@/lib/db/matches'
 import { renderCreateCityInlineForm, renderCreateStadiumInlineForm } from '../inlineCreateForms'
 
@@ -14,6 +15,7 @@ type EditMatchLocationFieldsProps = {
   stadiums: AdminStadiumOption[]
   cities: AdminCityOption[]
   countries: AdminCountryOption[]
+  federations: AdminFederation[]
 }
 
 export default function EditMatchLocationFields({
@@ -22,6 +24,7 @@ export default function EditMatchLocationFields({
   stadiums,
   cities,
   countries,
+  federations,
 }: EditMatchLocationFieldsProps) {
   const [stadiumOptions, setStadiumOptions] = useState<AdminStadiumOption[]>(stadiums)
   const [cityOptions, setCityOptions] = useState<AdminCityOption[]>(cities)
@@ -105,6 +108,7 @@ export default function EditMatchLocationFields({
               scope: 'inline_edit',
               cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.name })),
               countries: countryOptions,
+              federations,
               onSelectedCityIdChange: setPendingStadiumCityId,
               onCityOptionCreated: (option) => {
                 setCityOptions((prev) => {
@@ -146,6 +150,7 @@ export default function EditMatchLocationFields({
             inlineForm={renderCreateCityInlineForm({
               scope: 'inline_edit_match',
               countries: countryOptions,
+              federations,
               onCountryOptionCreated: handleCountryOptionCreated,
             })}
           />

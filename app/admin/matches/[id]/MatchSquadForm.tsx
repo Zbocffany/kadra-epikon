@@ -9,6 +9,7 @@ import type {
 } from '@/lib/db/matches'
 import type { AdminPersonBirthCityOption } from '@/lib/db/people'
 import type { AdminCountryOption } from '@/lib/db/cities'
+import type { AdminFederation } from '@/lib/db/countries'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import { createClubInline } from '@/app/admin/clubs/actions'
 import PersonPickerField, { MATCH_PERSON_CREATED_EVENT } from './PersonPickerField'
@@ -65,6 +66,7 @@ export default function MatchSquadForm({
   latestPlayerClubTeamByPersonId,
   cities,
   countries,
+  federations,
 }: {
   namePrefix: string
   people: AdminMatchParticipantPersonOption[]
@@ -73,6 +75,7 @@ export default function MatchSquadForm({
   latestPlayerClubTeamByPersonId: Record<string, string | null>
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
+  federations: AdminFederation[]
 }) {
   const [rows, setRows] = useState<SquadRow[]>(() => buildInitialRows(players))
   const [people, setPeople] = useState<AdminMatchParticipantPersonOption[]>(initialPeople)
@@ -235,6 +238,7 @@ export default function MatchSquadForm({
                     addButtonTitle="Dodaj nowego piłkarza"
                     cities={cities}
                     countries={countries}
+                    federations={federations}
                   />
                 </td>
                 <td className="border-l border-neutral-800 bg-neutral-950 px-2 py-2">
@@ -271,6 +275,7 @@ export default function MatchSquadForm({
                       scope: `starter_${index}`,
                       cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.city_name })),
                       countries: countryOptions,
+                      federations,
                       onCityOptionCreated: handleCityOptionCreated,
                       onCountryOptionCreated: handleCountryOptionCreated,
                     })}
@@ -313,6 +318,7 @@ export default function MatchSquadForm({
                       addButtonTitle="Dodaj nowego piłkarza"
                       cities={cities}
                       countries={countries}
+                      federations={federations}
                     />
                   </td>
                   <td className="border-l border-neutral-800 bg-neutral-950 px-2 py-2">
@@ -349,6 +355,7 @@ export default function MatchSquadForm({
                         scope: `bench_${index}`,
                         cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.city_name })),
                         countries: countryOptions,
+                        federations,
                         onCityOptionCreated: handleCityOptionCreated,
                         onCountryOptionCreated: handleCountryOptionCreated,
                       })}

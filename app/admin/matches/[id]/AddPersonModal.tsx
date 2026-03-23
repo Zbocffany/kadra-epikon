@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AdminPersonBirthCityOption } from '@/lib/db/people'
 import type { AdminCountryOption } from '@/lib/db/cities'
+import type { AdminFederation } from '@/lib/db/countries'
 import { addPerson } from '@/app/admin/matches/actions'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { createCountryInline } from '@/app/admin/countries/actions'
@@ -15,6 +16,7 @@ type AddPersonModalProps = {
   onSuccess: (person: { id: string; label: string; firstName: string; lastName: string; nickname: string }) => void
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
+  federations: AdminFederation[]
 }
 
 export default function AddPersonModal({
@@ -23,6 +25,7 @@ export default function AddPersonModal({
   onSuccess,
   cities,
   countries,
+  federations,
 }: AddPersonModalProps) {
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName] = useState('')
@@ -316,6 +319,24 @@ export default function AddPersonModal({
                           className="uppercase rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
                         />
                       </div>
+
+                      <div className="flex flex-col gap-1.5">
+                        <label htmlFor="inline_add_person_country_federation" className="text-xs text-neutral-400">
+                          Federacja
+                        </label>
+                        <select
+                          id="inline_add_person_country_federation"
+                          name="federation_id"
+                          className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                        >
+                          <option value="">— brak —</option>
+                          {federations.map((federation) => (
+                            <option key={federation.id} value={federation.id}>
+                              {federation.short_name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   )}
                 />
@@ -396,6 +417,24 @@ export default function AddPersonModal({
                       className="uppercase rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
                     />
                   </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="inline_add_person_birth_country_federation" className="text-xs text-neutral-400">
+                      Federacja
+                    </label>
+                    <select
+                      id="inline_add_person_birth_country_federation"
+                      name="federation_id"
+                      className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                    >
+                      <option value="">— brak —</option>
+                      {federations.map((federation) => (
+                        <option key={federation.id} value={federation.id}>
+                          {federation.short_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
             />
@@ -453,6 +492,24 @@ export default function AddPersonModal({
                       maxLength={3}
                       className="uppercase rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
                     />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label htmlFor="inline_add_person_represented_country_federation" className="text-xs text-neutral-400">
+                      Federacja
+                    </label>
+                    <select
+                      id="inline_add_person_represented_country_federation"
+                      name="federation_id"
+                      className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+                    >
+                      <option value="">— brak —</option>
+                      {federations.map((federation) => (
+                        <option key={federation.id} value={federation.id}>
+                          {federation.short_name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               )}

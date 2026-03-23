@@ -3,6 +3,7 @@ import { createCityInline } from '@/app/admin/cities/actions'
 import { createCountryInline } from '@/app/admin/countries/actions'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import type { AdminCountryOption } from '@/lib/db/cities'
+import type { AdminFederation } from '@/lib/db/countries'
 
 type InlineOption = {
   id: string
@@ -17,12 +18,14 @@ type InlineCreatedOption = {
 type CreateCityInlineFormProps = {
   scope: string
   countries: AdminCountryOption[]
+  federations: AdminFederation[]
   onCountryOptionCreated?: (option: InlineCreatedOption) => void
 }
 
 export function renderCreateCityInlineForm({
   scope,
   countries,
+  federations,
   onCountryOptionCreated,
 }: CreateCityInlineFormProps) {
   return (
@@ -79,6 +82,24 @@ export function renderCreateCityInlineForm({
                 className="uppercase rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
               />
             </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor={`${scope}_city_country_federation`} className="text-xs text-neutral-400">
+                Federacja
+              </label>
+              <select
+                id={`${scope}_city_country_federation`}
+                name="federation_id"
+                className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+              >
+                <option value="">— brak —</option>
+                {federations.map((federation) => (
+                  <option key={federation.id} value={federation.id}>
+                    {federation.short_name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
       />
@@ -108,6 +129,7 @@ type CreateClubInlineFormProps = {
   scope: string
   cityOptions: InlineOption[]
   countries: AdminCountryOption[]
+  federations: AdminFederation[]
   onCityOptionCreated?: (option: InlineCreatedOption) => void
   onCountryOptionCreated?: (option: InlineCreatedOption) => void
 }
@@ -116,6 +138,7 @@ export function renderCreateClubInlineForm({
   scope,
   cityOptions,
   countries,
+  federations,
   onCityOptionCreated,
   onCountryOptionCreated,
 }: CreateClubInlineFormProps) {
@@ -150,6 +173,7 @@ export function renderCreateClubInlineForm({
         inlineForm={renderCreateCityInlineForm({
           scope: `${scope}_club`,
           countries,
+          federations,
           onCountryOptionCreated,
         })}
       />
@@ -161,6 +185,7 @@ type CreateStadiumInlineFormProps = {
   scope: string
   cityOptions: InlineOption[]
   countries: AdminCountryOption[]
+  federations: AdminFederation[]
   onSelectedCityIdChange?: (cityId: string) => void
   onCityOptionCreated?: (option: InlineCreatedOption) => void
   onCountryOptionCreated?: (option: InlineCreatedOption) => void
@@ -170,6 +195,7 @@ export function renderCreateStadiumInlineForm({
   scope,
   cityOptions,
   countries,
+  federations,
   onSelectedCityIdChange,
   onCityOptionCreated,
   onCountryOptionCreated,
@@ -205,6 +231,7 @@ export function renderCreateStadiumInlineForm({
         inlineForm={renderCreateCityInlineForm({
           scope: `${scope}_stadium`,
           countries,
+          federations,
           onCountryOptionCreated,
         })}
       />

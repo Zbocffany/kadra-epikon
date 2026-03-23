@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { AdminMatchParticipantPersonOption } from '@/lib/db/matches'
 import type { AdminPersonBirthCityOption } from '@/lib/db/people'
 import type { AdminCountryOption } from '@/lib/db/cities'
+import type { AdminFederation } from '@/lib/db/countries'
 import AddPersonModal from './AddPersonModal'
 
 export const MATCH_PERSON_CREATED_EVENT = 'match:person-created'
@@ -20,6 +21,7 @@ type PersonPickerFieldProps = {
   addButtonTitle?: string
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
+  federations: AdminFederation[]
 }
 
 export default function PersonPickerField({
@@ -34,6 +36,7 @@ export default function PersonPickerField({
   addButtonTitle = 'Dodaj nową osobę',
   cities,
   countries,
+  federations,
 }: PersonPickerFieldProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
@@ -168,7 +171,7 @@ export default function PersonPickerField({
             }`}
           />
 
-          {isOpen && searchText && filteredPeople.length === 0 && (
+          {isOpen && (
             <button
               type="button"
               onMouseDown={(e) => {
@@ -211,6 +214,7 @@ export default function PersonPickerField({
         onSuccess={handleAddNewSuccess}
         cities={cities}
         countries={countries}
+        federations={federations}
       />
     </>
   )

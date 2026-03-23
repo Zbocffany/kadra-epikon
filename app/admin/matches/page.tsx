@@ -6,6 +6,7 @@ import AdminPagination from '@/components/admin/AdminPagination'
 import { getAdminMatchesPage } from '@/lib/db/matches'
 import { getAdminMatchCreateOptions } from '@/lib/db/matches'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
+import { getAdminFederations, type AdminFederation } from '@/lib/db/countries'
 import type { AdminMatch, AdminStadiumOption, EditorialStatus, MatchStatus } from '@/lib/db/matches'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
@@ -62,14 +63,16 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
   let teamOptions: { id: string; label: string }[] = []
   let cityOptions: { id: string; name: string }[] = []
   let countryOptions: AdminCountryOption[] = []
+  let federationOptions: AdminFederation[] = []
   let stadiumOptions: AdminStadiumOption[] = []
   let fetchError: string | null = null
 
   try {
-    const [fetchedMatches, options, countries] = await Promise.all([
+    const [fetchedMatches, options, countries, federations] = await Promise.all([
       getAdminMatchesPage(page, pageSize),
       getAdminMatchCreateOptions(),
       getAdminCountriesOptions(),
+      getAdminFederations(),
     ])
 
     matches = fetchedMatches.items
@@ -78,6 +81,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
     teamOptions = options.teams
     cityOptions = options.cities
     countryOptions = countries
+    federationOptions = federations
     stadiumOptions = options.stadiums
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
@@ -208,6 +212,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
             teams={teamOptions}
             cities={cityOptions}
             countries={countryOptions}
+            federations={federationOptions}
             stadiums={stadiumOptions}
             createAction={createMatch}
           />

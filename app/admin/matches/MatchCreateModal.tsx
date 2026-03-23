@@ -7,6 +7,7 @@ import { createStadiumInline } from '@/app/admin/stadiums/actions'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import AdminCancelLink from '@/components/admin/AdminCancelLink'
 import type { AdminCountryOption } from '@/lib/db/cities'
+import type { AdminFederation } from '@/lib/db/countries'
 import {
   renderCreateCityInlineForm,
   renderCreateClubInlineForm,
@@ -24,6 +25,7 @@ type MatchCreateModalProps = {
   teams: AdminTeamOption[]
   cities: AdminCityOption[]
   countries: AdminCountryOption[]
+  federations: AdminFederation[]
   stadiums: AdminStadiumOption[]
   createAction: (formData: FormData) => Promise<void>
 }
@@ -33,6 +35,7 @@ export default function MatchCreateModal({
   teams,
   cities,
   countries,
+  federations,
   stadiums,
   createAction,
 }: MatchCreateModalProps) {
@@ -170,6 +173,7 @@ export default function MatchCreateModal({
                   scope: 'inline_match',
                   cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.name })),
                   countries: countryOptions,
+                  federations,
                   onSelectedCityIdChange: setPendingStadiumCityId,
                   onCityOptionCreated: (option) => {
                     setCityOptions((prev) => {
@@ -207,6 +211,7 @@ export default function MatchCreateModal({
                 inlineForm={renderCreateCityInlineForm({
                   scope: 'inline_match',
                   countries: countryOptions,
+                  federations,
                   onCountryOptionCreated: handleCountryOptionCreated,
                 })}
               />
@@ -238,6 +243,7 @@ export default function MatchCreateModal({
                   scope: 'inline_match_home',
                   cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.name })),
                   countries: countryOptions,
+                  federations,
                   onCityOptionCreated: handleCityOptionCreated,
                   onCountryOptionCreated: handleCountryOptionCreated,
                 })}
@@ -267,6 +273,7 @@ export default function MatchCreateModal({
                   scope: 'inline_match_away',
                   cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.name })),
                   countries: countryOptions,
+                  federations,
                   onCityOptionCreated: handleCityOptionCreated,
                   onCountryOptionCreated: handleCountryOptionCreated,
                 })}

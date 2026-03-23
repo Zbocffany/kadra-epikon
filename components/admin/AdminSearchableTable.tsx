@@ -1,0 +1,223 @@
+'use client'
+
+import { useMemo, useState } from 'react'
+import AdminTable from '@/components/admin/AdminTable'
+import type { AdminTableColumn } from '@/components/admin/AdminTable'
+
+type FilterConfig<T> = {
+  label: string
+  allLabel: string
+  getValue: (row: T) => string | null | undefined
+}
+
+type AdminSearchableTableProps<T extends Record<string, unknown>> = {
+  data: T[]
+  columns: AdminTableColumn<T>[]
+  searchLabel: string
+  searchPlaceholder: string
+  priorityHint: string
+  emptyMessage: string
+  emptySearchMessage: string
+  getPrimaryText: (row: T) => string | null | undefined
+  getSecondaryTexts?: (row: T) => Array<string | null | undefined>
+  filterConfig?: FilterConfig<T>
+  secondaryFilterConfig?: FilterConfig<T>
+  summaryText?: (visible: number, total: number) => string
+  filterWidthClass?: string
+  secondaryFilterWidthClass?: string
+}
+
+function normalizeText(value: string | null | undefined) {
+  return (value ?? '')
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim()
+}
+
+function getRank(
+  primaryText: string | null | undefined,
+  secondaryTexts: Array<string | null | undefined>,
+  query: string
+) {
+  const primary = normalizeText(primaryText)
+  if (!primary) return -1
+
+  if (primary.startsWith(query)) {
+    return 0
+  }
+
+  if (primary.split(/\s+/).some((part) => part.startsWith(query))) {
+    return 1
+  }
+
+  if (primary.includes(query)) {
+    return 2
+  }
+
+  const hasSecondaryMatch = secondaryTexts.some((text) => normalizeText(text).includes(query))
+  return hasSecondaryMatch ? 3 : -1
+}
+
+export default function AdminSearchableTable<T extends Record<string, unknown>>({
+  data,
+  columns,
+  searchLabel,
+  searchPlaceholder,
+  priorityHint,
+  emptyMessage,
+  emptySearchMessage,
+  getPrimaryText,
+  getSecondaryTexts,
+  filterConfig,
+  secondaryFilterConfig,
+  summaryText,
+  filterWidthClass = 'md:w-60',
+  secondaryFilterWidthClass = 'md:w-60',
+}: AdminSearchableTableProps<T>) {
+  const [query, setQuery] = useState('')
+  const [selectedFilter, setSelectedFilter] = useState('')
+  const [selectedSecondaryFilter, setSelectedSecondaryFilter] = useState('')
+
+  const filterOptions = useMemo(() => {
+    if (!filterConfig) return []
+
+    return [...new Set(data.map((row) => filterConfig.getValue(row)).filter(Boolean))]
+      .sort((a, b) => String(a).localeCompare(String(b), 'pl')) as string[]
+  }, [data, filterConfig])
+
+  const secondaryFilterOptions = useMemo(() => {
+    if (!secondaryFilterConfig) return []
+
+    return [...new Set(data.map((row) => secondaryFilterConfig.getValue(row)).filter(Boolean))]
+      .sort((a, b) => String(a).localeCompare(String(b), 'pl')) as string[]
+  }, [data, secondaryFilterConfig])
+
+  const filteredData = useMemo(() => {
+    const normalizedQuery = normalizeText(query)
+
+    const baseByPrimaryFilter = filterConfig && selectedFilter
+      ? data.filter((row) => filterConfig.getValue(row) === selectedFilter)
+      : data
+
+    const base = secondaryFilterConfig && selectedSecondaryFilter
+      ? baseByPrimaryFilter.filter((row) => secondaryFilterConfig.getValue(row) === selectedSecondaryFilter)
+      : baseByPrimaryFilter
+
+    if (!normalizedQuery) {
+      return base
+    }
+
+    return [...base]
+      .map((row) => ({
+        row,
+        rank: getRank(
+          getPrimaryText(row),
+          getSecondaryTexts ? getSecondaryTexts(row) : [],
+          normalizedQuery
+        ),
+      }))
+      .filter((entry) => entry.rank >= 0)
+      .sort((left, right) => {
+        if (left.rank !== right.rank) {
+          return left.rank - right.rank
+        }
+
+        const leftPrimary = String(getPrimaryText(left.row) ?? '')
+        const rightPrimary = String(getPrimaryText(right.row) ?? '')
+        return leftPrimary.localeCompare(rightPrimary, 'pl')
+      })
+      .map((entry) => entry.row)
+  }, [
+    data,
+    filterConfig,
+    secondaryFilterConfig,
+    getPrimaryText,
+    getSecondaryTexts,
+    query,
+    selectedFilter,
+    selectedSecondaryFilter,
+  ])
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end">
+          <div className="flex-1">
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="admin-search" className="text-sm font-medium text-neutral-300">
+                {searchLabel}
+              </label>
+              <input
+                id="admin-search"
+                type="text"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder={searchPlaceholder}
+                className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+              />
+            </div>
+          </div>
+
+          {filterConfig && (
+            <div className={filterWidthClass}>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="admin-filter" className="text-sm font-medium text-neutral-300">
+                  {filterConfig.label}
+                </label>
+                <select
+                  id="admin-filter"
+                  value={selectedFilter}
+                  onChange={(event) => setSelectedFilter(event.target.value)}
+                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+                >
+                  <option value="">{filterConfig.allLabel}</option>
+                  {filterOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {secondaryFilterConfig && (
+            <div className={secondaryFilterWidthClass}>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="admin-secondary-filter" className="text-sm font-medium text-neutral-300">
+                  {secondaryFilterConfig.label}
+                </label>
+                <select
+                  id="admin-secondary-filter"
+                  value={selectedSecondaryFilter}
+                  onChange={(event) => setSelectedSecondaryFilter(event.target.value)}
+                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+                >
+                  <option value="">{secondaryFilterConfig.allLabel}</option>
+                  {secondaryFilterOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <p className="mt-3 text-xs text-neutral-500">{priorityHint}</p>
+      </div>
+
+      <AdminTable
+        data={filteredData}
+        columns={columns}
+        emptyMessage={query.trim() ? emptySearchMessage : emptyMessage}
+      />
+
+      {summaryText && filteredData.length > 0 && (
+        <p className="text-xs text-neutral-500">{summaryText(filteredData.length, data.length)}</p>
+      )}
+    </div>
+  )
+}

@@ -5,6 +5,31 @@ export type AdminClub = {
   id: string
   name: string
   city_name: string | null
+  country_name: string | null
+}
+
+type CityCountryPeriod = {
+  city_id: string
+  country_id: string
+  valid_from: string | null
+  valid_to: string | null
+}
+
+function sortPeriods(periods: CityCountryPeriod[]): CityCountryPeriod[] {
+  return [...periods].sort((a, b) => {
+    const aCurrent = a.valid_to === null
+    const bCurrent = b.valid_to === null
+
+    if (aCurrent !== bCurrent) return aCurrent ? -1 : 1
+
+    const aTo = a.valid_to ? new Date(a.valid_to).getTime() : Number.NEGATIVE_INFINITY
+    const bTo = b.valid_to ? new Date(b.valid_to).getTime() : Number.NEGATIVE_INFINITY
+    if (aTo !== bTo) return bTo - aTo
+
+    const aFrom = a.valid_from ? new Date(a.valid_from).getTime() : Number.NEGATIVE_INFINITY
+    const bFrom = b.valid_from ? new Date(b.valid_from).getTime() : Number.NEGATIVE_INFINITY
+    return bFrom - aFrom
+  })
 }
 
 export type AdminClubDetails = {
@@ -57,22 +82,65 @@ export async function getAdminClubs(): Promise<AdminClub[]> {
   const cityIds = [...new Set(clubs.map((c) => c.club_city_id).filter(Boolean))]
 
   if (!cityIds.length) {
-    return clubs.map((c) => ({ id: c.id, name: c.name, city_name: null }))
+    return clubs.map((c) => ({ id: c.id, name: c.name, city_name: null, country_name: null }))
   }
 
-  const { data: cities, error: citiesError } = await supabase
-    .from('tbl_Cities')
-    .select('id, city_name')
-    .in('id', cityIds)
+  const [
+    { data: cities, error: citiesError },
+    { data: periods, error: periodsError },
+  ] = await Promise.all([
+    supabase
+      .from('tbl_Cities')
+      .select('id, city_name')
+      .in('id', cityIds),
+    supabase
+      .from('tbl_City_Country_Periods')
+      .select('city_id, country_id, valid_from, valid_to')
+      .in('city_id', cityIds),
+  ])
 
   if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
+  if (periodsError) throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
 
   const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
+
+  const periodsByCity = new Map<string, CityCountryPeriod[]>()
+  for (const period of periods ?? []) {
+    const list = periodsByCity.get(period.city_id) ?? []
+    list.push(period)
+    periodsByCity.set(period.city_id, list)
+  }
+
+  const currentCountryIdByCity = new Map<string, string>()
+  for (const cityId of cityIds) {
+    const current = sortPeriods(periodsByCity.get(cityId) ?? [])[0]
+    if (current?.country_id) {
+      currentCountryIdByCity.set(cityId, current.country_id)
+    }
+  }
+
+  const countryIds = [...new Set([...currentCountryIdByCity.values()])]
+  let countryMap = new Map<string, string>()
+
+  if (countryIds.length) {
+    const { data: countries, error: countriesError } = await supabase
+      .from('tbl_Countries')
+      .select('id, name')
+      .in('id', countryIds)
+
+    if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
+    countryMap = new Map((countries ?? []).map((country) => [country.id, country.name]))
+  }
 
   return clubs.map((c) => ({
     id: c.id,
     name: c.name,
     city_name: c.club_city_id ? (cityMap.get(c.club_city_id) ?? null) : null,
+    country_name: c.club_city_id
+      ? ((currentCountryIdByCity.get(c.club_city_id)
+        ? countryMap.get(currentCountryIdByCity.get(c.club_city_id) as string)
+        : null) ?? null)
+      : null,
   }))
 }
 
@@ -96,25 +164,68 @@ export async function getAdminClubsPage(
 
   if (!cityIds.length) {
     return {
-      items: clubs.map((c) => ({ id: c.id, name: c.name, city_name: null })),
+      items: clubs.map((c) => ({ id: c.id, name: c.name, city_name: null, country_name: null })),
       total: count ?? 0,
     }
   }
 
-  const { data: cities, error: citiesError } = await supabase
-    .from('tbl_Cities')
-    .select('id, city_name')
-    .in('id', cityIds)
+  const [
+    { data: cities, error: citiesError },
+    { data: periods, error: periodsError },
+  ] = await Promise.all([
+    supabase
+      .from('tbl_Cities')
+      .select('id, city_name')
+      .in('id', cityIds),
+    supabase
+      .from('tbl_City_Country_Periods')
+      .select('city_id, country_id, valid_from, valid_to')
+      .in('city_id', cityIds),
+  ])
 
   if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
+  if (periodsError) throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
 
   const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
+
+  const periodsByCity = new Map<string, CityCountryPeriod[]>()
+  for (const period of periods ?? []) {
+    const list = periodsByCity.get(period.city_id) ?? []
+    list.push(period)
+    periodsByCity.set(period.city_id, list)
+  }
+
+  const currentCountryIdByCity = new Map<string, string>()
+  for (const cityId of cityIds) {
+    const current = sortPeriods(periodsByCity.get(cityId) ?? [])[0]
+    if (current?.country_id) {
+      currentCountryIdByCity.set(cityId, current.country_id)
+    }
+  }
+
+  const countryIds = [...new Set([...currentCountryIdByCity.values()])]
+  let countryMap = new Map<string, string>()
+
+  if (countryIds.length) {
+    const { data: countries, error: countriesError } = await supabase
+      .from('tbl_Countries')
+      .select('id, name')
+      .in('id', countryIds)
+
+    if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
+    countryMap = new Map((countries ?? []).map((country) => [country.id, country.name]))
+  }
 
   return {
     items: clubs.map((c) => ({
       id: c.id,
       name: c.name,
       city_name: c.club_city_id ? (cityMap.get(c.club_city_id) ?? null) : null,
+      country_name: c.club_city_id
+        ? ((currentCountryIdByCity.get(c.club_city_id)
+          ? countryMap.get(currentCountryIdByCity.get(c.club_city_id) as string)
+          : null) ?? null)
+        : null,
     })),
     total: count ?? 0,
   }
