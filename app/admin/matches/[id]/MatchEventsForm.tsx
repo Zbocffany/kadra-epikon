@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { AdminMatchEvent, AdminMatchParticipantPersonOption, AdminTeamOption, MatchEventType, ResultType } from '@/lib/db/matches'
+import type { AdminMatchEvent, AdminMatchParticipantPersonOption, AdminTeamOption, MatchEventType } from '@/lib/db/matches'
 import { Icon } from '@/components/icons'
-import { calculateMatchScore, formatMatchScore } from '../scoreCalculation'
 
 export type MatchEventPersonOption = Pick<AdminMatchParticipantPersonOption, 'id' | 'label'> & {
   teamIds: string[]
@@ -220,18 +219,12 @@ export default function MatchEventsForm({
   teams,
   matchId,
   clearDraft,
-  resultType,
-  homeTeamId,
-  awayTeamId,
 }: {
   events: AdminMatchEvent[]
   people: MatchEventPersonOption[]
   teams: AdminTeamOption[]
   matchId: string
   clearDraft: boolean
-  resultType: ResultType | null
-  homeTeamId: string
-  awayTeamId: string
 }) {
   const [rows, setRows] = useState<EventRow[]>(() => events.map(mapEventToRow))
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
@@ -339,64 +332,6 @@ export default function MatchEventsForm({
   return (
     <div className="space-y-4">
       <input type="hidden" name="events_touched" value={isTouched ? '1' : '0'} />
-      
-      {/* Wynik meczu */}
-      <div className="rounded-lg border border-neutral-800 bg-neutral-950 p-3">
-        <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500 mb-2">Wynik meczu</p>
-        <div className="flex items-center gap-3">
-          <div className="text-center">
-            <p className="text-xs text-neutral-400">{teams.find(t => t.id === homeTeamId)?.label || 'Gospodarz'}</p>
-            <p className="text-2xl font-bold text-neutral-100 mt-1">
-              {calculateMatchScore(rows.map(r => ({
-                id: 'temporary',
-                team_id: r.teamId || null,
-                event_type: r.eventType,
-                minute: parseInt(r.minute) || 0,
-                minute_extra: r.minuteExtra ? parseInt(r.minuteExtra) : null,
-                primary_person_id: r.primaryPersonId || null,
-                secondary_person_id: r.secondaryPersonId || null,
-                notes: null,
-                event_order: null,
-              } as AdminMatchEvent)), homeTeamId, awayTeamId).homeGoals}
-            </p>
-          </div>
-          <div className="text-center flex-1">
-            <p className="text-sm text-neutral-400 mb-1">
-              {formatMatchScore(
-                calculateMatchScore(rows.map(r => ({
-                  id: 'temporary',
-                  team_id: r.teamId || null,
-                  event_type: r.eventType,
-                  minute: parseInt(r.minute) || 0,
-                  minute_extra: r.minuteExtra ? parseInt(r.minuteExtra) : null,
-                  primary_person_id: r.primaryPersonId || null,
-                  secondary_person_id: r.secondaryPersonId || null,
-                  notes: null,
-                  event_order: null,
-                } as AdminMatchEvent)), homeTeamId, awayTeamId),
-                resultType
-              )}
-            </p>
-          </div>
-          <div className="text-center">
-            <p className="text-xs text-neutral-400">{teams.find(t => t.id !== homeTeamId)?.label || 'Gość'}</p>
-            <p className="text-2xl font-bold text-neutral-100 mt-1">
-              {calculateMatchScore(rows.map(r => ({
-                id: 'temporary',
-                team_id: r.teamId || null,
-                event_type: r.eventType,
-                minute: parseInt(r.minute) || 0,
-                minute_extra: r.minuteExtra ? parseInt(r.minuteExtra) : null,
-                primary_person_id: r.primaryPersonId || null,
-                secondary_person_id: r.secondaryPersonId || null,
-                notes: null,
-                event_order: null,
-              } as AdminMatchEvent)), homeTeamId, awayTeamId).awayGoals}
-            </p>
-          </div>
-        </div>
-      </div>
-
       <div className="overflow-visible rounded-lg border border-neutral-800">
         <table className="w-full table-fixed">
           <colgroup>

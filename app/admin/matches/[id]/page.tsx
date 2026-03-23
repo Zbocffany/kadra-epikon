@@ -321,18 +321,12 @@ function MatchEventsSectionEdit({
   teams,
   matchId,
   wasSaved,
-  resultType,
-  homeTeamId,
-  awayTeamId,
 }: {
   events: AdminMatchEvent[]
   people: MatchEventPersonOption[]
   teams: AdminTeamOption[]
   matchId: string
   wasSaved: boolean
-  resultType: AdminMatchDetails['result_type']
-  homeTeamId: string
-  awayTeamId: string
 }) {
   return (
     <section className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-6">
@@ -344,9 +338,6 @@ function MatchEventsSectionEdit({
           teams={teams}
           matchId={matchId}
           clearDraft={wasSaved}
-          resultType={resultType}
-          homeTeamId={homeTeamId}
-          awayTeamId={awayTeamId}
         />
       </div>
     </section>
@@ -635,7 +626,15 @@ export default async function AdminMatchDetailsPage({
 
           <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-6">
             <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">Admin / Mecze</p>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight">{matchTitle}</h1>
+            <h1 className="mt-2 text-3xl font-bold tracking-tight">
+              {matchTitle}
+              {displayScore && (
+                <>
+                  {'\u00A0'.repeat(10)}
+                  {displayScore}
+                </>
+              )}
+            </h1>
 
             {saved && (
               <div className="mt-6 rounded-lg border border-emerald-800 bg-emerald-950/50 px-5 py-4 text-sm text-emerald-300">
@@ -700,9 +699,6 @@ export default async function AdminMatchDetailsPage({
             teams={eventTeams}
             matchId={match.id}
             wasSaved={saved === '1'}
-            resultType={match.result_type}
-            homeTeamId={match.home_team_id}
-            awayTeamId={match.away_team_id}
           />
 
           <div className="mt-8 flex items-center justify-end gap-2">
