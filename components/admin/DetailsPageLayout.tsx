@@ -9,6 +9,7 @@ type DetailsPageHeaderProps = {
   editHref: string
   deleteAction: (formData: FormData) => Promise<void>
   deleteId: string
+  deleteConfirmMessage?: string
 }
 
 type DetailsPageContentProps = {
@@ -30,8 +31,10 @@ export function DetailsPageHeader({
   editHref,
   deleteAction,
   deleteId,
+  deleteConfirmMessage,
 }: DetailsPageHeaderProps) {
   const deleteTargetLabel = title.trim() && title !== '—' ? `"${title}"` : 'ten element'
+  const confirmMessage = deleteConfirmMessage ?? `Czy na pewno chcesz usunąć ${deleteTargetLabel}?`
 
   return (
     <div className="mb-6 flex items-center justify-between gap-3">
@@ -53,7 +56,7 @@ export function DetailsPageHeader({
           <input type="hidden" name="id" value={deleteId} />
           <ConfirmSubmitButton
             type="submit"
-            confirmMessage={`Czy na pewno chcesz usunąć ${deleteTargetLabel}?`}
+            confirmMessage={confirmMessage}
             className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
           >
             Usuń

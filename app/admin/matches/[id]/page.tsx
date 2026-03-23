@@ -2,7 +2,10 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import MatchCoachesForm from './MatchCoachesForm'
+import type { MatchEventPersonOption } from './MatchEventsForm'
 import MatchSquadForm from './MatchSquadForm'
+import MatchEventsForm from './MatchEventsForm'
+import ValidationIssuesModal from './ValidationIssuesModal'
 import EditMatchFormWrapper from './EditMatchFormWrapper'
 import EditMatchLocationFields from './EditMatchLocationFields'
 import RefereePersonField from './RefereePersonField'
@@ -24,7 +27,9 @@ import {
   getLatestPlayerClubTeamByPersonIds,
   getAdminMatchCreateOptions,
   getAdminMatchDetails,
+  getAdminMatchEvents,
   getAdminMatchParticipants,
+  type AdminMatchEvent,
   type AdminMatchDetails,
   type AdminMatchParticipant,
   type AdminMatchParticipantPersonOption,
@@ -309,6 +314,35 @@ function MatchTeamParticipantsSection({
   )
 }
 
+function MatchEventsSectionEdit({
+  events,
+  people,
+  teams,
+  matchId,
+  wasSaved,
+}: {
+  events: AdminMatchEvent[]
+  people: MatchEventPersonOption[]
+  teams: AdminTeamOption[]
+  matchId: string
+  wasSaved: boolean
+}) {
+  return (
+    <section className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-6">
+      <h2 className="text-xl font-semibold text-neutral-100">Zdarzenia meczowe</h2>
+      <div className="mt-4">
+        <MatchEventsForm
+          events={events}
+          people={people}
+          teams={teams}
+          matchId={matchId}
+          clearDraft={wasSaved}
+        />
+      </div>
+    </section>
+  )
+}
+
 export default async function AdminMatchDetailsPage({
   params,
   searchParams,
@@ -318,6 +352,10 @@ export default async function AdminMatchDetailsPage({
 }) {
   const { id } = await params
   const { mode, saved, error } = await searchParams
+  const validationErrors = error?.startsWith('VALIDATION_LIST::')
+    ? error.replace('VALIDATION_LIST::', '').split('||').map((item) => item.trim()).filter(Boolean)
+    : []
+  const plainError = validationErrors.length ? null : error
 
   const match = await getAdminMatchDetails(id)
 
@@ -325,19 +363,55 @@ export default async function AdminMatchDetailsPage({
     notFound()
   }
 
-  const [options, participants, cities, countries, federations, clubTeams] = await Promise.all([
+  const [options, participants, cities, countries, federations, clubTeams, events] = await Promise.all([
     getAdminMatchCreateOptions(),
     getAdminMatchParticipants(match),
     getAdminPersonBirthCityOptions(),
     getAdminCountriesOptions(),
     getAdminFederations(),
     getAdminClubTeamOptions(),
+    getAdminMatchEvents(match.id),
   ])
 
   const latestPlayerClubTeamByPersonId = await getLatestPlayerClubTeamByPersonIds(
     participants.people.map((person) => person.id),
     { excludeMatchId: match.id }
   )
+
+  const eventPeopleById = new Map<string, MatchEventPersonOption>()
+
+  for (const participant of [
+    ...participants.homeParticipants,
+    ...participants.awayParticipants,
+    ...participants.referees,
+  ]) {
+    const existing = eventPeopleById.get(participant.person_id)
+    const nextTeamIds = participant.team_id
+      ? (existing?.teamIds.includes(participant.team_id)
+          ? existing.teamIds
+          : [...(existing?.teamIds ?? []), participant.team_id])
+      : (existing?.teamIds ?? [])
+
+    eventPeopleById.set(participant.person_id, {
+      id: participant.person_id,
+      label: participant.person_name,
+      teamIds: nextTeamIds,
+    })
+  }
+
+  const eventPeople = [...eventPeopleById.values()]
+    .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
+
+  const eventTeams = [
+    options.teams.find((team) => team.id === match.home_team_id) ?? {
+      id: match.home_team_id,
+      label: match.home_team_name,
+    },
+    options.teams.find((team) => team.id === match.away_team_id) ?? {
+      id: match.away_team_id,
+      label: match.away_team_name,
+    },
+  ]
 
   const isEdit = mode === 'edit'
   const competitionName =
@@ -528,6 +602,7 @@ export default async function AdminMatchDetailsPage({
   ) : null
 
   const matchTitle = `${match.home_team_name} vs ${match.away_team_name}`
+  const deleteWarningMessage = `Uwaga: usunięcie meczu "${matchTitle}" jest nieodwracalne. Zostaną usunięte wszystkie zdarzenia meczowe oraz wszystkie przypisania osób do tego meczu (składy, sztab, sędzia). Same osoby nie zostaną usunięte z bazy.`
   const matchDateTimeLabel = `${formatDate(match.match_date)}${match.match_time ? ` ${match.match_time.slice(0, 5)}` : ''}`
   const currentReferee = participants.referees[0] ?? null
 
@@ -557,9 +632,9 @@ export default async function AdminMatchDetailsPage({
               </div>
             )}
 
-            {error && (
+            {plainError && (
               <div className="mt-6 rounded-lg border border-red-800 bg-red-950/50 px-5 py-4 text-sm text-red-300">
-                {error}
+                {plainError}
               </div>
             )}
 
@@ -608,10 +683,18 @@ export default async function AdminMatchDetailsPage({
             />
           </section>
 
+          <MatchEventsSectionEdit
+            events={events}
+            people={eventPeople}
+            teams={eventTeams}
+            matchId={match.id}
+            wasSaved={saved === '1'}
+          />
+
           <div className="mt-8 flex items-center justify-end gap-2">
             <ConfirmSubmitButton
               formAction={deleteMatch}
-              confirmMessage={`Czy na pewno chcesz usunąć mecz "${matchTitle}"?`}
+              confirmMessage={deleteWarningMessage}
               className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
             >
               Usuń
@@ -630,6 +713,13 @@ export default async function AdminMatchDetailsPage({
             </button>
           </div>
         </form>
+
+        {validationErrors.length > 0 && (
+          <ValidationIssuesModal
+            errors={validationErrors}
+            exitHref={`/admin/matches/${match.id}`}
+          />
+        )}
       </DetailsPageContainer>
     </EditMatchFormWrapper>
     )
@@ -644,6 +734,7 @@ export default async function AdminMatchDetailsPage({
         editHref={`/admin/matches/${match.id}?mode=edit`}
         deleteAction={deleteMatch}
         deleteId={match.id}
+        deleteConfirmMessage={deleteWarningMessage}
       />
 
 

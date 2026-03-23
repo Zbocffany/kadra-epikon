@@ -29,6 +29,20 @@ export type PlayerPosition =
   | 'MIDFIELDER'
   | 'ATTACKER'
 
+export type MatchEventType =
+  | 'GOAL'
+  | 'OWN_GOAL'
+  | 'PENALTY_GOAL'
+  | 'YELLOW_CARD'
+  | 'SECOND_YELLOW_CARD'
+  | 'RED_CARD'
+  | 'PENALTY_SHOOTOUT_SCORED'
+  | 'PENALTY_SHOOTOUT_MISSED'
+  | 'PENALTY_SHOOTOUT_SAVED'
+  | 'MATCH_PENALTY_SAVED'
+  | 'MATCH_PENALTY_MISSED'
+  | 'SUBSTITUTION'
+
 export type AdminMatch = {
   id: string
   match_date: string
@@ -92,6 +106,18 @@ export type AdminMatchParticipantPersonOption = {
   nickname: string
 }
 
+export type AdminMatchEvent = {
+  id: string
+  team_id: string | null
+  event_type: MatchEventType
+  minute: number
+  minute_extra: number | null
+  primary_person_id: string | null
+  secondary_person_id: string | null
+  notes: string | null
+  event_order: number | null
+}
+
 type MatchParticipantRow = {
   id: string
   team_id: string | null
@@ -152,6 +178,18 @@ type MatchListRow = {
   competition_id: string
   home_team_id: string
   away_team_id: string
+}
+
+type MatchEventRow = {
+  id: string
+  team_id: string | null
+  event_type: MatchEventType
+  minute: number
+  minute_extra: number | null
+  primary_person_id: string | null
+  secondary_person_id: string | null
+  notes: string | null
+  event_order: number | null
 }
 
 function buildPersonDisplayName(person: MatchParticipantPersonRow): string {
@@ -624,6 +662,33 @@ export async function getAdminMatchCreateOptions(): Promise<{
     cities: cityOptions,
     stadiums: stadiumOptions,
   }
+}
+
+export async function getAdminMatchEvents(matchId: string): Promise<AdminMatchEvent[]> {
+  const supabase = createServiceRoleClient()
+
+  const { data: events, error } = await supabase
+    .from('tbl_Match_Events')
+    .select('id, team_id, event_type, minute, minute_extra, primary_person_id, secondary_person_id, notes, event_order')
+    .eq('match_id', matchId)
+    .order('minute', { ascending: true })
+    .order('minute_extra', { ascending: true, nullsFirst: true })
+    .order('event_order', { ascending: true, nullsFirst: true })
+    .order('id', { ascending: true })
+
+  if (error) throw new Error(`tbl_Match_Events: ${error.message}`)
+
+  return ((events ?? []) as MatchEventRow[]).map((row) => ({
+    id: row.id,
+    team_id: row.team_id,
+    event_type: row.event_type,
+    minute: row.minute,
+    minute_extra: row.minute_extra,
+    primary_person_id: row.primary_person_id,
+    secondary_person_id: row.secondary_person_id,
+    notes: row.notes,
+    event_order: row.event_order,
+  }))
 }
 
 export async function getAdminClubTeamOptions(): Promise<AdminTeamOption[]> {

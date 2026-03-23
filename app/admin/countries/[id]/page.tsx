@@ -19,6 +19,7 @@ import {
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
 import AdminCancelLink from '@/components/admin/AdminCancelLink'
+import CountryFlag from '@/components/CountryFlag'
 import {
   DetailsPageContainer,
   DetailsPageHeader,
@@ -96,7 +97,10 @@ export default async function AdminCountryDetailsPage({
             />
           </div>
         ) : (
-          <DetailsFieldValue value={country.name} />
+          <div className="flex items-center gap-3">
+            <CountryFlag fifaCode={country.fifa_code} countryName={country.name} className="h-5 w-[30px]" />
+            <DetailsFieldValue value={country.name} />
+          </div>
         )}
       </DetailsFieldCard>
 

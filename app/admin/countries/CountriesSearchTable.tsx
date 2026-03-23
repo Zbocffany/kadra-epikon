@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import AdminSearchableTable from '@/components/admin/AdminSearchableTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
+import CountryFlag from '@/components/CountryFlag'
 import type { AdminCountry } from '@/lib/db/countries'
 
 export default function CountriesSearchTable({ countries }: { countries: AdminCountry[] }) {
@@ -17,12 +18,15 @@ export default function CountriesSearchTable({ countries }: { countries: AdminCo
       key: 'name',
       label: 'Nazwa',
       render: (country) => (
-        <Link
-          href={`/admin/countries/${country.id}`}
-          className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-        >
-          {country.name}
-        </Link>
+        <div className="flex items-center gap-2">
+          <CountryFlag fifaCode={country.fifa_code} countryName={country.name} />
+          <Link
+            href={`/admin/countries/${country.id}`}
+            className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+          >
+            {country.name}
+          </Link>
+        </div>
       ),
       className: 'font-medium',
     },

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import CountryFlag from '@/components/CountryFlag'
 import AdminSearchableTable from '@/components/admin/AdminSearchableTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import type { AdminPersonListItem, AdminPersonRole } from '@/lib/db/people'
@@ -69,9 +70,34 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
     },
     {
       key: 'birth_country',
-      label: 'Kraj ur.',
-      render: (person) => person.birth_country_name ?? '—',
-      className: 'text-neutral-400',
+      label: 'Kraj',
+      render: (person) => {
+        const showBirthFlag =
+          !!person.birth_country_name &&
+          !person.represented_country_names.includes(person.birth_country_name)
+
+        const hasAny = showBirthFlag || person.represented_country_names.length > 0
+        if (!hasAny) return '—'
+
+        return (
+          <div className="flex items-center justify-center gap-1">
+            {showBirthFlag && (
+              <CountryFlag
+                fifaCode={person.birth_country_fifa_code}
+                countryName={person.birth_country_name!}
+              />
+            )}
+            {person.represented_country_names.map((name, i) => (
+              <CountryFlag
+                key={name}
+                fifaCode={person.represented_country_fifa_codes[i] ?? null}
+                countryName={name}
+              />
+            ))}
+          </div>
+        )
+      },
+      className: 'text-center',
     },
     {
       key: 'role',
