@@ -749,7 +749,11 @@ export default async function AdminMatchDetailsPage({
 
 
       <DetailsPageContent
-        title={matchTitle}
+        title={
+          displayScore
+            ? `${matchTitle}${'\u00A0'.repeat(10)}${displayScore}`
+            : matchTitle
+        }
         breadcrumb={
           <div className="flex items-center gap-3">
             <span>{matchDateTimeLabel}</span>
@@ -788,17 +792,10 @@ export default async function AdminMatchDetailsPage({
           </div>
         )}
         headerRight={(
-          <div className="flex items-center gap-4">
-            {displayScore ? (
-              <span className="text-lg font-bold text-neutral-100">
-                {displayScore}
-              </span>
-            ) : null}
-            <div className="flex items-center gap-2">
-              <ResultTypeBadge resultType={match.result_type} />
-              <MatchStatusBadge status={match.match_status} />
-              <EditorialStatusBadge status={match.editorial_status} />
-            </div>
+          <div className="flex items-center gap-2">
+            <ResultTypeBadge resultType={match.result_type} />
+            <MatchStatusBadge status={match.match_status} />
+            <EditorialStatusBadge status={match.editorial_status} />
           </div>
         )}
         saved={saved}
