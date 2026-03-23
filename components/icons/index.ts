@@ -1,0 +1,5 @@
+export { default as Icon } from './Icon'
+export { default as CardsIcon } from './CardsIcon'
+export { default as GoalIcon } from './GoalIcon'
+export { default as SubstitutionIcon } from './SubstitutionIcon'
+export type { AppIconName } from './registry'

@@ -1201,6 +1201,7 @@ function collectConsistencyValidationErrors(
     [awayTeamId, new Set<string>()],
   ])
   const firstYellowByPlayer = new Set<string>()
+  const redCardedPlayers = new Set<string>()
 
   const isOnPitch = (personId: string): boolean => (
     currentOnPitchByTeam.get(homeTeamId)?.has(personId)
@@ -1218,6 +1219,14 @@ function collectConsistencyValidationErrors(
   let shootoutEligiblePlayers: Set<string> | null = null
 
   for (const event of orderedEvents) {
+    if (event.primaryPersonId && redCardedPlayers.has(event.primaryPersonId)) {
+      errors.push(`Wiersz ${event.rowNumber}: zawodnik, który wcześniej dostał czerwoną kartkę, nie może uczestniczyć w kolejnych zdarzeniach (Osoba 1).`)
+    }
+
+    if (event.secondaryPersonId && redCardedPlayers.has(event.secondaryPersonId)) {
+      errors.push(`Wiersz ${event.rowNumber}: zawodnik, który wcześniej dostał czerwoną kartkę, nie może uczestniczyć w kolejnych zdarzeniach (Osoba 2).`)
+    }
+
     if (event.eventType === 'YELLOW_CARD' && event.primaryPersonId) {
       firstYellowByPlayer.add(event.primaryPersonId)
     }
@@ -1315,6 +1324,17 @@ function collectConsistencyValidationErrors(
       currentOnPitch.add(onPlayerId)
       currentOnPitchByTeam.set(event.teamId, currentOnPitch)
       wentOffByTeam.set(event.teamId, wentOff)
+    }
+
+    if (event.eventType === 'RED_CARD' && event.primaryPersonId) {
+      redCardedPlayers.add(event.primaryPersonId)
+
+      const teamId = personTeam.get(event.primaryPersonId)
+      if (teamId) {
+        const currentOnPitch = currentOnPitchByTeam.get(teamId) ?? new Set<string>()
+        currentOnPitch.delete(event.primaryPersonId)
+        currentOnPitchByTeam.set(teamId, currentOnPitch)
+      }
     }
   }
 

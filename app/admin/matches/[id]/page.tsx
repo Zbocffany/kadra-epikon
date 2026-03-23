@@ -17,6 +17,7 @@ import { getMatchStatusLabel, MATCH_STATUS_OPTIONS } from '../matchStatusLabels'
 import { getResultTypeLabel, RESULT_TYPE_OPTIONS } from '../resultTypeLabels'
 import { compareByPlayerPosition } from '../playerPositionSort'
 import { renderCreateClubInlineForm } from '../inlineCreateForms'
+import { getDisplayScore } from '../scoreCalculation'
 import {
   DetailsPageContainer,
   DetailsPageContent,
@@ -320,12 +321,18 @@ function MatchEventsSectionEdit({
   teams,
   matchId,
   wasSaved,
+  resultType,
+  homeTeamId,
+  awayTeamId,
 }: {
   events: AdminMatchEvent[]
   people: MatchEventPersonOption[]
   teams: AdminTeamOption[]
   matchId: string
   wasSaved: boolean
+  resultType: AdminMatchDetails['result_type']
+  homeTeamId: string
+  awayTeamId: string
 }) {
   return (
     <section className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-6">
@@ -337,6 +344,9 @@ function MatchEventsSectionEdit({
           teams={teams}
           matchId={matchId}
           clearDraft={wasSaved}
+          resultType={resultType}
+          homeTeamId={homeTeamId}
+          awayTeamId={awayTeamId}
         />
       </div>
     </section>
@@ -605,6 +615,7 @@ export default async function AdminMatchDetailsPage({
   const deleteWarningMessage = `Uwaga: usunięcie meczu "${matchTitle}" jest nieodwracalne. Zostaną usunięte wszystkie zdarzenia meczowe oraz wszystkie przypisania osób do tego meczu (składy, sztab, sędzia). Same osoby nie zostaną usunięte z bazy.`
   const matchDateTimeLabel = `${formatDate(match.match_date)}${match.match_time ? ` ${match.match_time.slice(0, 5)}` : ''}`
   const currentReferee = participants.referees[0] ?? null
+  const displayScore = getDisplayScore(events, match.result_type, match.home_team_id, match.away_team_id)
 
   if (isEdit) {
     return (
@@ -689,6 +700,9 @@ export default async function AdminMatchDetailsPage({
             teams={eventTeams}
             matchId={match.id}
             wasSaved={saved === '1'}
+            resultType={match.result_type}
+            homeTeamId={match.home_team_id}
+            awayTeamId={match.away_team_id}
           />
 
           <div className="mt-8 flex items-center justify-end gap-2">
@@ -778,10 +792,17 @@ export default async function AdminMatchDetailsPage({
           </div>
         )}
         headerRight={(
-          <div className="flex items-center gap-2">
-            <ResultTypeBadge resultType={match.result_type} />
-            <MatchStatusBadge status={match.match_status} />
-            <EditorialStatusBadge status={match.editorial_status} />
+          <div className="flex items-center gap-4">
+            {displayScore ? (
+              <span className="text-lg font-bold text-neutral-100">
+                {displayScore}
+              </span>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <ResultTypeBadge resultType={match.result_type} />
+              <MatchStatusBadge status={match.match_status} />
+              <EditorialStatusBadge status={match.editorial_status} />
+            </div>
           </div>
         )}
         saved={saved}
