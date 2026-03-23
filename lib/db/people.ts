@@ -8,6 +8,20 @@ type CityCountryPeriod = {
   valid_to: string | null
 }
 
+export type AdminPersonRole = 'PLAYER' | 'COACH' | 'REFEREE'
+
+const ROLE_ORDER: Record<AdminPersonRole, number> = {
+  PLAYER: 0,
+  COACH: 1,
+  REFEREE: 2,
+}
+
+const ROLE_LABEL: Record<AdminPersonRole, string> = {
+  PLAYER: 'Piłkarz',
+  COACH: 'Trener',
+  REFEREE: 'Sędzia',
+}
+
 export type AdminPersonListItem = {
   id: string
   first_name: string | null
@@ -20,6 +34,8 @@ export type AdminPersonListItem = {
   birth_city_name: string | null
   birth_country_name: string | null
   represented_country_names: string[]
+  roles: AdminPersonRole[]
+  role_labels: string[]
 }
 
 export type AdminPersonDetails = AdminPersonListItem & {
@@ -63,6 +79,44 @@ function buildDisplayName(person: Pick<AdminPersonListItem, 'first_name' | 'last
 
 export function getPersonDisplayName(person: Pick<AdminPersonListItem, 'first_name' | 'last_name' | 'nickname'>): string {
   return buildDisplayName(person)
+}
+
+function mapRolesToLabels(roles: AdminPersonRole[]): string[] {
+  return roles.map((role) => ROLE_LABEL[role])
+}
+
+async function getRolesByPersonId(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  personIds: string[]
+): Promise<Map<string, AdminPersonRole[]>> {
+  if (!personIds.length) {
+    return new Map()
+  }
+
+  const { data: participants, error: participantsError } = await supabase
+    .from('tbl_Match_Participants')
+    .select('person_id, role')
+    .in('person_id', personIds)
+
+  if (participantsError) {
+    throw new Error(`tbl_Match_Participants: ${participantsError.message}`)
+  }
+
+  const map = new Map<string, AdminPersonRole[]>()
+
+  for (const row of participants ?? []) {
+    const role = row.role as AdminPersonRole
+    if (!role || !(role in ROLE_ORDER)) continue
+
+    const existing = map.get(row.person_id) ?? []
+    if (!existing.includes(role)) {
+      existing.push(role)
+      existing.sort((left, right) => ROLE_ORDER[left] - ROLE_ORDER[right])
+      map.set(row.person_id, existing)
+    }
+  }
+
+  return map
 }
 
 async function getExplicitRepresentedCountryNamesByPersonId(
@@ -236,6 +290,10 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
     supabase,
     people.map((person) => person.id)
   )
+  const rolesByPersonId = await getRolesByPersonId(
+    supabase,
+    people.map((person) => person.id)
+  )
 
   return people
     .map((person) => ({
@@ -261,6 +319,8 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
 
         return fallback ? [fallback] : []
       })(),
+      roles: rolesByPersonId.get(person.id) ?? [],
+      role_labels: mapRolesToLabels(rolesByPersonId.get(person.id) ?? []),
     }))
     .sort((a, b) => buildDisplayName(a).localeCompare(buildDisplayName(b), 'pl'))
 }
@@ -307,6 +367,10 @@ export async function getAdminPeoplePage(
     supabase,
     people.map((person) => person.id)
   )
+  const rolesByPersonId = await getRolesByPersonId(
+    supabase,
+    people.map((person) => person.id)
+  )
 
   return {
     items: people.map((person) => ({
@@ -332,6 +396,8 @@ export async function getAdminPeoplePage(
 
         return fallback ? [fallback] : []
       })(),
+      roles: rolesByPersonId.get(person.id) ?? [],
+      role_labels: mapRolesToLabels(rolesByPersonId.get(person.id) ?? []),
     })),
     total: count ?? 0,
   }
@@ -371,9 +437,11 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
 
   const representedCountryNamesByPersonId = await getExplicitRepresentedCountryNamesByPersonId(supabase, [person.id])
   const representedCountryIdsByPersonId = await getExplicitRepresentedCountryIdsByPersonId(supabase, [person.id])
+  const rolesByPersonId = await getRolesByPersonId(supabase, [person.id])
   const explicitRepresented = representedCountryNamesByPersonId.get(person.id) ?? []
   const explicitRepresentedIds = representedCountryIdsByPersonId.get(person.id) ?? []
   const fallbackRepresented = country?.name ?? null
+  const roles = rolesByPersonId.get(person.id) ?? []
 
   return {
     id: person.id,
@@ -390,5 +458,7 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     represented_country_names: explicitRepresented.length
       ? explicitRepresented
       : (fallbackRepresented ? [fallbackRepresented] : []),
+    roles,
+    role_labels: mapRolesToLabels(roles),
   }
 }

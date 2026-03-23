@@ -10,6 +10,9 @@ import { createCountryInline } from '@/app/admin/countries/actions'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 
+const MATCH_CITY_CREATED_EVENT = 'match:city-created'
+const MATCH_COUNTRY_CREATED_EVENT = 'match:country-created'
+
 type AddPersonModalProps = {
   isOpen: boolean
   onClose: () => void
@@ -49,6 +52,46 @@ export default function AddPersonModal({
   useEffect(() => {
     setCountryOptions(countries)
   }, [countries])
+
+  useEffect(() => {
+    function handleExternalCityCreated(event: Event) {
+      const customEvent = event as CustomEvent<AdminPersonBirthCityOption>
+      const createdCity = customEvent.detail
+
+      if (!createdCity) return
+
+      setCityOptions((prev) => {
+        if (prev.some((city) => city.id === createdCity.id)) {
+          return prev
+        }
+
+        return [...prev, createdCity].sort((a, b) => a.city_name.localeCompare(b.city_name, 'pl'))
+      })
+    }
+
+    function handleExternalCountryCreated(event: Event) {
+      const customEvent = event as CustomEvent<AdminCountryOption>
+      const createdCountry = customEvent.detail
+
+      if (!createdCountry) return
+
+      setCountryOptions((prev) => {
+        if (prev.some((country) => country.id === createdCountry.id)) {
+          return prev
+        }
+
+        return [...prev, createdCountry].sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+      })
+    }
+
+    window.addEventListener(MATCH_CITY_CREATED_EVENT, handleExternalCityCreated)
+    window.addEventListener(MATCH_COUNTRY_CREATED_EVENT, handleExternalCountryCreated)
+
+    return () => {
+      window.removeEventListener(MATCH_CITY_CREATED_EVENT, handleExternalCityCreated)
+      window.removeEventListener(MATCH_COUNTRY_CREATED_EVENT, handleExternalCountryCreated)
+    }
+  }, [])
 
   // Build city-to-country mapping
   const cityCountryMap = useMemo(
@@ -223,26 +266,29 @@ export default function AddPersonModal({
             onSelectedIdChange={handleCityChange}
             onOptionCreated={(option) => {
               const createdCountryId = pendingCityCountryIdRef.current || null
+              const countryName = createdCountryId
+                ? countryOptions.find((country) => country.id === createdCountryId)?.name ?? null
+                : null
+              const createdCity: AdminPersonBirthCityOption = {
+                id: option.id,
+                city_name: option.label ?? '—',
+                current_country_id: createdCountryId,
+                current_country_name: countryName,
+              }
 
               setCityOptions((prev) => {
                 if (prev.some((city) => city.id === option.id)) {
                   return prev
                 }
 
-                const countryName = createdCountryId
-                  ? countryOptions.find((country) => country.id === createdCountryId)?.name ?? null
-                  : null
-
-                return [
-                  ...prev,
-                  {
-                    id: option.id,
-                    city_name: option.label ?? '—',
-                    current_country_id: createdCountryId,
-                    current_country_name: countryName,
-                  },
-                ].sort((a, b) => a.city_name.localeCompare(b.city_name, 'pl'))
+                return [...prev, createdCity].sort((a, b) => a.city_name.localeCompare(b.city_name, 'pl'))
               })
+
+              window.dispatchEvent(
+                new CustomEvent<AdminPersonBirthCityOption>(MATCH_CITY_CREATED_EVENT, {
+                  detail: createdCity,
+                })
+              )
 
               if (createdCountryId) {
                 setSelectedCountryId(createdCountryId)
@@ -281,14 +327,22 @@ export default function AddPersonModal({
                   createAction={createCountryInline}
                   onSelectedIdChange={handlePendingCityCountryChange}
                   onOptionCreated={(option) => {
+                    const createdCountry = { id: option.id, name: option.label ?? '—' }
+
                     setCountryOptions((prev) => {
                       if (prev.some((country) => country.id === option.id)) {
                         return prev
                       }
 
-                      return [...prev, { id: option.id, name: option.label ?? '—' }]
+                      return [...prev, createdCountry]
                         .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
                     })
+
+                    window.dispatchEvent(
+                      new CustomEvent<AdminCountryOption>(MATCH_COUNTRY_CREATED_EVENT, {
+                        detail: createdCountry,
+                      })
+                    )
 
                     handlePendingCityCountryChange(option.id)
                   }}
@@ -379,14 +433,22 @@ export default function AddPersonModal({
               createAction={createCountryInline}
               onSelectedIdChange={handleBirthCountryChange}
               onOptionCreated={(option) => {
+                const createdCountry = { id: option.id, name: option.label ?? '—' }
+
                 setCountryOptions((prev) => {
                   if (prev.some((country) => country.id === option.id)) {
                     return prev
                   }
 
-                  return [...prev, { id: option.id, name: option.label ?? '—' }]
+                  return [...prev, createdCountry]
                     .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
                 })
+
+                window.dispatchEvent(
+                  new CustomEvent<AdminCountryOption>(MATCH_COUNTRY_CREATED_EVENT, {
+                    detail: createdCountry,
+                  })
+                )
 
                 setSelectedCountryId(option.id)
               }}

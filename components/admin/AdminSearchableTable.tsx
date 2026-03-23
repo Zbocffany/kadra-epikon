@@ -7,7 +7,7 @@ import type { AdminTableColumn } from '@/components/admin/AdminTable'
 type FilterConfig<T> = {
   label: string
   allLabel: string
-  getValue: (row: T) => string | null | undefined
+  getValue: (row: T) => string | string[] | null | undefined
 }
 
 type AdminSearchableTableProps<T extends Record<string, unknown>> = {
@@ -22,9 +22,19 @@ type AdminSearchableTableProps<T extends Record<string, unknown>> = {
   getSecondaryTexts?: (row: T) => Array<string | null | undefined>
   filterConfig?: FilterConfig<T>
   secondaryFilterConfig?: FilterConfig<T>
+  tertiaryFilterConfig?: FilterConfig<T>
   summaryText?: (visible: number, total: number) => string
   filterWidthClass?: string
   secondaryFilterWidthClass?: string
+  tertiaryFilterWidthClass?: string
+}
+
+function normalizeFilterValue(value: string | string[] | null | undefined): string[] {
+  if (Array.isArray(value)) {
+    return value.filter((entry) => Boolean(entry))
+  }
+
+  return value ? [value] : []
 }
 
 function normalizeText(value: string | null | undefined) {
@@ -71,44 +81,62 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
   getSecondaryTexts,
   filterConfig,
   secondaryFilterConfig,
+  tertiaryFilterConfig,
   summaryText,
   filterWidthClass = 'md:w-60',
   secondaryFilterWidthClass = 'md:w-60',
+  tertiaryFilterWidthClass = 'md:w-60',
 }: AdminSearchableTableProps<T>) {
   const [query, setQuery] = useState('')
   const [selectedFilter, setSelectedFilter] = useState('')
   const [selectedSecondaryFilter, setSelectedSecondaryFilter] = useState('')
+  const [selectedTertiaryFilter, setSelectedTertiaryFilter] = useState('')
 
   const filterOptions = useMemo(() => {
     if (!filterConfig) return []
 
-    return [...new Set(data.map((row) => filterConfig.getValue(row)).filter(Boolean))]
+    return [...new Set(data.flatMap((row) => normalizeFilterValue(filterConfig.getValue(row))))]
       .sort((a, b) => String(a).localeCompare(String(b), 'pl')) as string[]
   }, [data, filterConfig])
 
   const secondaryFilterOptions = useMemo(() => {
     if (!secondaryFilterConfig) return []
 
-    return [...new Set(data.map((row) => secondaryFilterConfig.getValue(row)).filter(Boolean))]
+    return [...new Set(data.flatMap((row) => normalizeFilterValue(secondaryFilterConfig.getValue(row))))]
       .sort((a, b) => String(a).localeCompare(String(b), 'pl')) as string[]
   }, [data, secondaryFilterConfig])
+
+  const tertiaryFilterOptions = useMemo(() => {
+    if (!tertiaryFilterConfig) return []
+
+    return [...new Set(data.flatMap((row) => normalizeFilterValue(tertiaryFilterConfig.getValue(row))))]
+      .sort((a, b) => String(a).localeCompare(String(b), 'pl')) as string[]
+  }, [data, tertiaryFilterConfig])
 
   const filteredData = useMemo(() => {
     const normalizedQuery = normalizeText(query)
 
     const baseByPrimaryFilter = filterConfig && selectedFilter
-      ? data.filter((row) => filterConfig.getValue(row) === selectedFilter)
+      ? data.filter((row) => normalizeFilterValue(filterConfig.getValue(row)).includes(selectedFilter))
       : data
 
     const base = secondaryFilterConfig && selectedSecondaryFilter
-      ? baseByPrimaryFilter.filter((row) => secondaryFilterConfig.getValue(row) === selectedSecondaryFilter)
+      ? baseByPrimaryFilter.filter((row) =>
+        normalizeFilterValue(secondaryFilterConfig.getValue(row)).includes(selectedSecondaryFilter)
+      )
       : baseByPrimaryFilter
 
+    const baseByAllFilters = tertiaryFilterConfig && selectedTertiaryFilter
+      ? base.filter((row) =>
+        normalizeFilterValue(tertiaryFilterConfig.getValue(row)).includes(selectedTertiaryFilter)
+      )
+      : base
+
     if (!normalizedQuery) {
-      return base
+      return baseByAllFilters
     }
 
-    return [...base]
+    return [...baseByAllFilters]
       .map((row) => ({
         row,
         rank: getRank(
@@ -137,6 +165,7 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
     query,
     selectedFilter,
     selectedSecondaryFilter,
+    selectedTertiaryFilter,
   ])
 
   return (
@@ -196,6 +225,29 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
                 >
                   <option value="">{secondaryFilterConfig.allLabel}</option>
                   {secondaryFilterOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {tertiaryFilterConfig && (
+            <div className={tertiaryFilterWidthClass}>
+              <div className="flex flex-col gap-1.5">
+                <label htmlFor="admin-tertiary-filter" className="text-sm font-medium text-neutral-300">
+                  {tertiaryFilterConfig.label}
+                </label>
+                <select
+                  id="admin-tertiary-filter"
+                  value={selectedTertiaryFilter}
+                  onChange={(event) => setSelectedTertiaryFilter(event.target.value)}
+                  className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+                >
+                  <option value="">{tertiaryFilterConfig.allLabel}</option>
+                  {tertiaryFilterOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>

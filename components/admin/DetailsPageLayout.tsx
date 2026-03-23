@@ -13,7 +13,7 @@ type DetailsPageHeaderProps = {
 
 type DetailsPageContentProps = {
   title: ReactNode
-  breadcrumb: string
+  breadcrumb: ReactNode
   subtitle?: ReactNode
   headerRight?: ReactNode
   saved?: string
@@ -83,12 +83,12 @@ export function DetailsPageContent({
       <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
+            <div className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
               {breadcrumb}
-            </p>
+            </div>
             <h1 className="mt-2 text-3xl font-bold tracking-tight">{title}</h1>
             {subtitle ? (
-              <p className="mt-1 text-sm font-medium text-neutral-400">{subtitle}</p>
+              <div className="mt-1 text-sm font-medium text-neutral-400">{subtitle}</div>
             ) : null}
           </div>
           {headerRight ? <div className="shrink-0">{headerRight}</div> : null}

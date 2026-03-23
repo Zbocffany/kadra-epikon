@@ -4,16 +4,14 @@ import { createCityInline } from '@/app/admin/cities/actions'
 import { createCountryInline } from '@/app/admin/countries/actions'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCountryOption } from '@/lib/db/cities'
-import AdminPagination from '@/components/admin/AdminPagination'
-import { getAdminPeoplePage, getPersonDisplayName, getAdminPersonBirthCityOptions } from '@/lib/db/people'
+import { getAdminPeople, getAdminPersonBirthCityOptions } from '@/lib/db/people'
 import type { AdminPersonBirthCityOption, AdminPersonListItem } from '@/lib/db/people'
 import AdminListLayout from '@/components/admin/AdminListLayout'
-import AdminTable from '@/components/admin/AdminTable'
-import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import AdminCancelLink from '@/components/admin/AdminCancelLink'
 import PersonBirthplaceFields from '@/components/admin/PersonBirthplaceFields'
 import PersonRepresentedCountriesFields from '@/components/admin/PersonRepresentedCountriesFields'
-import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
+import type { RawSearchParams } from '@/lib/pagination'
+import PeopleSearchTable from './PeopleSearchTable'
 
 type SearchParams = Promise<RawSearchParams>
 
@@ -91,112 +89,30 @@ function PeopleCreateFields({
   )
 }
 
-function formatDate(date: string | null): string {
-  if (!date) return '—'
-  const [year, month, day] = date.split('-')
-  return `${day}.${month}.${year}`
-}
-
 export default async function AdminPeoplePage({ searchParams }: { searchParams: SearchParams }) {
   const resolvedSearchParams = await searchParams
   const { error: formError, create } = resolvedSearchParams
-  const { page, pageSize } = parsePaginationParams(resolvedSearchParams)
 
   let people: AdminPersonListItem[] = []
-  let totalPeople = 0
   let cities: AdminPersonBirthCityOption[] = []
   let countries: AdminCountryOption[] = []
   let fetchError: string | null = null
 
   try {
-    const [peoplePage, fetchedCities, fetchedCountries] = await Promise.all([
-      getAdminPeoplePage(page, pageSize),
+    const [fetchedPeople, fetchedCities, fetchedCountries] = await Promise.all([
+      getAdminPeople(),
       getAdminPersonBirthCityOptions(),
       getAdminCountriesOptions(),
     ])
-    people = peoplePage.items
-    totalPeople = peoplePage.total
+    people = fetchedPeople
     cities = fetchedCities
     countries = fetchedCountries
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
 
-  const pagination = getPaginationMeta(totalPeople, page, pageSize)
-  const indexOffset = pagination.from > 0 ? pagination.from - 1 : 0
-
-  const columns: AdminTableColumn<AdminPersonListItem>[] = [
-    {
-      key: 'index',
-      label: '#',
-      render: (_, i) => indexOffset + i + 1,
-      className: 'text-neutral-500',
-    },
-    {
-      key: 'person',
-      label: 'Osoba',
-      render: (person) => (
-        <Link
-          href={`/admin/people/${person.id}`}
-          className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-        >
-          {getPersonDisplayName(person)}
-        </Link>
-      ),
-      className: 'font-medium',
-    },
-    {
-      key: 'birth_date',
-      label: 'Data ur.',
-      render: (person) => formatDate(person.birth_date),
-      className: 'text-neutral-300',
-    },
-    {
-      key: 'birth_city',
-      label: 'Miasto ur.',
-      render: (person) => person.birth_city_name ?? '—',
-      className: 'text-neutral-400',
-    },
-    {
-      key: 'country',
-      label: 'Kraj',
-      render: (person) => person.represented_country_names.length
-        ? person.represented_country_names.join(' / ')
-        : '—',
-      className: 'text-neutral-400',
-    },
-    {
-      key: 'active',
-      label: 'Aktywna',
-      render: (person) => person.is_active ? (
-        <span
-          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-500 bg-emerald-500/15 text-emerald-400"
-          title="Aktywna"
-          aria-label="Aktywna"
-        >
-          <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
-            <path
-              d="M4.5 10.5L8.25 14.25L15.5 7"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </span>
-      ) : (
-        <span
-          className="inline-flex h-5 w-5 rounded-full border-2 border-red-500"
-          title="Nieaktywna"
-          aria-label="Nieaktywna"
-        />
-      ),
-      className: 'text-neutral-400 text-center',
-    },
-  ]
-
   const pluralLabel = (() => {
-    const count = totalPeople
+    const count = people.length
     if (count === 1) return 'osoba'
     if (count < 5) return 'osoby'
     return 'osób'
@@ -208,7 +124,7 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
     <AdminListLayout
       title="Ludzie"
       breadcrumb="Admin"
-      recordCount={totalPeople}
+      recordCount={people.length}
       recordLabel={pluralLabel}
       fetchError={fetchError}
       headerActions={(
@@ -222,23 +138,7 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
     >
       {!fetchError && (
         <>
-          <AdminTable data={people} columns={columns} emptyMessage="Brak osób w bazie danych." />
-          {people.length > 0 && (
-            <AdminPagination
-              basePath="/admin/people"
-              searchParams={resolvedSearchParams}
-              page={pagination.page}
-              pageSize={pagination.pageSize}
-              totalPages={pagination.totalPages}
-              totalItems={pagination.total}
-              from={pagination.from}
-              to={pagination.to}
-              itemLabel={pagination.total === 1 ? 'osoby' : 'osób'}
-            />
-          )}
-          {people.length > 0 && (
-            <p className="text-xs text-neutral-500">Kliknij osobę, aby przejść do strony szczegółów.</p>
-          )}
+          <PeopleSearchTable people={people} />
 
           {isCreateModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
