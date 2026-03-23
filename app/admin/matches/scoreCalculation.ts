@@ -3,6 +3,8 @@ import type { AdminMatchEvent, ResultType } from '@/lib/db/matches'
 export interface MatchScore {
   homeGoals: number
   awayGoals: number
+  homeGoalsHT: number
+  awayGoalsHT: number
   homeShootoutScore: number
   awayShootoutScore: number
 }
@@ -10,6 +12,7 @@ export interface MatchScore {
 /**
  * Oblicza wynik meczu na podstawie zdarzeń.
  * - homeGoals/awayGoals: bramki w regulaminowym czasie + dogrywce
+ * - homeGoalsHT/awayGoalsHT: bramki do przerwy (minute < 45)
  * - homeShootoutScore/awayShootoutScore: wynik rzutów karnych
  */
 export function calculateMatchScore(
@@ -19,6 +22,8 @@ export function calculateMatchScore(
 ): MatchScore {
   let homeGoals = 0
   let awayGoals = 0
+  let homeGoalsHT = 0
+  let awayGoalsHT = 0
   let homeShootoutScore = 0
   let awayShootoutScore = 0
 
@@ -28,19 +33,19 @@ export function calculateMatchScore(
   for (const event of events) {
     // Bramki w regulaminowym/dogrywce
     if (GOAL_TYPES.has(event.event_type)) {
-      // OWN_GOAL liczy się dla drużyny PRZECIWNEJ
-      if (event.event_type === 'OWN_GOAL') {
-        if (event.team_id === homeTeamId) {
-          awayGoals += 1
-        } else if (event.team_id === awayTeamId) {
-          homeGoals += 1
+      const isHomeTeamScoringTeam = event.event_type === 'OWN_GOAL' 
+        ? event.team_id === awayTeamId
+        : event.team_id === homeTeamId
+
+      if (isHomeTeamScoringTeam) {
+        homeGoals += 1
+        if (event.minute < 45) {
+          homeGoalsHT += 1
         }
       } else {
-        // GOAL i PENALTY_GOAL liczą się dla zespołu event.team_id
-        if (event.team_id === homeTeamId) {
-          homeGoals += 1
-        } else if (event.team_id === awayTeamId) {
-          awayGoals += 1
+        awayGoals += 1
+        if (event.minute < 45) {
+          awayGoalsHT += 1
         }
       }
     }
@@ -55,28 +60,26 @@ export function calculateMatchScore(
     }
   }
 
-  return { homeGoals, awayGoals, homeShootoutScore, awayShootoutScore }
+  return { homeGoals, awayGoals, homeGoalsHT, awayGoalsHT, homeShootoutScore, awayShootoutScore }
 }
 
 /**
  * Formatuje wynik meczu w formacie:
- * - Regulaminowy: "A:B (a:b)"
- * - Po dogrywce: "A:B (a:b) po dogr."
- * - Po karnych: "A:B (a:b) po karnych (A:B)"
- * 
- * Gdzie:
- * - A:B = wynik bramek w meczu
- * - (a:b) = wynik karnych pomeczowych
- * - (A:B) w końcówce = wynik karnych pomeczowych (duplikacja dla karnych)
+ * - Regulaminowy: "A:B (a:b)" gdzie a:b to wynik do przerwy
+ * - Po dogrywce: "A:B (a:b) po dogr." gdzie a:b to wynik do przerwy
+ * - Po karnych: "A:B (a:b) po karnych (X:Y)" gdzie a:b to wynik do przerwy, X:Y to wynik karnych
  */
 export function formatMatchScore(
   score: MatchScore,
   resultType: ResultType | null
 ): string {
-  const { homeGoals, awayGoals, homeShootoutScore, awayShootoutScore } = score
+  const { homeGoals, awayGoals, homeGoalsHT, awayGoalsHT, homeShootoutScore, awayShootoutScore } = score
 
-  // Podstawowy wynik bramek
-  let result = `${homeGoals}:${awayGoals} (${homeShootoutScore}:${awayShootoutScore})`
+  // Podstawowy wynik meczu
+  let result = `${homeGoals}:${awayGoals}`
+
+  // Wynik do przerwy w nawiasach (zawsze)
+  result += ` (${homeGoalsHT}:${awayGoalsHT})`
 
   // Sufiks dla wyniku
   if (resultType === 'EXTRA_TIME') {
@@ -98,12 +101,10 @@ export function getDisplayScore(
   homeTeamId: string,
   awayTeamId: string
 ): string | null {
-  const score = calculateMatchScore(events, homeTeamId, awayTeamId)
-
-  // Jeśli nie ma żadnych bramek - nie wyświetlaj
-  if (score.homeGoals === 0 && score.awayGoals === 0 && score.homeShootoutScore === 0 && score.awayShootoutScore === 0) {
+  if (events.length === 0) {
     return null
   }
 
+  const score = calculateMatchScore(events, homeTeamId, awayTeamId)
   return formatMatchScore(score, resultType)
 }
