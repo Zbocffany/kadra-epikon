@@ -89,7 +89,7 @@ export function DetailsPageContent({
             <div className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
               {breadcrumb}
             </div>
-            <h1 className="mt-2 text-3xl font-bold tracking-tight">{title}</h1>
+            {title ? <h1 className="mt-2 text-3xl font-bold tracking-tight">{title}</h1> : null}
             {subtitle ? (
               <div className="mt-1 text-sm font-medium text-neutral-400">{subtitle}</div>
             ) : null}

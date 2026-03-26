@@ -33,16 +33,12 @@ export function calculateMatchScore(
   for (const event of events) {
     // Bramki w regulaminowym/dogrywce
     if (GOAL_TYPES.has(event.event_type)) {
-      const isHomeTeamScoringTeam = event.event_type === 'OWN_GOAL' 
-        ? event.team_id === awayTeamId
-        : event.team_id === homeTeamId
-
-      if (isHomeTeamScoringTeam) {
+      if (event.team_id === homeTeamId) {
         homeGoals += 1
         if (event.minute < 45) {
           homeGoalsHT += 1
         }
-      } else {
+      } else if (event.team_id === awayTeamId) {
         awayGoals += 1
         if (event.minute < 45) {
           awayGoalsHT += 1

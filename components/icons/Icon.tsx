@@ -7,5 +7,6 @@ type IconProps = SVGProps<SVGSVGElement> & {
 
 export default function Icon({ name, ...props }: IconProps) {
   const Svg = ICON_REGISTRY[name]
+  if (!Svg) return null
   return <Svg {...props} />
 }

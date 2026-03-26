@@ -1,6 +1,6 @@
 import type { SVGProps } from 'react'
 
-export default function CardsIcon(props: SVGProps<SVGSVGElement>) {
+export default function SecondYellowCardIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
       viewBox="0 0 24 24"

@@ -90,6 +90,18 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
 
   const pagination = getPaginationMeta(totalMatches, page, pageSize)
   const isCreateModalOpen = create === '1' || Boolean(error)
+  const maxTeamNameLength = matches.length > 0
+    ? Math.max(
+        ...matches.flatMap((match) => [match.home_team_name.length, match.away_team_name.length]),
+        1
+      )
+    : 1
+  const maxScoreLength = matches.length > 0
+    ? Math.max(
+        ...matches.map((match) => (match.final_score ? match.final_score.length + 2 : 0)),
+        0
+      )
+    : 0
 
   return (
     <main className="min-h-screen px-4 py-10 sm:px-8">
@@ -135,13 +147,25 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
         {/* Table */}
         {matches.length > 0 && (
           <div className="overflow-x-auto rounded-xl border border-neutral-800">
-            <table className="w-full border-collapse text-sm">
+            <table className="w-full border-collapse text-sm table-auto">
+              <colgroup>
+                <col />
+                <col style={{ width: `${maxTeamNameLength}ch` }} />
+                <col style={{ width: '1ch' }} />
+                <col style={{ width: `${maxTeamNameLength}ch` }} />
+                <col style={{ width: `${Math.max(maxScoreLength, 1)}ch` }} />
+                <col />
+                <col />
+                <col />
+                <col />
+              </colgroup>
               <thead>
                 <tr className="border-b border-neutral-800 bg-neutral-900 text-left">
                   <th className="px-4 py-3 font-medium text-neutral-400">Data</th>
-                  <th className="px-4 py-3 font-medium text-neutral-400">Gospodarz</th>
-                  <th className="px-4 py-3 text-center font-medium text-neutral-400">vs</th>
-                  <th className="px-4 py-3 font-medium text-neutral-400">Gość</th>
+                  <th className="px-4 py-3 font-medium text-neutral-400"></th>
+                  <th className="px-1 py-3 font-medium text-neutral-400"></th>
+                  <th className="px-4 py-3 font-medium text-neutral-400"></th>
+                  <th className="px-4 py-3 font-medium text-neutral-400"></th>
                   <th className="px-4 py-3 font-medium text-neutral-400">Rozgrywki</th>
                   <th className="px-4 py-3 font-medium text-neutral-400">Status meczu</th>
                   <th className="px-4 py-3 font-medium text-neutral-400">Status redakcji</th>
@@ -167,9 +191,14 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
                     <td className="px-4 py-3 font-semibold text-neutral-100 whitespace-nowrap">
                       {match.home_team_name}
                     </td>
-                    <td className="px-4 py-3 text-center text-neutral-500">–</td>
+                    <td className="px-1 py-3 text-center text-neutral-500 whitespace-nowrap">
+                      -
+                    </td>
                     <td className="px-4 py-3 font-semibold text-neutral-100 whitespace-nowrap">
                       {match.away_team_name}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-neutral-100 whitespace-nowrap">
+                      {match.final_score ? `(${match.final_score})` : ''}
                     </td>
                     <td className="px-4 py-3 text-neutral-400 whitespace-nowrap">
                       {match.competition_name}

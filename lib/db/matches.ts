@@ -53,6 +53,7 @@ export type AdminMatch = {
   competition_name: string
   home_team_name: string
   away_team_name: string
+  final_score: string | null
 }
 
 export type AdminMatchDetails = AdminMatch & {
@@ -182,6 +183,7 @@ type MatchListRow = {
 
 type MatchEventRow = {
   id: string
+  match_id?: string
   team_id: string | null
   event_type: MatchEventType
   minute: number
@@ -357,10 +359,48 @@ async function mapAdminMatches(
 
   if (compError) throw new Error(`tbl_Competitions: ${compError.message}`)
 
-  const teamNameMap = await getTeamDisplayMap(teamIds)
+  const [{ data: matchEvents, error: matchEventsError }, teamNameMap] = await Promise.all([
+    supabase
+      .from('tbl_Match_Events')
+      .select('match_id, team_id, event_type')
+      .in('match_id', matches.map((match) => match.id)),
+    getTeamDisplayMap(teamIds),
+  ])
+
+  if (matchEventsError) throw new Error(`tbl_Match_Events: ${matchEventsError.message}`)
 
   // 3. Lookup maps
   const compMap = new Map(competitions?.map((c) => [c.id, c.name]) ?? [])
+  const eventsByMatchId = new Map<string, Array<Pick<MatchEventRow, 'team_id' | 'event_type'>>>()
+
+  for (const event of ((matchEvents ?? []) as Array<Pick<MatchEventRow, 'match_id' | 'team_id' | 'event_type'>>)) {
+    if (!event.match_id) continue
+    const existing = eventsByMatchId.get(event.match_id) ?? []
+    existing.push({ team_id: event.team_id, event_type: event.event_type })
+    eventsByMatchId.set(event.match_id, existing)
+  }
+
+  function getFinalScore(match: MatchListRow): string | null {
+    const events = eventsByMatchId.get(match.id) ?? []
+    if (!events.length) return null
+
+    let homeGoals = 0
+    let awayGoals = 0
+
+    for (const event of events) {
+      if (event.event_type !== 'GOAL' && event.event_type !== 'OWN_GOAL' && event.event_type !== 'PENALTY_GOAL') {
+        continue
+      }
+
+      if (event.team_id === match.home_team_id) {
+        homeGoals += 1
+      } else if (event.team_id === match.away_team_id) {
+        awayGoals += 1
+      }
+    }
+
+    return `${homeGoals}:${awayGoals}`
+  }
 
   // 4. Assemble
   return matches.map((m) => ({
@@ -373,6 +413,7 @@ async function mapAdminMatches(
     competition_name: compMap.get(m.competition_id) ?? '—',
     home_team_name: teamNameMap.get(m.home_team_id) ?? '—',
     away_team_name: teamNameMap.get(m.away_team_id) ?? '—',
+    final_score: getFinalScore(m),
   }))
 }
 
@@ -411,6 +452,7 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
     competition_name: competition?.name ?? '—',
     home_team_name: teamNameMap.get(match.home_team_id) ?? '—',
     away_team_name: teamNameMap.get(match.away_team_id) ?? '—',
+    final_score: null,
     competition_id: match.competition_id,
     home_team_id: match.home_team_id,
     away_team_id: match.away_team_id,

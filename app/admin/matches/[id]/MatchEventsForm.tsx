@@ -551,7 +551,7 @@ export default function MatchEventsForm({
           title="Dodaj nowy wiersz zdarzenia typu kartka"
         >
           Dodaj kartkę
-          <Icon name="cards" className="ml-1 h-4 w-4 shrink-0" />
+          <Icon name="yellowCard" className="ml-1 h-4 w-4 shrink-0" />
         </button>
         <button
           type="button"
