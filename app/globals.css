@@ -24,3 +24,38 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.pl-flag-scene {
+  width: min(70vw, 720px);
+  height: calc(min(70vw, 720px) * 5 / 8);
+  min-height: 220px;
+  max-height: 55vh;
+  display: grid;
+  place-items: center;
+}
+
+.pl-flag {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.2);
+}
+
+.pl-flag-half {
+  position: absolute;
+  inset-inline: 0;
+  height: 50%;
+}
+
+.pl-flag-white {
+  top: 0;
+  background: #f8f8f8;
+}
+
+.pl-flag-red {
+  bottom: 0;
+  background: #dc143c;
+}

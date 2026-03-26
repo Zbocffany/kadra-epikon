@@ -2,49 +2,21 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <main className="min-h-screen px-6 py-16">
-      <div className="mx-auto max-w-3xl">
-        <div className="mb-8 flex justify-end">
-          <Link
-            href="/login"
-            className="rounded-lg border border-neutral-700 px-4 py-2 text-sm text-neutral-400 transition hover:border-neutral-500 hover:text-neutral-200"
-          >
-            Zaloguj się
-          </Link>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-neutral-950 px-6 py-10">
+      <div className="absolute right-6 top-6 z-20">
+        <Link
+          href="/login"
+          className="rounded-lg border border-neutral-700/80 bg-neutral-900/60 px-4 py-2 text-sm text-neutral-200 backdrop-blur transition hover:border-neutral-500 hover:bg-neutral-900/80"
+        >
+          Zaloguj sie
+        </Link>
+      </div>
+
+      <div className="pl-flag-scene">
+        <div className="pl-flag" aria-label="Polish flag waving animation" role="img">
+          <div className="pl-flag-half pl-flag-white" />
+          <div className="pl-flag-half pl-flag-red" />
         </div>
-        <h1 className="text-4xl font-bold tracking-tight">
-          Kadra Polski — mecze reprezentacji
-        </h1>
-
-        <p className="mt-4 text-lg text-neutral-300">
-          Prosta aplikacja do katalogowania meczów reprezentacji Polski. Dane
-          dodaję ręcznie (na razie). W kolejnych krokach dojdą: lista meczów,
-          filtrowanie oraz panel admina.
-        </p>
-
-        <div className="mt-10 grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-5">
-            <h2 className="text-lg font-semibold">Co już działa</h2>
-            <ul className="mt-3 list-disc space-y-1 pl-5 text-neutral-300">
-              <li>Projekt Next.js uruchamia się lokalnie</li>
-              <li>Deploy na Vercel działa</li>
-              <li>Repozytorium na GitHub jest skonfigurowane</li>
-            </ul>
-          </div>
-
-          <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-5">
-            <h2 className="text-lg font-semibold">Następne kroki</h2>
-            <ul className="mt-3 list-disc space-y-1 pl-5 text-neutral-300">
-              <li>Model bazy: Team i Match</li>
-              <li>Widok listy meczów</li>
-              <li>Formularz dodawania meczu (panel admina)</li>
-            </ul>
-          </div>
-        </div>
-
-        <p className="mt-10 text-sm text-neutral-400">
-          Status: MVP w budowie.
-        </p>
       </div>
     </main>
   );
