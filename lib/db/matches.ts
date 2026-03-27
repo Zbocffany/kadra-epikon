@@ -1,6 +1,57 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
+type QueryError = { message: string } | null
+type QueryResult<T> = { data: T[] | null; error: QueryError }
+
+function isTransientGatewayError(error: QueryError): boolean {
+  if (!error?.message) return false
+  const msg = error.message.toLowerCase()
+  return (
+    msg.includes('502') ||
+    msg.includes('503') ||
+    msg.includes('504') ||
+    msg.includes('bad gateway') ||
+    msg.includes('gateway timeout') ||
+    msg.includes('<!doctype html>')
+  )
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function runSelectWithRetry<T>(
+  run: () => Promise<QueryResult<T>>,
+  maxAttempts = 3
+): Promise<QueryResult<T>> {
+  let attempt = 1
+  let lastResult = await run()
+
+  while (attempt < maxAttempts && isTransientGatewayError(lastResult.error)) {
+    await delay(150 * attempt)
+    attempt += 1
+    lastResult = await run()
+  }
+
+  return lastResult
+}
+
+function isMissingSchemaObjectMessage(message: string, objectHint: string): boolean {
+  const normalized = message.toLowerCase()
+  const hint = objectHint.toLowerCase()
+
+  return (
+    normalized.includes(hint)
+    && (
+      normalized.includes('schema cache')
+      || normalized.includes('does not exist')
+      || normalized.includes('could not find')
+      || normalized.includes('not found')
+    )
+  )
+}
+
 export type MatchStatus =
   | 'SCHEDULED'
   | 'FINISHED'
@@ -58,6 +109,7 @@ export type AdminMatch = {
 
 export type AdminMatchDetails = AdminMatch & {
   competition_id: string
+  match_level_id: string | null
   home_team_id: string
   away_team_id: string
   match_city_id: string | null
@@ -65,6 +117,11 @@ export type AdminMatchDetails = AdminMatch & {
 }
 
 export type AdminCompetitionOption = {
+  id: string
+  name: string
+}
+
+export type AdminMatchLevelOption = {
   id: string
   name: string
 }
@@ -242,15 +299,19 @@ function sortTeamParticipants(participants: AdminMatchParticipant[]): AdminMatch
 
 async function getTeamDisplayMap(teamIds: string[]): Promise<Map<string, string>> {
   const supabase = createServiceRoleClient()
+  type TeamRow = { id: string; country_id: string | null; club_id: string | null }
+  type NamedRow = { id: string; name: string }
 
   if (!teamIds.length) {
     return new Map()
   }
 
-  const { data: teams, error: teamError } = await supabase
-    .from('tbl_Teams')
-    .select('id, country_id, club_id')
-    .in('id', teamIds)
+  const { data: teams, error: teamError } = await runSelectWithRetry<TeamRow>(async () =>
+    await supabase
+      .from('tbl_Teams')
+      .select('id, country_id, club_id')
+      .in('id', teamIds)
+  )
 
   if (teamError) throw new Error(`tbl_Teams: ${teamError.message}`)
 
@@ -262,15 +323,24 @@ async function getTeamDisplayMap(teamIds: string[]): Promise<Map<string, string>
     { data: clubs, error: clubError },
   ] = await Promise.all([
     countryIds.length
-      ? supabase.from('tbl_Countries').select('id, name').in('id', countryIds)
-      : Promise.resolve({ data: [] as { id: string; name: string }[], error: null }),
+      ? runSelectWithRetry<NamedRow>(async () =>
+          await supabase.from('tbl_Countries').select('id, name').in('id', countryIds)
+        )
+      : Promise.resolve({ data: [] as NamedRow[], error: null }),
     clubIds.length
-      ? supabase.from('tbl_Clubs').select('id, name').in('id', clubIds)
-      : Promise.resolve({ data: [] as { id: string; name: string }[], error: null }),
+      ? runSelectWithRetry<NamedRow>(async () =>
+          await supabase.from('tbl_Clubs').select('id, name').in('id', clubIds)
+        )
+      : Promise.resolve({ data: [] as NamedRow[], error: null }),
   ])
 
-  if (countryError) throw new Error(`tbl_Countries: ${countryError.message}`)
-  if (clubError) throw new Error(`tbl_Clubs: ${clubError.message}`)
+  // For transient upstream outages, degrade labels instead of crashing the whole page.
+  if (countryError && !isTransientGatewayError(countryError)) {
+    throw new Error(`tbl_Countries: ${countryError.message}`)
+  }
+  if (clubError && !isTransientGatewayError(clubError)) {
+    throw new Error(`tbl_Clubs: ${clubError.message}`)
+  }
 
   const countryMap = new Map(countries?.map((c) => [c.id, c.name]) ?? [])
   const clubMap = new Map(clubs?.map((c) => [c.id, c.name]) ?? [])
@@ -280,7 +350,7 @@ async function getTeamDisplayMap(teamIds: string[]): Promise<Map<string, string>
       t.id,
       t.country_id
         ? (countryMap.get(t.country_id) ?? '—')
-        : (clubMap.get(t.club_id) ?? '—'),
+        : (t.club_id ? (clubMap.get(t.club_id) ?? '—') : '—'),
     ])
   )
 }
@@ -442,6 +512,22 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
 
   if (competitionError) throw new Error(`tbl_Competitions: ${competitionError.message}`)
 
+  let matchLevelId: string | null = null
+
+  const { data: levelRow, error: levelRowError } = await supabase
+    .from('tbl_Matches')
+    .select('match_level_id')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (levelRowError) {
+    if (!isMissingSchemaObjectMessage(levelRowError.message, 'match_level_id')) {
+      throw new Error(`tbl_Matches (match_level_id): ${levelRowError.message}`)
+    }
+  } else {
+    matchLevelId = (levelRow?.match_level_id as string | null | undefined) ?? null
+  }
+
   return {
     id: match.id,
     match_date: match.match_date,
@@ -454,6 +540,7 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
     away_team_name: teamNameMap.get(match.away_team_id) ?? '—',
     final_score: null,
     competition_id: match.competition_id,
+    match_level_id: matchLevelId,
     home_team_id: match.home_team_id,
     away_team_id: match.away_team_id,
     match_city_id: match.match_city_id ?? null,
@@ -642,6 +729,7 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
 
 export async function getAdminMatchCreateOptions(): Promise<{
   competitions: AdminCompetitionOption[]
+  matchLevels: AdminMatchLevelOption[]
   teams: AdminTeamOption[]
   cities: AdminCityOption[]
   stadiums: AdminStadiumOption[]
@@ -667,6 +755,21 @@ export async function getAdminMatchCreateOptions(): Promise<{
   if (teamsError) throw new Error(`tbl_Teams: ${teamsError.message}`)
   if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
   if (stadiumsError) throw new Error(`tbl_Stadiums: ${stadiumsError.message}`)
+
+  let matchLevels: AdminMatchLevelOption[] = []
+
+  const { data: levels, error: levelsError } = await supabase
+    .from('tbl_Match_Levels')
+    .select('id, name')
+    .order('name', { ascending: true })
+
+  if (levelsError) {
+    if (!isMissingSchemaObjectMessage(levelsError.message, 'tbl_match_levels')) {
+      throw new Error(`tbl_Match_Levels: ${levelsError.message}`)
+    }
+  } else {
+    matchLevels = levels ?? []
+  }
 
   const cityNameMap = new Map((cities ?? []).map((city) => [city.id, city.city_name]))
 
@@ -700,6 +803,7 @@ export async function getAdminMatchCreateOptions(): Promise<{
 
   return {
     competitions: competitions ?? [],
+    matchLevels,
     teams: teamOptions,
     cities: cityOptions,
     stadiums: stadiumOptions,

@@ -24,6 +24,7 @@ type MatchInput = {
   matchDate: string
   matchTime: string | null
   competitionId: string
+  matchLevelId: string | null
   homeTeamId: string
   awayTeamId: string
   matchStadiumId: string | null
@@ -181,6 +182,7 @@ function readMatchInput(
     matchDate: getTrimmedString(formData, 'match_date'),
     matchTime: getTrimmedNullable(formData, 'match_time'),
     competitionId: getTrimmedString(formData, 'competition_id'),
+    matchLevelId: getTrimmedNullable(formData, 'match_level_id'),
     homeTeamId: getTrimmedString(formData, 'home_team_id'),
     awayTeamId: getTrimmedString(formData, 'away_team_id'),
     matchStadiumId: getTrimmedNullable(formData, 'match_stadium_id'),
@@ -189,6 +191,30 @@ function readMatchInput(
     resultType: matchStatus === 'FINISHED' ? resultType : null,
     editorialStatus,
   }
+}
+
+async function hasMatchLevelColumn(
+  supabase: ReturnType<typeof createServiceRoleClient>
+): Promise<boolean> {
+  const { error } = await supabase
+    .from('tbl_Matches')
+    .select('match_level_id')
+    .limit(1)
+
+  if (!error) return true
+
+  const message = error.message.toLowerCase()
+  const isMissingColumn = message.includes('match_level_id')
+    && (
+      message.includes('schema cache')
+      || message.includes('does not exist')
+      || message.includes('could not find')
+      || message.includes('not found')
+    )
+
+  if (isMissingColumn) return false
+
+  throw new Error(`tbl_Matches (match_level_id): ${error.message}`)
 }
 
 function validateMatchInputOrRedirect(input: MatchInput, redirectPath: string): void {
@@ -1380,23 +1406,30 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
   }
 
   const supabase = createServiceRoleClient()
+  const supportsMatchLevel = await hasMatchLevelColumn(supabase)
   const matchCityId = await resolveMatchCityId(supabase, input.matchStadiumId, input.matchCityIdRaw, redirectPath)
   await validateTeamsExistOrRedirect(supabase, input.homeTeamId, input.awayTeamId, redirectPath)
 
+  const payload: Record<string, unknown> = {
+    home_team_id: input.homeTeamId,
+    away_team_id: input.awayTeamId,
+    competition_id: input.competitionId,
+    match_date: input.matchDate,
+    match_time: input.matchTime,
+    match_stadium_id: input.matchStadiumId,
+    match_city_id: matchCityId,
+    match_status: input.matchStatus,
+    result_type: input.resultType,
+    editorial_status: input.editorialStatus,
+  }
+
+  if (supportsMatchLevel) {
+    payload.match_level_id = input.matchLevelId
+  }
+
   const { data: updatedMatch, error: updateError } = await supabase
     .from('tbl_Matches')
-    .update({
-      home_team_id: input.homeTeamId,
-      away_team_id: input.awayTeamId,
-      competition_id: input.competitionId,
-      match_date: input.matchDate,
-      match_time: input.matchTime,
-      match_stadium_id: input.matchStadiumId,
-      match_city_id: matchCityId,
-      match_status: input.matchStatus,
-      result_type: input.resultType,
-      editorial_status: input.editorialStatus,
-    })
+    .update(payload)
     .eq('id', id)
     .select('id, match_date, home_team_id, away_team_id')
     .single()
@@ -1447,6 +1480,7 @@ export async function createMatch(formData: FormData): Promise<void> {
   validateMatchInputOrRedirect(input, '/admin/matches')
 
   const supabase = createServiceRoleClient()
+  const supportsMatchLevel = await hasMatchLevelColumn(supabase)
   const matchCityId = await resolveMatchCityId(
     supabase,
     input.matchStadiumId,
@@ -1455,7 +1489,7 @@ export async function createMatch(formData: FormData): Promise<void> {
   )
   await validateTeamsExistOrRedirect(supabase, input.homeTeamId, input.awayTeamId, '/admin/matches')
 
-  const { error } = await supabase.from('tbl_Matches').insert({
+  const payload: Record<string, unknown> = {
     id: crypto.randomUUID(),
     home_team_id: input.homeTeamId,
     away_team_id: input.awayTeamId,
@@ -1467,7 +1501,13 @@ export async function createMatch(formData: FormData): Promise<void> {
     match_status: 'SCHEDULED',
     result_type: null,
     editorial_status: 'DRAFT',
-  })
+  }
+
+  if (supportsMatchLevel) {
+    payload.match_level_id = input.matchLevelId
+  }
+
+  const { error } = await supabase.from('tbl_Matches').insert(payload)
 
   if (error) {
     redirectWithError('/admin/matches', 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
@@ -1489,6 +1529,7 @@ export async function updateMatch(formData: FormData): Promise<void> {
   validateMatchInputOrRedirect(input, redirectPath)
 
   const supabase = createServiceRoleClient()
+  const supportsMatchLevel = await hasMatchLevelColumn(supabase)
   const matchCityId = await resolveMatchCityId(
     supabase,
     input.matchStadiumId,
@@ -1498,20 +1539,26 @@ export async function updateMatch(formData: FormData): Promise<void> {
 
   await validateTeamsExistOrRedirect(supabase, input.homeTeamId, input.awayTeamId, redirectPath)
 
+  const payload: Record<string, unknown> = {
+    home_team_id: input.homeTeamId,
+    away_team_id: input.awayTeamId,
+    competition_id: input.competitionId,
+    match_date: input.matchDate,
+    match_time: input.matchTime,
+    match_stadium_id: input.matchStadiumId,
+    match_city_id: matchCityId,
+    match_status: input.matchStatus,
+    result_type: input.resultType,
+    editorial_status: input.editorialStatus,
+  }
+
+  if (supportsMatchLevel) {
+    payload.match_level_id = input.matchLevelId
+  }
+
   const { error } = await supabase
     .from('tbl_Matches')
-    .update({
-      home_team_id: input.homeTeamId,
-      away_team_id: input.awayTeamId,
-      competition_id: input.competitionId,
-      match_date: input.matchDate,
-      match_time: input.matchTime,
-      match_stadium_id: input.matchStadiumId,
-      match_city_id: matchCityId,
-      match_status: input.matchStatus,
-      result_type: input.resultType,
-      editorial_status: input.editorialStatus,
-    })
+    .update(payload)
     .eq('id', id)
 
   if (error) {
