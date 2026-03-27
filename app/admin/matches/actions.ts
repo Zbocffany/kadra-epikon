@@ -9,6 +9,16 @@ import {
   redirectWithError,
   redirectWithSaved,
 } from '@/lib/actions/admin'
+import { findDuplicatePeopleByBirthDateAndCountry, type DuplicatePerson } from '@/lib/db/people'
+
+export async function checkDuplicatePeople(
+  birthDate: string | null,
+  birthCountryId: string | null
+): Promise<DuplicatePerson[]> {
+  await requireAdminAccess()
+  if (!birthDate || !birthCountryId) return []
+  return findDuplicatePeopleByBirthDateAndCountry(birthDate.trim(), birthCountryId.trim())
+}
 
 type MatchInput = {
   matchDate: string

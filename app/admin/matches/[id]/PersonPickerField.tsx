@@ -187,7 +187,7 @@ export default function PersonPickerField({
         </div>
 
         {isOpen && (
-          <div className="absolute top-full z-10 mt-1 max-h-80 w-full overflow-y-auto rounded-md border border-neutral-700 bg-neutral-900 shadow-lg">
+          <div className="absolute left-0 top-full z-10 mt-1 max-h-80 min-w-full w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-neutral-700 bg-neutral-900 shadow-lg">
             {filteredPeople.length > 0 ? (
               filteredPeople.map((person) => (
                 <button

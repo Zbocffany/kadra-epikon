@@ -200,6 +200,53 @@ async function getExplicitRepresentedCountryIdsByPersonId(
   return map
 }
 
+export type DuplicatePerson = {
+  id: string
+  first_name: string | null
+  last_name: string | null
+  nickname: string | null
+  birth_date: string | null
+  birth_country_name: string | null
+}
+
+export async function findDuplicatePeopleByBirthDateAndCountry(
+  birthDate: string,
+  birthCountryId: string
+): Promise<DuplicatePerson[]> {
+  const supabase = createServiceRoleClient()
+
+  const { data: people, error } = await supabase
+    .from('tbl_People')
+    .select('id, first_name, last_name, nickname, birth_date, birth_country_id')
+    .eq('birth_date', birthDate)
+    .eq('birth_country_id', birthCountryId)
+
+  if (error) throw new Error(`tbl_People: ${error.message}`)
+  if (!people?.length) return []
+
+  const countryIds = [...new Set(people.map((p) => p.birth_country_id).filter(Boolean))]
+  let countryNameById = new Map<string, string>()
+
+  if (countryIds.length) {
+    const { data: countries, error: countriesError } = await supabase
+      .from('tbl_Countries')
+      .select('id, name')
+      .in('id', countryIds)
+
+    if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
+    countryNameById = new Map((countries ?? []).map((c) => [c.id, c.name ?? '']))
+  }
+
+  return people.map((p) => ({
+    id: p.id,
+    first_name: p.first_name ?? null,
+    last_name: p.last_name ?? null,
+    nickname: p.nickname ?? null,
+    birth_date: p.birth_date ?? null,
+    birth_country_name: p.birth_country_id ? (countryNameById.get(p.birth_country_id) ?? null) : null,
+  }))
+}
+
 export async function getAdminPersonBirthCityOptions(): Promise<AdminPersonBirthCityOption[]> {
   const supabase = createServiceRoleClient()
 

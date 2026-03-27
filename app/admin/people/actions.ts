@@ -3,6 +3,20 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import { getTrimmedNullable, getTrimmedString, redirectWithAdded, redirectWithError, redirectWithSaved } from '@/lib/actions/admin'
+import { findDuplicatePeopleByBirthDateAndCountry, type DuplicatePerson } from '@/lib/db/people'
+
+export async function checkDuplicatePeople(
+  birthDate: string | null,
+  birthCityId: string | null,
+  birthCountryId: string | null
+): Promise<DuplicatePerson[]> {
+  await requireAdminAccess()
+  if (!birthDate) return []
+  const supabase = createServiceRoleClient()
+  const resolvedCountryId = await resolveBirthCountryId(birthCityId, birthCountryId, supabase)
+  if (!resolvedCountryId) return []
+  return findDuplicatePeopleByBirthDateAndCountry(birthDate.trim(), resolvedCountryId)
+}
 
 async function resolveBirthCountryId(
   birthCityId: string | null,

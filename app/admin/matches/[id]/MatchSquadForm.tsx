@@ -200,8 +200,8 @@ export default function MatchSquadForm({
         <table className="w-full table-fixed">
           <colgroup>
             <col />
-            <col className="w-[150px]" />
-            <col className="w-[190px]" />
+            <col className="w-[124px]" />
+            <col className="w-[164px]" />
           </colgroup>
           <thead>
             <tr>
@@ -293,8 +293,8 @@ export default function MatchSquadForm({
           <table className="w-full table-fixed">
             <colgroup>
               <col />
-              <col className="w-[150px]" />
-              <col className="w-[190px]" />
+              <col className="w-[124px]" />
+              <col className="w-[164px]" />
             </colgroup>
             <tbody>
               {rows.slice(STARTERS_COUNT).map((row, index) => (

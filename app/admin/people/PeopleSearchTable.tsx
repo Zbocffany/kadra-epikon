@@ -169,9 +169,11 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
         ...person.represented_country_names,
       ]}
       filterConfig={{
-        label: 'Kraj ur.',
+        label: 'Kraj rep.',
         allLabel: 'Wszystkie kraje',
-        getValue: (person) => person.birth_country_name,
+        getValue: (person) => person.represented_country_names.length > 0
+          ? person.represented_country_names
+          : person.birth_country_name,
       }}
       secondaryFilterConfig={{
         label: 'Aktywność',

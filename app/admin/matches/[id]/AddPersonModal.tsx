@@ -1,10 +1,11 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { AdminPersonBirthCityOption } from '@/lib/db/people'
+import type { AdminPersonBirthCityOption, DuplicatePerson } from '@/lib/db/people'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import type { AdminFederation } from '@/lib/db/countries'
-import { addPerson } from '@/app/admin/matches/actions'
+import { addPerson, checkDuplicatePeople } from '@/app/admin/matches/actions'
+import DuplicatePeopleWarning from '@/components/admin/DuplicatePeopleWarning'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { createCountryInline } from '@/app/admin/countries/actions'
 import AdminSelectField from '@/components/admin/AdminSelectField'
@@ -44,6 +45,17 @@ export default function AddPersonModal({
   const [isActive, setIsActive] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [duplicates, setDuplicates] = useState<DuplicatePerson[]>([])
+  const [pendingPersonData, setPendingPersonData] = useState<null | {
+    firstName: string
+    lastName: string
+    nickname: string
+    birthDate: string | null
+    cityId: string | null
+    countryId: string | null
+    representedCountryIds: string[]
+    isActive: boolean
+  }>(null)
 
   useEffect(() => {
     setCityOptions(cities)
@@ -142,21 +154,21 @@ export default function AddPersonModal({
     setSelectedRepresentedCountryId(countryId)
   }
 
-  async function handleAddPerson() {
+  async function doAddPerson(
+    fName: string,
+    lName: string,
+    nick: string,
+    bDate: string | null,
+    cityId: string | null,
+    countryId: string | null,
+    representedCountryIds: string[],
+    active: boolean
+  ) {
     setError('')
     setIsLoading(true)
 
     try {
-      const newPerson = await addPerson(
-        firstName,
-        lastName,
-        nickname,
-        birthDate || null,
-        selectedCityId || null,
-        selectedCountryId || null,
-        selectedRepresentedCountryId ? [selectedRepresentedCountryId] : [],
-        isActive
-      )
+      const newPerson = await addPerson(fName, lName, nick, bDate, cityId, countryId, representedCountryIds, active)
       setFirstName('')
       setLastName('')
       setNickname('')
@@ -166,6 +178,8 @@ export default function AddPersonModal({
       setSelectedRepresentedCountryId('')
       setIsRepresentedCountryTouched(false)
       setIsActive(true)
+      setPendingPersonData(null)
+      setDuplicates([])
       onSuccess(newPerson)
       onClose()
     } catch (err) {
@@ -174,6 +188,45 @@ export default function AddPersonModal({
     } finally {
       setIsLoading(false)
     }
+  }
+
+  async function handleAddPerson() {
+    setError('')
+
+    if (birthDate && selectedCountryId) {
+      const found = await checkDuplicatePeople(birthDate, selectedCountryId)
+      if (found.length > 0) {
+        setDuplicates(found)
+        setPendingPersonData({
+          firstName,
+          lastName,
+          nickname,
+          birthDate: birthDate || null,
+          cityId: selectedCityId || null,
+          countryId: selectedCountryId || null,
+          representedCountryIds: selectedRepresentedCountryId ? [selectedRepresentedCountryId] : [],
+          isActive,
+        })
+        return
+      }
+    }
+
+    await doAddPerson(
+      firstName,
+      lastName,
+      nickname,
+      birthDate || null,
+      selectedCityId || null,
+      selectedCountryId || null,
+      selectedRepresentedCountryId ? [selectedRepresentedCountryId] : [],
+      isActive
+    )
+  }
+
+  async function handleConfirmDespiteDuplicates() {
+    if (!pendingPersonData) return
+    const { firstName: fN, lastName: lN, nickname: nN, birthDate: bD, cityId, countryId, representedCountryIds, isActive: active } = pendingPersonData
+    await doAddPerson(fN, lN, nN, bD, cityId, countryId, representedCountryIds, active)
   }
 
   if (!isOpen) return null
@@ -633,6 +686,14 @@ export default function AddPersonModal({
           </div>
         </div>
       </div>
+
+      {duplicates.length > 0 && (
+        <DuplicatePeopleWarning
+          duplicates={duplicates}
+          onContinue={handleConfirmDespiteDuplicates}
+          onCancel={() => { setDuplicates([]); setPendingPersonData(null) }}
+        />
+      )}
     </div>
   )
 }

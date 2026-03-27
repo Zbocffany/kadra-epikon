@@ -334,7 +334,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
           )}
 
           {isOpen && !disabled && (
-            <div className="absolute left-0 right-0 top-full z-30 mt-1 max-h-72 overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900 shadow-xl">
+            <div className="absolute left-0 top-full z-30 mt-1 max-h-72 min-w-full w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900 shadow-xl">
               {filteredOptions.length > 0 ? (
                 <>
                   {!required && (

@@ -332,17 +332,17 @@ export default function MatchEventsForm({
   return (
     <div className="space-y-4">
       <input type="hidden" name="events_touched" value={isTouched ? '1' : '0'} />
-      <div className="overflow-visible rounded-lg border border-neutral-800">
-        <table className="w-full table-fixed">
+      <div className="overflow-x-auto overflow-y-visible rounded-lg border border-neutral-800">
+        <table className="w-full table-auto">
           <colgroup>
-            <col className="w-[40px]" />
-            <col className="w-[72px]" />
+            <col className="w-[36px]" />
             <col className="w-[64px]" />
-            <col className="w-[190px]" />
-            <col className="w-[190px]" />
-            <col className="w-[220px]" />
-            <col className="w-[220px]" />
-            <col className="w-[44px]" />
+            <col className="w-[56px]" />
+            <col className="w-[160px]" />
+            <col className="w-[150px]" />
+            <col className="w-[170px]" />
+            <col className="w-[170px]" />
+            <col className="w-[48px]" />
           </colgroup>
           <thead>
             <tr>
@@ -367,7 +367,7 @@ export default function MatchEventsForm({
               <th className="border-b border-l border-neutral-800 bg-neutral-900 px-3 py-2 text-left text-xs font-semibold uppercase tracking-widest text-neutral-500">
                 Osoba 2
               </th>
-              <th className="border-b border-l border-neutral-800 bg-neutral-900 px-2 py-2 text-center text-xs font-semibold uppercase tracking-widest text-neutral-500">
+              <th className="border-b border-l border-neutral-800 bg-neutral-900 px-1 py-2 text-center text-xs font-semibold uppercase tracking-widest text-neutral-500">
                 -
               </th>
             </tr>
@@ -516,7 +516,7 @@ export default function MatchEventsForm({
                       onChange={(id) => updateRow(index, { secondaryPersonId: id })}
                     />
                   </td>
-                  <td className="border-l border-neutral-800 bg-neutral-950 px-2 py-2">
+                  <td className="border-l border-neutral-800 bg-neutral-950 px-1 py-2 text-center">
                     <button
                       type="button"
                       onClick={() => removeRow(index)}
