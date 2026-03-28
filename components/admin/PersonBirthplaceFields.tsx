@@ -40,6 +40,9 @@ export default function PersonBirthplaceFields({
 
   const [selectedCityId, setSelectedCityId] = useState(defaultCityId ?? '')
   const [selectedCountryId, setSelectedCountryId] = useState(initialCountryId)
+  const [createdCityCountryById, setCreatedCityCountryById] = useState<
+    Record<string, { id: string; name: string | null }>
+  >({})
 
   const cityCountryMap = useMemo(
     () => new Map(cities.map((city) => [city.id, city.current_country_id] as const)),
@@ -51,16 +54,25 @@ export default function PersonBirthplaceFields({
     [cities]
   )
 
+  const countryNameById = useMemo(
+    () => new Map(countries.map((country) => [country.id, country.name] as const)),
+    [countries]
+  )
+
   const handleBirthCityChange = (cityId: string) => {
     setSelectedCityId(cityId)
 
     if (!cityId) return
 
-    const mappedCountryId = cityCountryMap.get(cityId) ?? ''
-    setSelectedCountryId(mappedCountryId)
+    const mappedCountryId = cityCountryMap.get(cityId) ?? createdCityCountryById[cityId]?.id
+    if (mappedCountryId) {
+      setSelectedCountryId(mappedCountryId)
+    }
   }
 
-  const derivedCountryName = selectedCityId ? cityCountryNameMap.get(selectedCityId) ?? null : null
+  const derivedCountryName = selectedCityId
+    ? cityCountryNameMap.get(selectedCityId) ?? createdCityCountryById[selectedCityId]?.name ?? null
+    : null
 
   useEffect(() => {
     if (!syncScope || typeof window === 'undefined') return
@@ -101,6 +113,19 @@ export default function PersonBirthplaceFields({
         emptyResultsMessage="Brak wyników - możesz dodać nowe miasto poniżej."
         createAction={createCityAction}
         onSelectedIdChange={handleBirthCityChange}
+        onOptionCreated={(option, context) => {
+          const createdCountryId = (context?.formData.get('country_id') as string | null)?.trim() ?? ''
+          if (!createdCountryId) return
+
+          setCreatedCityCountryById((prev) => ({
+            ...prev,
+            [option.id]: {
+              id: createdCountryId,
+              name: countryNameById.get(createdCountryId) ?? null,
+            },
+          }))
+          setSelectedCountryId(createdCountryId)
+        }}
         inlineForm={(
           <div className="space-y-3">
             <div className="flex flex-col gap-1.5">

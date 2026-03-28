@@ -27,6 +27,7 @@ import {
 import {
   getAdminClubTeamOptions,
   getLatestPlayerClubTeamByPersonIds,
+  getLatestPlayerPositionByPersonIds,
   getAdminMatchCreateOptions,
   getAdminMatchDetails,
   getAdminMatchEvents,
@@ -339,6 +340,7 @@ function MatchTeamParticipantsSection({
   people,
   clubTeams,
   latestPlayerClubTeamByPersonId,
+  latestPlayerPositionByPersonId,
   isEdit,
   cities,
   countries,
@@ -351,6 +353,7 @@ function MatchTeamParticipantsSection({
   people: AdminMatchParticipantPersonOption[]
   clubTeams: AdminTeamOption[]
   latestPlayerClubTeamByPersonId: Record<string, string | null>
+  latestPlayerPositionByPersonId: Record<string, PlayerPosition | null>
   isEdit: boolean
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
@@ -372,6 +375,7 @@ function MatchTeamParticipantsSection({
               players={players}
               clubTeams={clubTeams}
               latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
+              latestPlayerPositionByPersonId={latestPlayerPositionByPersonId}
               cities={cities}
               countries={countries}
               federations={federations}
@@ -811,6 +815,11 @@ export default async function AdminMatchDetailsPage({
     { excludeMatchId: match.id }
   )
 
+  const latestPlayerPositionByPersonId = await getLatestPlayerPositionByPersonIds(
+    participants.people.map((person) => person.id),
+    { excludeMatchId: match.id }
+  )
+
   const eventPeopleById = new Map<string, MatchEventPersonOption>()
 
   for (const participant of [
@@ -908,7 +917,7 @@ export default async function AdminMatchDetailsPage({
         </div>
       </MatchDetailCard>
 
-      <MatchDetailCard label="Rozgrywki" spanTwo>
+      <MatchDetailCard label="Rozgrywki">
         <AdminSelectField
           name="competition_id"
           label="Rozgrywki"
@@ -918,6 +927,21 @@ export default async function AdminMatchDetailsPage({
           options={options.competitions.map((competition) => ({ id: competition.id, label: competition.name }))}
           displayKey="label"
           placeholder="Wpisz, aby filtrować rozgrywki..."
+          emptyResultsMessage="Brak wyników."
+          inlineForm={null}
+        />
+      </MatchDetailCard>
+
+      <MatchDetailCard label="Poziom">
+        <AdminSelectField
+          name="match_level_id"
+          label="Poziom"
+          hideLabel
+          selectedId={match.match_level_id}
+          emptyOptionLabel="— brak —"
+          options={options.matchLevels.map((level) => ({ id: level.id, label: level.name }))}
+          displayKey="label"
+          placeholder="Wpisz, aby filtrować poziom..."
           emptyResultsMessage="Brak wyników."
           inlineForm={null}
         />
@@ -1111,6 +1135,7 @@ export default async function AdminMatchDetailsPage({
               people={participants.people}
               clubTeams={clubTeams}
               latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
+              latestPlayerPositionByPersonId={latestPlayerPositionByPersonId}
               isEdit={true}
               cities={cities}
               countries={countries}
@@ -1124,6 +1149,7 @@ export default async function AdminMatchDetailsPage({
               people={participants.people}
               clubTeams={clubTeams}
               latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
+              latestPlayerPositionByPersonId={latestPlayerPositionByPersonId}
               isEdit={true}
               cities={cities}
               countries={countries}
@@ -1259,6 +1285,7 @@ export default async function AdminMatchDetailsPage({
           people={participants.people}
           clubTeams={clubTeams}
           latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
+          latestPlayerPositionByPersonId={latestPlayerPositionByPersonId}
           isEdit={false}
           cities={cities}
           countries={countries}
@@ -1272,6 +1299,7 @@ export default async function AdminMatchDetailsPage({
           people={participants.people}
           clubTeams={clubTeams}
           latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
+          latestPlayerPositionByPersonId={latestPlayerPositionByPersonId}
           isEdit={false}
           cities={cities}
           countries={countries}

@@ -161,14 +161,79 @@ export async function deleteClub(formData: FormData): Promise<void> {
     .eq('id', id)
     .maybeSingle()
 
-  const { error } = await supabase.from('tbl_Clubs').delete().eq('id', id)
+  // Find the club's team row
+  const { data: team } = await supabase
+    .from('tbl_Teams')
+    .select('id')
+    .eq('club_id', id)
+    .maybeSingle()
 
-  if (error) {
+  if (team) {
+    // Block deletion if the team is used in any match (home or away)
+    const { count: homeMatchCount } = await supabase
+      .from('tbl_Matches')
+      .select('id', { count: 'exact', head: true })
+      .eq('home_team_id', team.id)
+
+    const { count: awayMatchCount } = await supabase
+      .from('tbl_Matches')
+      .select('id', { count: 'exact', head: true })
+      .eq('away_team_id', team.id)
+
+    const totalMatches = (homeMatchCount ?? 0) + (awayMatchCount ?? 0)
+    if (totalMatches > 0) {
+      redirectWithError(
+        `/admin/clubs/${id}`,
+        `Nie można usunąć klubu — drużyna tego klubu jest powiązana z ${totalMatches} ${
+          totalMatches === 1 ? 'meczem' : totalMatches < 5 ? 'meczami' : 'meczami'
+        }. Najpierw usuń lub przepisz te mecze.`
+      )
+    }
+
+    // No matches → safe to clean up dependents before deleting the team
+
+    // 1) Nullify club_team_id in match participants (nullable FK)
+    await supabase
+      .from('tbl_Match_Participants')
+      .update({ club_team_id: null })
+      .eq('club_team_id', team.id)
+
+    // 2) Nullify team_id in match events (nullable FK)
+    await supabase
+      .from('tbl_Match_Events')
+      .update({ team_id: null })
+      .eq('team_id', team.id)
+
+    // 3) Delete person-team periods tied to this club's team
+    await supabase
+      .from('tbl_Person_Team_Periods')
+      .delete()
+      .eq('club_team_id', team.id)
+
+    // 4) Delete the team row itself
+    const { error: teamDeleteError } = await supabase
+      .from('tbl_Teams')
+      .delete()
+      .eq('id', team.id)
+
+    if (teamDeleteError) {
+      redirectWithError(`/admin/clubs/${id}`, 'Błąd usuwania drużyny klubu. Spróbuj ponownie.')
+    }
+  }
+
+  // 5) Delete club history (club_id NOT NULL → must go before club)
+  await supabase.from('tbl_Club_History').delete().eq('club_id', id)
+
+  // 6) Delete the club itself
+  const { error: clubDeleteError } = await supabase
+    .from('tbl_Clubs')
+    .delete()
+    .eq('id', id)
+
+  if (clubDeleteError) {
     redirectWithError(
       `/admin/clubs/${id}`,
-      error.code === '23503'
-        ? 'Nie można usunąć klubu — jest powiązany z innymi danymi.'
-        : 'Wystąpił błąd bazy danych. Spróbuj ponownie.'
+      'Wystąpił błąd bazy danych podczas usuwania klubu. Spróbuj ponownie.'
     )
   }
 

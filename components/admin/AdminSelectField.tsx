@@ -26,7 +26,7 @@ interface AdminSelectFieldProps<T extends AdminSelectOption = AdminSelectOption>
   emptyResultsMessage?: string
   createAction?: (prevState: InlineCreateState, formData: FormData) => Promise<InlineCreateState>
   onSelectedIdChange?: (selectedId: string) => void
-  onOptionCreated?: (option: T) => void
+  onOptionCreated?: (option: T, context?: { formData: FormData }) => void
   /**
    * Custom form content to render inside the inline create dialog.
    * The dialog handles open/close buttons, so only render the form fields.
@@ -138,7 +138,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
           next.sort((a, b) => getDisplayLabel(a).localeCompare(getDisplayLabel(b), 'pl'))
           return next
         })
-        onOptionCreated?.(nextOpt)
+        onOptionCreated?.(nextOpt, { formData })
         setValue(newId)
         onSelectedIdChange?.(newId)
         setQuery(newLabel)

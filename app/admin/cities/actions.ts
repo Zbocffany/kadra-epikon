@@ -30,6 +30,41 @@ async function isPolandCountryId(countryId: string): Promise<boolean> {
   return fifaCode === 'POL' || countryName === 'polska'
 }
 
+export async function getCityCurrentCountry(
+  cityId: string
+): Promise<{ id: string; name: string } | null> {
+  if (!cityId) return null
+  await requireAdminAccess()
+  const supabase = createServiceRoleClient()
+
+  const { data: periods } = await supabase
+    .from('tbl_City_Country_Periods')
+    .select('country_id, valid_from, valid_to')
+    .eq('city_id', cityId)
+
+  if (!periods?.length) return null
+
+  const sorted = [...periods].sort((a, b) => {
+    const aCurrent = a.valid_to === null
+    const bCurrent = b.valid_to === null
+    if (aCurrent !== bCurrent) return aCurrent ? -1 : 1
+    const aTo = a.valid_to ? new Date(a.valid_to).getTime() : Number.NEGATIVE_INFINITY
+    const bTo = b.valid_to ? new Date(b.valid_to).getTime() : Number.NEGATIVE_INFINITY
+    return bTo - aTo
+  })
+
+  const countryId = sorted[0]?.country_id
+  if (!countryId) return null
+
+  const { data: country } = await supabase
+    .from('tbl_Countries')
+    .select('id, name')
+    .eq('id', countryId)
+    .maybeSingle()
+
+  return country ? { id: country.id, name: country.name } : null
+}
+
 export async function createCity(formData: FormData): Promise<void> {
   await requireAdminAccess()
   const cityName = getTrimmedString(formData, 'city_name')

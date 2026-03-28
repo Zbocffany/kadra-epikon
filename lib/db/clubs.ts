@@ -45,6 +45,8 @@ export type AdminClubDetails = {
 export type AdminCity = {
   id: string
   city_name: string
+  current_country_id: string | null
+  current_country_name: string | null
 }
 
 export const CLUB_HISTORY_EVENT_TYPES = [
@@ -234,13 +236,60 @@ export async function getAdminClubsPage(
 export async function getAdminCities(): Promise<AdminCity[]> {
   const supabase = createServiceRoleClient()
 
-  const { data, error } = await supabase
+  const { data: cities, error: citiesError } = await supabase
     .from('tbl_Cities')
     .select('id, city_name')
     .order('city_name', { ascending: true })
 
-  if (error) throw new Error(`tbl_Cities: ${error.message}`)
-  return data ?? []
+  if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
+  if (!cities?.length) return []
+
+  const cityIds = cities.map((c) => c.id)
+
+  const { data: periods, error: periodsError } = await supabase
+    .from('tbl_City_Country_Periods')
+    .select('city_id, country_id, valid_from, valid_to')
+    .in('city_id', cityIds)
+
+  if (periodsError) throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
+
+  const periodsByCity = new Map<string, CityCountryPeriod[]>()
+  for (const period of periods ?? []) {
+    const list = periodsByCity.get(period.city_id) ?? []
+    list.push(period)
+    periodsByCity.set(period.city_id, list)
+  }
+
+  const currentCountryIdByCity = new Map<string, string>()
+  for (const cityId of cityIds) {
+    const current = sortPeriods(periodsByCity.get(cityId) ?? [])[0]
+    if (current?.country_id) {
+      currentCountryIdByCity.set(cityId, current.country_id)
+    }
+  }
+
+  const countryIds = [...new Set([...currentCountryIdByCity.values()])]
+  let countryMap = new Map<string, string>()
+
+  if (countryIds.length) {
+    const { data: countries, error: countriesError } = await supabase
+      .from('tbl_Countries')
+      .select('id, name')
+      .in('id', countryIds)
+
+    if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
+    countryMap = new Map((countries ?? []).map((country) => [country.id, country.name]))
+  }
+
+  return cities.map((c) => {
+    const countryId = currentCountryIdByCity.get(c.id) ?? null
+    return {
+      id: c.id,
+      city_name: c.city_name,
+      current_country_id: countryId,
+      current_country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
+    }
+  })
 }
 
 export async function getAdminClubDetails(

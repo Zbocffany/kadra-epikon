@@ -64,6 +64,7 @@ export default function MatchSquadForm({
   players,
   clubTeams: initialClubTeams,
   latestPlayerClubTeamByPersonId,
+  latestPlayerPositionByPersonId,
   cities,
   countries,
   federations,
@@ -73,6 +74,7 @@ export default function MatchSquadForm({
   players: AdminMatchParticipant[]
   clubTeams: AdminTeamOption[]
   latestPlayerClubTeamByPersonId: Record<string, string | null>
+  latestPlayerPositionByPersonId: Record<string, PlayerPosition | null>
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
   federations: AdminFederation[]
@@ -227,8 +229,10 @@ export default function MatchSquadForm({
                     placeholder={`Podstawowy ${index + 1}`}
                     onChange={(personId) => {
                       const suggestedClubTeamId = latestPlayerClubTeamByPersonId[personId] ?? null
+                      const suggestedPosition = latestPlayerPositionByPersonId[personId] ?? null
                       updateRow(index, {
                         personId,
+                        position: row.position || suggestedPosition || '',
                         clubTeamId: row.clubTeamId || suggestedClubTeamId || '',
                       })
                     }}
@@ -307,8 +311,10 @@ export default function MatchSquadForm({
                       placeholder={`Rezerwowy ${index + 1}`}
                       onChange={(personId) => {
                         const suggestedClubTeamId = latestPlayerClubTeamByPersonId[personId] ?? null
+                        const suggestedPosition = latestPlayerPositionByPersonId[personId] ?? null
                         updateRow(STARTERS_COUNT + index, {
                           personId,
+                          position: row.position || suggestedPosition || '',
                           clubTeamId: row.clubTeamId || suggestedClubTeamId || '',
                         })
                       }}

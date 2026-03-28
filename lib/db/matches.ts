@@ -102,6 +102,7 @@ export type AdminMatch = {
   result_type: ResultType | null
   editorial_status: EditorialStatus
   competition_name: string
+  match_level_name: string | null
   home_team_name: string
   away_team_name: string
   final_score: string | null
@@ -189,6 +190,7 @@ type MatchParticipantRow = {
 type PlayerClubSuggestionRow = {
   person_id: string
   club_team_id: string | null
+  player_position: PlayerPosition | null
   match_id: string
 }
 
@@ -429,6 +431,45 @@ async function mapAdminMatches(
 
   if (compError) throw new Error(`tbl_Competitions: ${compError.message}`)
 
+  let matchLevelIdByMatchId = new Map<string, string | null>()
+  const { data: matchesWithLevel, error: matchesWithLevelError } = await supabase
+    .from('tbl_Matches')
+    .select('id, match_level_id')
+    .in('id', matches.map((match) => match.id))
+
+  if (matchesWithLevelError) {
+    if (!isMissingSchemaObjectMessage(matchesWithLevelError.message, 'match_level_id')) {
+      throw new Error(`tbl_Matches (match_level_id): ${matchesWithLevelError.message}`)
+    }
+  } else {
+    matchLevelIdByMatchId = new Map(
+      (matchesWithLevel ?? []).map((row) => [
+        row.id as string,
+        (row.match_level_id as string | null | undefined) ?? null,
+      ])
+    )
+  }
+
+  const matchLevelIds = [...new Set(
+    [...matchLevelIdByMatchId.values()].filter((id): id is string => Boolean(id))
+  )]
+
+  let matchLevelNameById = new Map<string, string>()
+  if (matchLevelIds.length > 0) {
+    const { data: levels, error: levelsError } = await supabase
+      .from('tbl_Match_Levels')
+      .select('id, name')
+      .in('id', matchLevelIds)
+
+    if (levelsError) {
+      if (!isMissingSchemaObjectMessage(levelsError.message, 'tbl_match_levels')) {
+        throw new Error(`tbl_Match_Levels: ${levelsError.message}`)
+      }
+    } else {
+      matchLevelNameById = new Map((levels ?? []).map((level) => [level.id as string, level.name as string]))
+    }
+  }
+
   const [{ data: matchEvents, error: matchEventsError }, teamNameMap] = await Promise.all([
     supabase
       .from('tbl_Match_Events')
@@ -481,6 +522,11 @@ async function mapAdminMatches(
     result_type: m.result_type,
     editorial_status: m.editorial_status,
     competition_name: compMap.get(m.competition_id) ?? '—',
+    match_level_name: (() => {
+      const levelId = matchLevelIdByMatchId.get(m.id)
+      if (!levelId) return null
+      return matchLevelNameById.get(levelId) ?? null
+    })(),
     home_team_name: teamNameMap.get(m.home_team_id) ?? '—',
     away_team_name: teamNameMap.get(m.away_team_id) ?? '—',
     final_score: getFinalScore(m),
@@ -513,6 +559,7 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
   if (competitionError) throw new Error(`tbl_Competitions: ${competitionError.message}`)
 
   let matchLevelId: string | null = null
+  let matchLevelName: string | null = null
 
   const { data: levelRow, error: levelRowError } = await supabase
     .from('tbl_Matches')
@@ -526,6 +573,22 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
     }
   } else {
     matchLevelId = (levelRow?.match_level_id as string | null | undefined) ?? null
+
+    if (matchLevelId) {
+      const { data: level, error: levelError } = await supabase
+        .from('tbl_Match_Levels')
+        .select('id, name')
+        .eq('id', matchLevelId)
+        .maybeSingle()
+
+      if (levelError) {
+        if (!isMissingSchemaObjectMessage(levelError.message, 'tbl_match_levels')) {
+          throw new Error(`tbl_Match_Levels: ${levelError.message}`)
+        }
+      } else {
+        matchLevelName = (level?.name as string | null | undefined) ?? null
+      }
+    }
   }
 
   return {
@@ -536,6 +599,7 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
     result_type: match.result_type,
     editorial_status: match.editorial_status,
     competition_name: competition?.name ?? '—',
+    match_level_name: matchLevelName,
     home_team_name: teamNameMap.get(match.home_team_id) ?? '—',
     away_team_name: teamNameMap.get(match.away_team_id) ?? '—',
     final_score: null,
@@ -927,5 +991,80 @@ export async function getLatestPlayerClubTeamByPersonIds(
 
   return Object.fromEntries(
     [...bestByPerson.entries()].map(([personId, value]) => [personId, value.clubTeamId])
+  )
+}
+
+export async function getLatestPlayerPositionByPersonIds(
+  personIds: string[],
+  options?: { excludeMatchId?: string }
+): Promise<Record<string, PlayerPosition | null>> {
+  const supabase = createServiceRoleClient()
+
+  if (!personIds.length) {
+    return {}
+  }
+
+  let participantsQuery = supabase
+    .from('tbl_Match_Participants')
+    .select('person_id, player_position, match_id')
+    .eq('role', 'PLAYER')
+    .in('person_id', personIds)
+
+  if (options?.excludeMatchId) {
+    participantsQuery = participantsQuery.neq('match_id', options.excludeMatchId)
+  }
+
+  const { data: participantRows, error: participantsError } = await participantsQuery
+
+  if (participantsError) {
+    throw new Error(`tbl_Match_Participants: ${participantsError.message}`)
+  }
+
+  const rows = (participantRows ?? []) as PlayerClubSuggestionRow[]
+  if (!rows.length) {
+    return {}
+  }
+
+  const matchIds = [...new Set(rows.map((row) => row.match_id))]
+  const { data: matches, error: matchesError } = await supabase
+    .from('tbl_Matches')
+    .select('id, match_date')
+    .in('id', matchIds)
+
+  if (matchesError) {
+    throw new Error(`tbl_Matches: ${matchesError.message}`)
+  }
+
+  const matchDateMap = new Map((matches ?? []).map((match: MatchDateRow) => [match.id, match.match_date]))
+
+  const bestByPerson = new Map<string, { playerPosition: PlayerPosition | null; matchDate: string; matchId: string }>()
+  for (const row of rows) {
+    const matchDate = matchDateMap.get(row.match_id)
+    if (!matchDate) continue
+
+    const current = bestByPerson.get(row.person_id)
+    if (!current) {
+      bestByPerson.set(row.person_id, {
+        playerPosition: row.player_position,
+        matchDate,
+        matchId: row.match_id,
+      })
+      continue
+    }
+
+    const isNewer = matchDate > current.matchDate
+      || (matchDate === current.matchDate && row.match_id > current.matchId)
+
+    if (isNewer) {
+      bestByPerson.set(row.person_id, {
+        playerPosition: row.player_position,
+        matchDate,
+        matchId: row.match_id,
+      })
+    }
+  }
+
+  return Object.fromEntries(
+    [...bestByPerson.entries()].map(([personId, value]) => [personId, value.playerPosition])
   )
 }

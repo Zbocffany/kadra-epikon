@@ -158,15 +158,17 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
                 <col />
                 <col />
                 <col />
+                <col />
               </colgroup>
               <thead>
                 <tr className="border-b border-neutral-800 bg-neutral-900 text-left">
                   <th className="px-4 py-3 font-medium text-neutral-400">Data</th>
-                  <th className="px-4 py-3 font-medium text-neutral-400"></th>
+                  <th className="pl-0 pr-2 py-3 font-medium text-neutral-400"></th>
                   <th className="px-1 py-3 font-medium text-neutral-400"></th>
                   <th className="px-4 py-3 font-medium text-neutral-400"></th>
                   <th className="px-4 py-3 font-medium text-neutral-400"></th>
                   <th className="px-4 py-3 font-medium text-neutral-400">Rozgrywki</th>
+                  <th className="px-3 py-3 font-medium text-neutral-400">Poziom</th>
                   <th className="px-4 py-3 font-medium text-neutral-400">Status meczu</th>
                   <th className="px-4 py-3 font-medium text-neutral-400">Status redakcji</th>
                   <th className="px-4 py-3 text-right font-medium text-neutral-400">Szczegóły</th>
@@ -180,28 +182,39 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
                       i % 2 === 0 ? 'bg-neutral-950' : 'bg-neutral-900/30'
                     }`}
                   >
-                    <td className="px-4 py-3 font-mono text-neutral-300 whitespace-nowrap">
-                      {formatDate(match.match_date)}
-                      {match.match_time && (
-                        <span className="ml-2 text-xs text-neutral-500">
-                          {match.match_time.slice(0, 5)}
-                        </span>
-                      )}
+                    <td className="pl-4 pr-0 py-3 whitespace-nowrap">
+                      <span
+                        className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200"
+                      >
+                        {formatDate(match.match_date)}
+                      </span>
                     </td>
-                    <td className="px-4 py-3 font-semibold text-neutral-100 whitespace-nowrap">
+                    <td className="pl-0 pr-2 py-3 font-semibold text-neutral-100 whitespace-nowrap">
                       {match.home_team_name}
                     </td>
                     <td className="px-1 py-3 text-center text-neutral-500 whitespace-nowrap">
                       -
                     </td>
-                    <td className="px-4 py-3 font-semibold text-neutral-100 whitespace-nowrap">
+                    <td className="pl-0 pr-2 py-3 font-semibold text-neutral-100 whitespace-nowrap">
                       {match.away_team_name}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-neutral-100 whitespace-nowrap">
-                      {match.final_score ? `(${match.final_score})` : ''}
+                    <td className="pl-1 pr-2 py-3 font-semibold text-neutral-100 whitespace-nowrap">
+                      {match.final_score ?? ''}
                     </td>
-                    <td className="px-4 py-3 text-neutral-400 whitespace-nowrap">
-                      {match.competition_name}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span
+                        className="inline-flex items-center rounded-md border border-neutral-400 bg-black px-2 py-0.5 text-xs font-bold text-white"
+                        style={{ fontSize: '0.95em', fontWeight: 700 }}
+                      >
+                        {match.competition_name}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      <span
+                        className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200"
+                      >
+                        {match.match_level_name ?? ''}
+                      </span>
                     </td>
                     <td className="px-4 py-3">
                       <MatchStatusBadge status={match.match_status} />

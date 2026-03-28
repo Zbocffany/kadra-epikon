@@ -8,12 +8,12 @@ import {
   getClubHistory,
 } from '@/lib/db/clubs'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
-import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import { getAdminStadiumOptions } from '@/lib/db/stadiums'
 import type { AdminStadiumOption } from '@/lib/db/stadiums'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
 import AdminCancelLink from '@/components/admin/AdminCancelLink'
+import ClubCityCountryFields from '@/components/admin/ClubCityCountryFields'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { createStadiumInline } from '@/app/admin/stadiums/actions'
 import {
@@ -123,80 +123,25 @@ export default async function AdminClubDetailsPage({
         )}
       </DetailsFieldCard>
 
-      <DetailsFieldCard label="Miasto">
-        {isEdit ? (
-          <AdminSelectField
-            name="club_city_id"
-            label="Miasto"
-            selectedId={club.club_city_id}
-            options={cities.map((c) => ({ id: c.id, label: c.city_name }))}
-            displayKey="label"
-            addButtonLabel="+ Dodaj miasto"
-            addDialogTitle="Nowe miasto"
-            emptyResultsMessage="Brak wyników — możesz dodać nowe miasto poniżej."
-            createAction={createCityInline}
-            inlineForm={(
-              <div className="space-y-3">
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="inline_city_name" className="text-xs text-neutral-400">
-                    Nazwa miasta
-                  </label>
-                  <input
-                    id="inline_city_name"
-                    name="city_name"
-                    type="text"
-                    required
-                    className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                  />
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="inline_city_country" className="text-xs text-neutral-400">
-                    Kraj
-                  </label>
-                  <select
-                    id="inline_city_country"
-                    name="country_id"
-                    required
-                    className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                  >
-                    <option value="">— wybierz —</option>
-                    {countries.map((country) => (
-                      <option key={country.id} value={country.id}>
-                        {country.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor="inline_city_voivodeship" className="text-xs text-neutral-400">
-                    Województwo (tylko Polska)
-                  </label>
-                  <select
-                    id="inline_city_voivodeship"
-                    name="voivodeship"
-                    className="rounded-lg border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
-                  >
-                    <option value="">— brak —</option>
-                    {VOIVODESHIP_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
+      {isEdit ? (
+        <DetailsFieldCard label="Miasto / Kraj" spanTwo>
+          <ClubCityCountryFields
+            cities={cities}
+            countries={countries}
+            defaultCityId={club.club_city_id}
+            createCityAction={createCityInline}
           />
-        ) : (
-          <DetailsFieldValue value={club.city_name ?? '—'} />
-        )}
-      </DetailsFieldCard>
-
-      <DetailsFieldCard label="Kraj">
-        <DetailsFieldValue value={club.country_name ?? '—'} />
-      </DetailsFieldCard>
+        </DetailsFieldCard>
+      ) : (
+        <>
+          <DetailsFieldCard label="Miasto">
+            <DetailsFieldValue value={club.city_name ?? '—'} />
+          </DetailsFieldCard>
+          <DetailsFieldCard label="Kraj">
+            <DetailsFieldValue value={club.country_name ?? '—'} />
+          </DetailsFieldCard>
+        </>
+      )}
 
       <DetailsFieldCard label="Stadion" spanTwo>
         {isEdit ? (

@@ -66,6 +66,14 @@ export default function PersonRepresentedCountriesFields({
         return [...prev, { id: createdCountry.id, name: createdCountry.name ?? '—' }]
           .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
       })
+
+      if (isManualSelection) return
+
+      setRows((prev) => {
+        const next = prev.length ? [...prev] : ['']
+        next[0] = createdCountry.id
+        return next
+      })
     }
 
     window.addEventListener(BIRTH_COUNTRY_CHANGED_EVENT, handleBirthCountryChanged)
