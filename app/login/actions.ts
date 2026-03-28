@@ -27,5 +27,5 @@ export async function signInAction(formData: FormData) {
 export async function signOutAction() {
   const authClient = await createServerAuthClient()
   await authClient.auth.signOut()
-  redirect('/login')
+  redirect('/')
 }
