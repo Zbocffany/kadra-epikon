@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0a0a0a;
+  --foreground: #ededed;
 }
 
 @theme inline {
@@ -12,11 +12,79 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html.theme-dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+  color-scheme: dark;
+}
+
+html.theme-light {
+  --background: #f3f4f6;
+  --foreground: #111827;
+  color-scheme: light;
+}
+
+/* Light mode overrides for admin/panel readability */
+html.theme-light .bg-neutral-950 {
+  background-color: #ffffff !important;
+}
+
+html.theme-light .bg-neutral-950\/80,
+html.theme-light .bg-neutral-950\/60,
+html.theme-light .bg-neutral-950\/50 {
+  background-color: #ffffff !important;
+}
+
+html.theme-light .bg-neutral-900,
+html.theme-light .bg-neutral-900\/30,
+html.theme-light .bg-neutral-900\/40,
+html.theme-light .bg-neutral-900\/50,
+html.theme-light .bg-neutral-900\/60,
+html.theme-light .bg-neutral-900\/80 {
+  background-color: #f3f4f6 !important;
+}
+
+html.theme-light .bg-neutral-800 {
+  background-color: #e5e7eb !important;
+}
+
+html.theme-light .bg-black {
+  background-color: #ffffff !important;
+}
+
+html.theme-light .text-white {
+  color: #111827 !important;
+}
+
+html.theme-light .hover\:text-white:hover {
+  color: #111827 !important;
+}
+
+html.theme-light .border-neutral-800,
+html.theme-light .border-neutral-700,
+html.theme-light .border-neutral-700\/80,
+html.theme-light .ring-neutral-700,
+html.theme-light .ring-neutral-600 {
+  border-color: #d1d5db !important;
+  --tw-ring-color: #d1d5db !important;
+}
+
+html.theme-light .text-neutral-100,
+html.theme-light .text-neutral-200,
+html.theme-light .text-neutral-300,
+html.theme-light .text-neutral-400,
+html.theme-light .text-neutral-500,
+html.theme-light .text-neutral-600 {
+  color: #111827 !important;
+}
+
+html.theme-light .hover\:bg-neutral-800:hover {
+  background-color: #e5e7eb !important;
+}
+
+html.theme-light .hover\:bg-neutral-900\/80:hover,
+html.theme-light .hover\:bg-neutral-900:hover {
+  background-color: #e5e7eb !important;
 }
 
 body {

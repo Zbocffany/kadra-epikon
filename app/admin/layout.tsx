@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import { signOutAction } from '@/app/login/actions'
 import AdminStatusBar from '@/components/admin/AdminStatusBar'
+import ThemeToggle from '@/components/ThemeToggle'
 
 export default async function AdminLayout({
   children,
@@ -40,14 +41,17 @@ export default async function AdminLayout({
                   </span>
           </nav>
 
-          <form action={signOutAction}>
-            <button
-              type="submit"
-              className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-            >
-              Wyloguj
-            </button>
-          </form>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <form action={signOutAction}>
+              <button
+                type="submit"
+                className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+              >
+                Wyloguj
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 

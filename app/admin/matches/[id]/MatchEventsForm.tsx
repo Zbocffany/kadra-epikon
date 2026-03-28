@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import type { AdminMatchEvent, AdminMatchParticipantPersonOption, AdminTeamOption, MatchEventType } from '@/lib/db/matches'
 import { Icon } from '@/components/icons'
 
@@ -111,6 +112,9 @@ function EventPersonPicker({
   const [isOpen, setIsOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLDivElement>(null)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+  const [dropdownStyle, setDropdownStyle] = useState<CSSProperties | null>(null)
 
   const selectedLabel = options.find((opt) => opt.id === value)?.label ?? ''
 
@@ -122,7 +126,10 @@ function EventPersonPicker({
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+      const target = e.target as Node
+      const clickedInsideTrigger = containerRef.current?.contains(target) ?? false
+      const clickedInsideDropdown = dropdownRef.current?.contains(target) ?? false
+      if (!clickedInsideTrigger && !clickedInsideDropdown) {
         setIsOpen(false)
         setSearchText('')
       }
@@ -130,6 +137,32 @@ function EventPersonPicker({
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    function updatePosition() {
+      const rect = triggerRef.current?.getBoundingClientRect()
+      if (!rect) return
+
+      setDropdownStyle({
+        position: 'fixed',
+        top: rect.bottom + 4,
+        left: rect.left,
+        width: rect.width,
+        zIndex: 1200,
+      })
+    }
+
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [isOpen])
 
   if (disabled) {
     return (
@@ -143,7 +176,7 @@ function EventPersonPicker({
   return (
     <div ref={containerRef} className="relative">
       <input type="hidden" name={name} value={value} />
-      <div className="relative">
+      <div ref={triggerRef} className="relative">
         <input
           type="text"
           value={isOpen ? searchText : selectedLabel}
@@ -184,31 +217,59 @@ function EventPersonPicker({
           </button>
         )}
       </div>
-      {isOpen && (
-        <div className="absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-md border border-neutral-700 bg-neutral-900 shadow-lg">
-          <button
-            type="button"
-            onClick={() => { onChange(''); setSearchText(''); setIsOpen(false) }}
-            className="w-full border-b border-neutral-800 px-3 py-1.5 text-left text-sm text-neutral-500 hover:bg-neutral-800"
+      {isOpen && dropdownStyle && typeof document !== 'undefined'
+        ? createPortal(
+          <div
+            ref={dropdownRef}
+            style={dropdownStyle}
+            className="max-h-52 overflow-y-auto rounded-md border border-neutral-700 bg-neutral-900 shadow-lg"
           >
-            Brak
-          </button>
-          {filtered.length > 0 ? (
-            filtered.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => { onChange(opt.id); setSearchText(''); setIsOpen(false) }}
-                className="w-full border-b border-neutral-800 px-3 py-1.5 text-left text-sm text-neutral-100 hover:bg-neutral-800 last:border-b-0"
-              >
-                {opt.label}
-              </button>
-            ))
-          ) : (
-            <div className="px-3 py-1.5 text-sm text-neutral-400">Brak wyników</div>
-          )}
-        </div>
-      )}
+            <button
+              type="button"
+              onClick={() => {
+                onChange('')
+                setSearchText('')
+                setIsOpen(false)
+              }}
+              className="w-full border-b border-neutral-800 px-3 py-1.5 text-left text-sm text-neutral-500 hover:bg-neutral-800"
+            >
+              Brak
+            </button>
+            {filtered.length > 0 ? (
+              filtered.map((opt) => (
+                (() => {
+                  const isSelected = opt.id === value
+                  return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.id)
+                    setSearchText('')
+                    setIsOpen(false)
+                  }}
+                  aria-selected={isSelected}
+                  className={`w-full border-b border-neutral-800 px-3 py-1.5 text-left text-sm last:border-b-0 ${
+                    isSelected
+                      ? 'bg-neutral-800 text-neutral-100 font-semibold'
+                      : 'text-neutral-100 hover:bg-neutral-800'
+                  }`}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    {isSelected ? <span className="text-emerald-400">✓</span> : null}
+                    <span>{opt.label}</span>
+                  </span>
+                </button>
+                  )
+                })()
+              ))
+            ) : (
+              <div className="px-3 py-1.5 text-sm text-neutral-400">Brak wyników</div>
+            )}
+          </div>,
+          document.body
+        )
+        : null}
     </div>
   )
 }
@@ -332,7 +393,8 @@ export default function MatchEventsForm({
   return (
     <div className="space-y-4">
       <input type="hidden" name="events_touched" value={isTouched ? '1' : '0'} />
-      <div className="overflow-x-auto overflow-y-visible rounded-lg border border-neutral-800">
+      <div className="overflow-visible rounded-lg border border-neutral-800">
+        <div className="overflow-x-auto overflow-y-hidden">
         <table className="w-full table-auto">
           <colgroup>
             <col className="w-[36px]" />
@@ -532,6 +594,7 @@ export default function MatchEventsForm({
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       <div className="flex items-center gap-2">

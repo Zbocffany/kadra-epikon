@@ -1,34 +1,16 @@
 import Link from 'next/link'
 import { createMatch } from './actions'
 import MatchCreateModal from './MatchCreateModal'
-import { getMatchStatusLabel } from './matchStatusLabels'
 import AdminPagination from '@/components/admin/AdminPagination'
 import { getAdminMatchesPage } from '@/lib/db/matches'
 import { getAdminMatchCreateOptions } from '@/lib/db/matches'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import { getAdminFederations, type AdminFederation } from '@/lib/db/countries'
-import type { AdminMatch, AdminStadiumOption, EditorialStatus, MatchStatus } from '@/lib/db/matches'
+import type { AdminMatch, AdminStadiumOption, EditorialStatus } from '@/lib/db/matches'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
 
 type SearchParams = Promise<RawSearchParams>
-
-// ─── Badge helpers ────────────────────────────────────────────────────────────
-
-function MatchStatusBadge({ status }: { status: MatchStatus }) {
-  const styles: Record<string, string> = {
-    SCHEDULED: 'bg-indigo-900/50 text-indigo-300 ring-indigo-700',
-    FINISHED:  'bg-neutral-800   text-neutral-300 ring-neutral-700',
-    ABANDONED: 'bg-orange-900/50 text-orange-300  ring-orange-700',
-    CANCELLED: 'bg-red-900/50    text-red-300     ring-red-700',
-  }
-  const cls = styles[status] ?? 'bg-neutral-800 text-neutral-400 ring-neutral-700'
-  return (
-    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${cls}`}>
-      {getMatchStatusLabel(status)}
-    </span>
-  )
-}
 
 function EditorialStatusBadge({ status }: { status: EditorialStatus }) {
   const styles: Record<string, string> = {
@@ -49,6 +31,36 @@ function formatDate(dateStr: string) {
   // dateStr is a plain date from Postgres: 'YYYY-MM-DD'
   const [year, month, day] = dateStr.split('-')
   return `${day}.${month}.${year}`
+}
+
+function getCompetitionDisplay(name: string): { label: string; fullName: string; isCompact: boolean } {
+  const normalized = name.trim()
+
+  if (normalized === 'Mistrzostwa Świata') {
+    return { label: 'MŚ', fullName: normalized, isCompact: false }
+  }
+  if (normalized === 'Mistrzostwa Europy') {
+    return { label: 'ME', fullName: normalized, isCompact: false }
+  }
+  if (normalized === 'Liga Narodów') {
+    return { label: 'LN', fullName: normalized, isCompact: false }
+  }
+  if (normalized === 'Nieoficjalny') {
+    return { label: 'NO', fullName: normalized, isCompact: false }
+  }
+  if (normalized === 'Towarzyski') {
+    return { label: normalized, fullName: normalized, isCompact: true }
+  }
+
+  return { label: normalized, fullName: normalized, isCompact: false }
+}
+
+function getCompetitionLevelTooltip(competitionName: string, matchLevelName: string | null): string {
+  if (!matchLevelName || competitionName === 'Towarzyski' || competitionName === 'Nieoficjalny') {
+    return competitionName
+  }
+
+  return `${competitionName} - ${matchLevelName}`
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -90,18 +102,6 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
 
   const pagination = getPaginationMeta(totalMatches, page, pageSize)
   const isCreateModalOpen = create === '1' || Boolean(error)
-  const maxTeamNameLength = matches.length > 0
-    ? Math.max(
-        ...matches.flatMap((match) => [match.home_team_name.length, match.away_team_name.length]),
-        1
-      )
-    : 1
-  const maxScoreLength = matches.length > 0
-    ? Math.max(
-        ...matches.map((match) => (match.final_score ? match.final_score.length + 2 : 0)),
-        0
-      )
-    : 0
 
   return (
     <main className="min-h-screen px-4 py-10 sm:px-8">
@@ -150,32 +150,22 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
             <table className="w-full border-collapse text-sm table-auto">
               <colgroup>
                 <col />
-                <col style={{ width: `${maxTeamNameLength}ch` }} />
-                <col style={{ width: '1ch' }} />
-                <col style={{ width: `${maxTeamNameLength}ch` }} />
-                <col style={{ width: `${Math.max(maxScoreLength, 1)}ch` }} />
                 <col />
                 <col />
                 <col />
                 <col />
                 <col />
               </colgroup>
-              <thead>
-                <tr className="border-b border-neutral-800 bg-neutral-900 text-left">
-                  <th className="px-4 py-3 font-medium text-neutral-400">Data</th>
-                  <th className="pl-0 pr-2 py-3 font-medium text-neutral-400"></th>
-                  <th className="px-1 py-3 font-medium text-neutral-400"></th>
-                  <th className="px-4 py-3 font-medium text-neutral-400"></th>
-                  <th className="px-4 py-3 font-medium text-neutral-400"></th>
-                  <th className="px-4 py-3 font-medium text-neutral-400">Rozgrywki</th>
-                  <th className="px-3 py-3 font-medium text-neutral-400">Poziom</th>
-                  <th className="px-4 py-3 font-medium text-neutral-400">Status meczu</th>
-                  <th className="px-4 py-3 font-medium text-neutral-400">Status redakcji</th>
-                  <th className="px-4 py-3 text-right font-medium text-neutral-400">Szczegóły</th>
-                </tr>
-              </thead>
               <tbody>
                 {matches.map((match, i) => (
+                  (() => {
+                    const competition = getCompetitionDisplay(match.competition_name)
+                    const showLevel = Boolean(
+                      match.match_level_name
+                      && match.competition_name !== 'Towarzyski'
+                      && match.competition_name !== 'Nieoficjalny'
+                    )
+                    return (
                   <tr
                     key={match.id}
                     className={`border-b border-neutral-800 transition-colors hover:bg-neutral-900/60 ${
@@ -189,40 +179,41 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
                         {formatDate(match.match_date)}
                       </span>
                     </td>
-                    <td className="pl-0 pr-2 py-3 font-semibold text-neutral-100 whitespace-nowrap">
-                      {match.home_team_name}
+                    <td className="pl-2 pr-4 py-3 whitespace-nowrap font-semibold text-neutral-100">
+                      {match.home_team_name} – {match.away_team_name}
                     </td>
-                    <td className="px-1 py-3 text-center text-neutral-500 whitespace-nowrap">
-                      -
+                    <td className="px-6 py-3 whitespace-nowrap text-left">
+                      {match.final_score ? (
+                        <span
+                          className="inline-flex items-center rounded-md border border-neutral-400 bg-black px-2 py-0.5 text-xs font-bold text-white"
+                          style={{ fontSize: '0.95em', fontWeight: 700 }}
+                        >
+                          {match.final_score}
+                        </span>
+                      ) : null}
                     </td>
-                    <td className="pl-0 pr-2 py-3 font-semibold text-neutral-100 whitespace-nowrap">
-                      {match.away_team_name}
-                    </td>
-                    <td className="pl-1 pr-2 py-3 font-semibold text-neutral-100 whitespace-nowrap">
-                      {match.final_score ?? ''}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-8 py-3 whitespace-nowrap">
                       <span
-                        className="inline-flex items-center rounded-md border border-neutral-400 bg-black px-2 py-0.5 text-xs font-bold text-white"
-                        style={{ fontSize: '0.95em', fontWeight: 700 }}
+                        title={getCompetitionLevelTooltip(match.competition_name, match.match_level_name)}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-neutral-200"
                       >
-                        {match.competition_name}
+                        <span className={`font-semibold ${competition.isCompact ? 'text-[10px]' : 'text-xs'}`}>
+                          {competition.label}
+                        </span>
+                        {showLevel ? (
+                          <>
+                            <span className="text-[10px] text-neutral-500">/</span>
+                            <span className="text-xs font-semibold text-neutral-200">
+                              {match.match_level_name}
+                            </span>
+                          </>
+                        ) : null}
                       </span>
                     </td>
-                    <td className="px-3 py-3 whitespace-nowrap">
-                      <span
-                        className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200"
-                      >
-                        {match.match_level_name ?? ''}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <MatchStatusBadge status={match.match_status} />
-                    </td>
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-3 text-right whitespace-nowrap">
                       <EditorialStatusBadge status={match.editorial_status} />
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="pl-1 pr-4 py-3 text-right whitespace-nowrap">
                       <Link
                         href={`/admin/matches/${match.id}`}
                         className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
@@ -231,6 +222,8 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
                       </Link>
                     </td>
                   </tr>
+                    )
+                  })()
                 ))}
               </tbody>
             </table>

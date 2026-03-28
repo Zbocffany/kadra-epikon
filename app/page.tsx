@@ -1,9 +1,11 @@
 import Link from "next/link";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function Home() {
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-neutral-950 px-6 py-10">
-      <div className="absolute right-6 top-6 z-20">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden px-6 py-10">
+      <div className="absolute right-6 top-6 z-20 flex items-center gap-2">
+        <ThemeToggle />
         <Link
           href="/login"
           className="rounded-lg border border-neutral-700/80 bg-neutral-900/60 px-4 py-2 text-sm text-neutral-200 backdrop-blur transition hover:border-neutral-500 hover:bg-neutral-900/80"
