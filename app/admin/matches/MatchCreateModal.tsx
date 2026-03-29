@@ -16,12 +16,14 @@ import {
 import type {
   AdminCityOption,
   AdminCompetitionOption,
+  AdminMatchLevelOption,
   AdminStadiumOption,
   AdminTeamOption,
 } from '@/lib/db/matches'
 
 type MatchCreateModalProps = {
   competitions: AdminCompetitionOption[]
+  matchLevels: AdminMatchLevelOption[]
   teams: AdminTeamOption[]
   cities: AdminCityOption[]
   countries: AdminCountryOption[]
@@ -32,6 +34,7 @@ type MatchCreateModalProps = {
 
 export default function MatchCreateModal({
   competitions,
+  matchLevels,
   teams,
   cities,
   countries,
@@ -123,7 +126,7 @@ export default function MatchCreateModal({
               />
             </div>
 
-            <div className="sm:col-span-2">
+            <div className="flex flex-col gap-1.5">
               <AdminSelectField
                 name="competition_id"
                 label="Rozgrywki"
@@ -132,6 +135,18 @@ export default function MatchCreateModal({
                 displayKey="label"
                 placeholder="Wpisz, aby filtrować rozgrywki..."
                 emptyResultsMessage="Brak wyników."
+                inlineForm={null}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <AdminSelectField
+                name="match_level_id"
+                label="Poziom"
+                options={matchLevels.map((level) => ({ id: level.id, label: level.name }))}
+                displayKey="label"
+                placeholder="Wpisz, aby filtrować poziomy..."
+                emptyResultsMessage="Brak poziomów."
                 inlineForm={null}
               />
             </div>

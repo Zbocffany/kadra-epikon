@@ -77,6 +77,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
   let countryOptions: AdminCountryOption[] = []
   let federationOptions: AdminFederation[] = []
   let stadiumOptions: AdminStadiumOption[] = []
+  let matchLevelOptions: { id: string; name: string }[] = []
   let fetchError: string | null = null
 
   try {
@@ -95,6 +96,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
     countryOptions = countries
     federationOptions = federations
     stadiumOptions = options.stadiums
+    matchLevelOptions = options.matchLevels
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
     matches = []
@@ -244,6 +246,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
         {isCreateModalOpen && !fetchError && (
           <MatchCreateModal
             competitions={competitionOptions}
+            matchLevels={matchLevelOptions}
             teams={teamOptions}
             cities={cityOptions}
             countries={countryOptions}
