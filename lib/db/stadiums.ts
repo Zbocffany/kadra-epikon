@@ -22,6 +22,7 @@ export type AdminStadiumDetails = {
   stadium_city_id: string | null
   city_name: string | null
   country_name: string | null
+  country_fifa_code: string | null
 }
 
 export type AdminStadiumOption = {
@@ -93,6 +94,32 @@ async function getCountryNameMap(countryIds: string[]): Promise<Map<string, stri
   }
 
   return new Map((countries ?? []).map((country) => [country.id, country.name]))
+}
+
+async function getCountryDetailsMap(
+  countryIds: string[]
+): Promise<Map<string, { name: string | null; fifa_code: string | null }>> {
+  if (!countryIds.length) return new Map()
+
+  const supabase = createServiceRoleClient()
+  const { data: countries, error: countriesError } = await supabase
+    .from('tbl_Countries')
+    .select('id, name, fifa_code')
+    .in('id', countryIds)
+
+  if (countriesError) {
+    throw new Error(`tbl_Countries: ${countriesError.message}`)
+  }
+
+  return new Map(
+    (countries ?? []).map((country) => [
+      country.id,
+      {
+        name: country.name ?? null,
+        fifa_code: country.fifa_code ?? null,
+      },
+    ])
+  )
 }
 
 export async function getAdminStadiums(): Promise<AdminStadiumListItem[]> {
@@ -237,6 +264,7 @@ export async function getAdminStadiumDetails(
       stadium_city_id: null,
       city_name: null,
       country_name: null,
+      country_fifa_code: null,
     }
   }
 
@@ -250,13 +278,14 @@ export async function getAdminStadiumDetails(
 
   const currentCountryByCity = await getCurrentCountryIdByCity([stadium.stadium_city_id])
   const countryId = currentCountryByCity.get(stadium.stadium_city_id)
-  const countryMap = await getCountryNameMap(countryId ? [countryId] : [])
+  const countryMap = await getCountryDetailsMap(countryId ? [countryId] : [])
 
   return {
     id: stadium.id,
     name: stadium.name,
     stadium_city_id: stadium.stadium_city_id,
     city_name: city?.city_name ?? null,
-    country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
+    country_name: countryId ? (countryMap.get(countryId)?.name ?? null) : null,
+    country_fifa_code: countryId ? (countryMap.get(countryId)?.fifa_code ?? null) : null,
   }
 }

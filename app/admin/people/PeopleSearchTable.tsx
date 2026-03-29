@@ -72,24 +72,13 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
       key: 'birth_country',
       label: 'Kraj',
       render: (person) => {
-        const showBirthFlag =
-          !!person.birth_country_name &&
-          !person.represented_country_names.includes(person.birth_country_name)
-
-        const hasAny = showBirthFlag || person.represented_country_names.length > 0
-        if (!hasAny) return '—'
+        if (person.represented_country_names.length === 0) return '—'
 
         return (
           <div className="flex items-center justify-center gap-1">
-            {showBirthFlag && (
-              <CountryFlag
-                fifaCode={person.birth_country_fifa_code}
-                countryName={person.birth_country_name!}
-              />
-            )}
             {person.represented_country_names.map((name, i) => (
               <CountryFlag
-                key={name}
+                key={`${name}-${i}`}
                 fifaCode={person.represented_country_fifa_codes[i] ?? null}
                 countryName={name}
               />

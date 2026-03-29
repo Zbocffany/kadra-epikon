@@ -161,9 +161,7 @@ export const COUNTRY_HISTORY_EVENT_TYPES = [
   { value: 'UNIFICATION',  label: 'Zjednoczenie' },
   { value: 'PARTITION',    label: 'Podział' },
   { value: 'FIFA_JOIN',    label: 'Przystąpienie do FIFA' },
-  { value: 'UEFA_JOIN',    label: 'Przystąpienie do UEFA' },
   { value: 'FIFA_LEAVE',   label: 'Wyjście / wykluczenie z FIFA' },
-  { value: 'UEFA_LEAVE',   label: 'Wyjście / wykluczenie z UEFA' },
   { value: 'OTHER',        label: 'Inne' },
 ] as const
 
@@ -199,8 +197,10 @@ export type AdminSuccessionRow = {
   succession_id: string
   precountry_id: string
   precountry_name: string
+  precountry_fifa_code: string | null
   postcountry_id: string
   postcountry_name: string
+  postcountry_fifa_code: string | null
   source_event_id: string | null
   effective_date: string | null
 }
@@ -234,19 +234,29 @@ export async function getCountrySuccessions(
 
   const { data: countries, error: countriesError } = await supabase
     .from('tbl_Countries')
-    .select('id, name')
+    .select('id, name, fifa_code')
     .in('id', countryIds)
 
   if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
 
-  const nameMap = new Map((countries ?? []).map((c) => [c.id, c.name ?? '—']))
+  const countryMap = new Map(
+    (countries ?? []).map((c) => [
+      c.id,
+      {
+        name: c.name ?? '—',
+        fifa_code: c.fifa_code ?? null,
+      },
+    ])
+  )
 
   return allRows.map((row) => ({
     succession_id: row.id,
     precountry_id: row.precountry_id,
-    precountry_name: nameMap.get(row.precountry_id) ?? '—',
+    precountry_name: countryMap.get(row.precountry_id)?.name ?? '—',
+    precountry_fifa_code: countryMap.get(row.precountry_id)?.fifa_code ?? null,
     postcountry_id: row.postcountry_id,
-    postcountry_name: nameMap.get(row.postcountry_id) ?? '—',
+    postcountry_name: countryMap.get(row.postcountry_id)?.name ?? '—',
+    postcountry_fifa_code: countryMap.get(row.postcountry_id)?.fifa_code ?? null,
     source_event_id: row.source_event_id,
     effective_date: row.effective_date,
   }))

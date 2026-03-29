@@ -13,7 +13,7 @@ import {
   DetailsPageHeader,
   DetailsPageContent,
 } from '@/components/admin/DetailsPageLayout'
-import { DetailsFieldCard, DetailsFieldValue } from '@/components/admin/DetailsFieldCard'
+import CountryFlag from '@/components/CountryFlag'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 
 type Params = DetailPageParams
@@ -96,11 +96,24 @@ export default async function AdminStadiumDetailsPage({
   }
 
   const isEdit = mode === 'edit'
+  const stadiumSummary = [stadium.name, stadium.city_name ? `(${stadium.city_name})` : null]
+    .filter(Boolean)
+    .join(' ')
+
   const fields = (
-    <div className="mt-6 grid gap-4 sm:grid-cols-2">
-      <DetailsFieldCard label="Nazwa stadionu" spanTwo>
-        {isEdit ? (
-          <div className="flex flex-col gap-1.5">
+    <div className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="text-lg font-semibold text-neutral-100">{stadiumSummary || '—'}</p>
+        <CountryFlag
+          fifaCode={stadium.country_fifa_code}
+          countryName={stadium.country_name ?? '—'}
+          className="h-7 w-[42px]"
+        />
+      </div>
+
+      {isEdit ? (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
             <label htmlFor="name" className="text-sm font-medium text-neutral-300">
               Nazwa stadionu <span className="text-red-400">*</span>
             </label>
@@ -113,34 +126,31 @@ export default async function AdminStadiumDetailsPage({
               className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
             />
           </div>
-        ) : (
-          <DetailsFieldValue value={stadium.name ?? '-'} />
-        )}
-      </DetailsFieldCard>
 
-      <DetailsFieldCard label="Miasto stadionu">
-        {isEdit ? (
-          <AdminSelectField
-            name="stadium_city_id"
-            label="Miasto stadionu"
-            required
-            selectedId={stadium.stadium_city_id}
-            options={cities.map((c) => ({ id: c.id, label: c.city_name }))}
-            displayKey="label"
-            addButtonLabel="+ Dodaj miasto"
-            addDialogTitle="Nowe miasto"
-            emptyResultsMessage="Brak wyników - możesz dodać nowe miasto poniżej."
-            createAction={createCityInline}
-            inlineForm={<CityInlineForm countries={countries} />}
-          />
-        ) : (
-          <DetailsFieldValue value={stadium.city_name ?? '-'} />
-        )}
-      </DetailsFieldCard>
+          <div className="flex flex-col gap-1.5">
+            <AdminSelectField
+              name="stadium_city_id"
+              label="Miasto stadionu"
+              required
+              selectedId={stadium.stadium_city_id}
+              options={cities.map((c) => ({ id: c.id, label: c.city_name }))}
+              displayKey="label"
+              addButtonLabel="+ Dodaj miasto"
+              addDialogTitle="Nowe miasto"
+              emptyResultsMessage="Brak wyników - możesz dodać nowe miasto poniżej."
+              createAction={createCityInline}
+              inlineForm={<CityInlineForm countries={countries} />}
+            />
+          </div>
 
-      <DetailsFieldCard label="Kraj stadionu">
-        <DetailsFieldValue value={stadium.country_name ?? '-'} />
-      </DetailsFieldCard>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-neutral-300">Kraj stadionu</label>
+            <p className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-200">
+              {stadium.country_name ?? '—'}
+            </p>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 
@@ -156,8 +166,8 @@ export default async function AdminStadiumDetailsPage({
       />
 
       <DetailsPageContent
-        title={stadium.name ?? '-'}
-        breadcrumb="Admin / Stadiony"
+        title={null}
+        breadcrumb={null}
         saved={saved}
         error={error}
         isEdit={isEdit}

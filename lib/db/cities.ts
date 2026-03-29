@@ -26,7 +26,19 @@ export type AdminCityDetails = {
   current_country_id: string | null
   current_period_id: string | null
   country_name: string | null
+  country_fifa_code: string | null
   voivodeship: string | null
+}
+
+export type AdminCityPeriod = {
+  id: string
+  city_id: string
+  country_id: string
+  country_name: string | null
+  country_fifa_code: string | null
+  valid_from: string | null
+  valid_to: string | null
+  description: string | null
 }
 
 function sortPeriods(periods: CityCountryPeriod[]): CityCountryPeriod[] {
@@ -206,16 +218,18 @@ export async function getAdminCityDetails(id: string): Promise<AdminCityDetails 
   const best = sortPeriods(periods ?? [])[0]
 
   let countryName: string | null = null
+  let countryFifaCode: string | null = null
 
   if (best?.country_id) {
     const { data: country, error: countryError } = await supabase
       .from('tbl_Countries')
-      .select('name')
+      .select('name, fifa_code')
       .eq('id', best.country_id)
       .maybeSingle()
 
     if (countryError) throw new Error(`tbl_Countries: ${countryError.message}`)
     countryName = country?.name ?? null
+    countryFifaCode = country?.fifa_code ?? null
   }
 
   return {
@@ -224,6 +238,55 @@ export async function getAdminCityDetails(id: string): Promise<AdminCityDetails 
     current_country_id: best?.country_id ?? null,
     current_period_id: best?.id ?? null,
     country_name: countryName,
+    country_fifa_code: countryFifaCode,
     voivodeship: city.voivodeship ?? null,
   }
+}
+
+export async function getCityCountryPeriods(cityId: string): Promise<AdminCityPeriod[]> {
+  const supabase = createServiceRoleClient()
+
+  const { data: periods, error: periodsError } = await supabase
+    .from('tbl_City_Country_Periods')
+    .select('id, city_id, country_id, valid_from, valid_to, description')
+    .eq('city_id', cityId)
+
+  if (periodsError) throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
+  if (!periods?.length) return []
+
+  const countryIds = [...new Set(periods.map((p) => p.country_id))]
+  const { data: countries, error: countriesError } = await supabase
+    .from('tbl_Countries')
+    .select('id, name, fifa_code')
+    .in('id', countryIds)
+
+  if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
+
+  const countryMap = new Map((countries ?? []).map((c) => [c.id, c]))
+
+  const sorted = [...periods].sort((a, b) => {
+    const aOpen = a.valid_to === null
+    const bOpen = b.valid_to === null
+    if (aOpen !== bOpen) return aOpen ? -1 : 1
+    const aTo = a.valid_to ? new Date(a.valid_to).getTime() : Number.NEGATIVE_INFINITY
+    const bTo = b.valid_to ? new Date(b.valid_to).getTime() : Number.NEGATIVE_INFINITY
+    if (aTo !== bTo) return bTo - aTo
+    const aFrom = a.valid_from ? new Date(a.valid_from).getTime() : Number.NEGATIVE_INFINITY
+    const bFrom = b.valid_from ? new Date(b.valid_from).getTime() : Number.NEGATIVE_INFINITY
+    return bFrom - aFrom
+  })
+
+  return sorted.map((p) => {
+    const country = countryMap.get(p.country_id)
+    return {
+      id: p.id,
+      city_id: p.city_id,
+      country_id: p.country_id,
+      country_name: country?.name ?? null,
+      country_fifa_code: country?.fifa_code ?? null,
+      valid_from: p.valid_from,
+      valid_to: p.valid_to,
+      description: (p as Record<string, unknown>).description as string | null ?? null,
+    }
+  })
 }

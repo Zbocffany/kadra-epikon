@@ -282,4 +282,72 @@ export async function deleteCity(formData: FormData): Promise<void> {
   redirectWithAdded('/admin/cities', `Usunięto miasto: ${city?.city_name ?? id}`)
 }
 
+export async function saveCityPeriod(formData: FormData): Promise<void> {
+  await requireAdminAccess()
+  const cityId = getTrimmedString(formData, 'city_id')
+  const periodId = getTrimmedNullable(formData, 'period_id')
+  const countryId = getTrimmedString(formData, 'country_id')
+  const validFrom = getTrimmedNullable(formData, 'valid_from')
+  const validTo = getTrimmedNullable(formData, 'valid_to')
+  const description = getTrimmedNullable(formData, 'description')
+
+  if (!cityId) {
+    redirectWithError('/admin/cities', 'Brak ID miasta.')
+  }
+
+  if (!countryId) {
+    redirectWithError(`/admin/cities/${cityId}`, 'Kraj jest wymagany.')
+  }
+
+  const supabase = createServiceRoleClient()
+
+  if (periodId) {
+    const { error } = await supabase
+      .from('tbl_City_Country_Periods')
+      .update({ country_id: countryId, valid_from: validFrom, valid_to: validTo, description })
+      .eq('id', periodId)
+
+    if (error) {
+      redirectWithError(`/admin/cities/${cityId}`, 'Błąd zapisu okresu. Spróbuj ponownie.')
+    }
+  } else {
+    const { error } = await supabase.from('tbl_City_Country_Periods').insert({
+      id: crypto.randomUUID(),
+      city_id: cityId,
+      country_id: countryId,
+      valid_from: validFrom,
+      valid_to: validTo,
+      description,
+    })
+
+    if (error) {
+      redirectWithError(`/admin/cities/${cityId}`, 'Błąd zapisu okresu. Spróbuj ponownie.')
+    }
+  }
+
+  redirectWithSaved(`/admin/cities/${cityId}`)
+}
+
+export async function deleteCityPeriod(formData: FormData): Promise<void> {
+  await requireAdminAccess()
+  const cityId = getTrimmedString(formData, 'city_id')
+  const periodId = getTrimmedString(formData, 'period_id')
+
+  if (!cityId || !periodId) {
+    redirectWithError('/admin/cities', 'Brak danych do usunięcia.')
+  }
+
+  const supabase = createServiceRoleClient()
+
+  const { error } = await supabase
+    .from('tbl_City_Country_Periods')
+    .delete()
+    .eq('id', periodId)
+
+  if (error) {
+    redirectWithError(`/admin/cities/${cityId}`, 'Błąd usunięcia okresu. Spróbuj ponownie.')
+  }
+
+  redirectWithSaved(`/admin/cities/${cityId}`)
+}
 

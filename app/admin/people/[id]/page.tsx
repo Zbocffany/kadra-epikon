@@ -14,7 +14,7 @@ import {
   DetailsPageHeader,
   DetailsPageContent,
 } from '@/components/admin/DetailsPageLayout'
-import { DetailsFieldCard, DetailsFieldValue } from '@/components/admin/DetailsFieldCard'
+import CountryFlag from '@/components/CountryFlag'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 import PersonBirthplaceFields from '@/components/admin/PersonBirthplaceFields'
 import PersonRepresentedCountriesFields from '@/components/admin/PersonRepresentedCountriesFields'
@@ -26,6 +26,31 @@ function formatDate(date: string | null): string {
   if (!date) return '—'
   const [year, month, day] = date.split('-')
   return `${day}.${month}.${year}`
+}
+
+function getAge(date: string | null): number | null {
+  if (!date) return null
+
+  const [yearRaw, monthRaw, dayRaw] = date.split('-')
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+    return null
+  }
+
+  const today = new Date()
+  let age = today.getFullYear() - year
+  const hasBirthdayPassed =
+    today.getMonth() + 1 > month ||
+    (today.getMonth() + 1 === month && today.getDate() >= day)
+
+  if (!hasBirthdayPassed) {
+    age -= 1
+  }
+
+  return age >= 0 ? age : null
 }
 
 export default async function AdminPersonDetailsPage({
@@ -51,10 +76,55 @@ export default async function AdminPersonDetailsPage({
   const displayName = getPersonDisplayName(person)
   const isEdit = mode === 'edit'
   const syncScope = `admin-people-edit-${person.id}`
+  const birthAge = getAge(person.birth_date)
+  const birthDateLabel = person.birth_date
+    ? `${formatDate(person.birth_date)}${birthAge !== null ? ` (${birthAge} l.)` : ''}`
+    : '—'
+
+  const visibleFlags: { fifaCode: string | null; countryName: string; key: string }[] = []
+  const seenFlagKeys = new Set<string>()
+
+  person.represented_country_names.forEach((name, i) => {
+    const fifaCode = person.represented_country_fifa_codes[i] ?? null
+    const key = `${fifaCode ?? '—'}|${name}`
+
+    if (seenFlagKeys.has(key)) return
+    seenFlagKeys.add(key)
+    visibleFlags.push({ fifaCode, countryName: name, key: `rep-${key}` })
+  })
+
   const fields = (
-    <div className="mt-6 grid gap-4 sm:grid-cols-2">
-      <DetailsFieldCard label="Imię">
-        {isEdit ? (
+    <div className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <p className="text-lg font-semibold text-neutral-100">{displayName}</p>
+          <p className="mt-0.5 text-sm text-neutral-400">{birthDateLabel}</p>
+          <div className="mt-0.5 flex items-center gap-1.5 text-sm text-neutral-400">
+            <span>{person.birth_city_name ?? '—'}</span>
+            <span>(</span>
+            <CountryFlag
+              fifaCode={person.birth_country_fifa_code}
+              countryName={person.birth_country_name ?? '—'}
+              className="h-[13.5px] w-[20px]"
+            />
+            <span>)</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          {visibleFlags.map((flag) => (
+            <CountryFlag
+              key={flag.key}
+              fifaCode={flag.fifaCode}
+              countryName={flag.countryName}
+              className="h-[30px] w-[45px]"
+            />
+          ))}
+        </div>
+      </div>
+
+      {isEdit ? (
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="first_name" className="text-sm font-medium text-neutral-300">Imię</label>
             <input
@@ -65,13 +135,7 @@ export default async function AdminPersonDetailsPage({
               className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
             />
           </div>
-        ) : (
-          <DetailsFieldValue value={person.first_name ?? '—'} />
-        )}
-      </DetailsFieldCard>
 
-      <DetailsFieldCard label="Nazwisko">
-        {isEdit ? (
           <div className="flex flex-col gap-1.5">
             <label htmlFor="last_name" className="text-sm font-medium text-neutral-300">Nazwisko</label>
             <input
@@ -82,14 +146,8 @@ export default async function AdminPersonDetailsPage({
               className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
             />
           </div>
-        ) : (
-          <DetailsFieldValue value={person.last_name ?? '—'} />
-        )}
-      </DetailsFieldCard>
 
-      <DetailsFieldCard label="Pseudonim">
-        {isEdit ? (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
             <label htmlFor="nickname" className="text-sm font-medium text-neutral-300">Pseudonim</label>
             <input
               id="nickname"
@@ -99,14 +157,8 @@ export default async function AdminPersonDetailsPage({
               className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
             />
           </div>
-        ) : (
-          <DetailsFieldValue value={person.nickname ?? '—'} />
-        )}
-      </DetailsFieldCard>
 
-      <DetailsFieldCard label="Data urodzenia">
-        {isEdit ? (
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
             <label htmlFor="birth_date" className="text-sm font-medium text-neutral-300">Data urodzenia</label>
             <input
               id="birth_date"
@@ -116,57 +168,32 @@ export default async function AdminPersonDetailsPage({
               className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
             />
           </div>
-        ) : (
-          <DetailsFieldValue value={formatDate(person.birth_date)} />
-        )}
-      </DetailsFieldCard>
 
-      <DetailsFieldCard label="Miejsce urodzenia" spanTwo>
-        {isEdit ? (
-          <PersonBirthplaceFields
-            cities={cities}
-            countries={countries}
-            createCityAction={createCityInline}
-            createCountryAction={createCountryInline}
-            showBirthDate={false}
-            defaultBirthDate={person.birth_date}
-            defaultCityId={person.birth_city_id}
-            defaultCountryId={person.birth_country_id}
-            syncScope={syncScope}
-          />
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Miasto</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">{person.birth_city_name ?? '—'}</p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-neutral-500">Kraj</p>
-              <p className="mt-2 text-lg font-semibold text-neutral-100">{person.birth_country_name ?? '—'}</p>
-            </div>
+          <div className="sm:col-span-2">
+            <PersonBirthplaceFields
+              cities={cities}
+              countries={countries}
+              createCityAction={createCityInline}
+              createCountryAction={createCountryInline}
+              showBirthDate={false}
+              defaultBirthDate={person.birth_date}
+              defaultCityId={person.birth_city_id}
+              defaultCountryId={person.birth_country_id}
+              syncScope={syncScope}
+            />
           </div>
-        )}
-      </DetailsFieldCard>
 
-      <DetailsFieldCard label="Reprezentowane kraje" spanTwo>
-        {isEdit ? (
-          <PersonRepresentedCountriesFields
-            countries={countries}
-            createCountryAction={createCountryInline}
-            defaultCountryIds={person.represented_country_ids}
-            defaultBirthCountryId={person.birth_country_id}
-            syncScope={syncScope}
-          />
-        ) : (
-          <DetailsFieldValue
-            value={person.represented_country_names.length ? person.represented_country_names.join(', ') : '—'}
-          />
-        )}
-      </DetailsFieldCard>
+          <div className="sm:col-span-2">
+            <PersonRepresentedCountriesFields
+              countries={countries}
+              createCountryAction={createCountryInline}
+              defaultCountryIds={person.represented_country_ids}
+              defaultBirthCountryId={person.birth_country_id}
+              syncScope={syncScope}
+            />
+          </div>
 
-      <DetailsFieldCard label="Aktywna osoba" spanTwo>
-        {isEdit ? (
-          <div className="flex items-center gap-2 pt-1">
+          <div className="sm:col-span-2 flex items-center gap-2 pt-1">
             <input
               id="is_active"
               name="is_active"
@@ -176,10 +203,8 @@ export default async function AdminPersonDetailsPage({
             />
             <label htmlFor="is_active" className="text-sm text-neutral-300">Aktywna osoba</label>
           </div>
-        ) : (
-          <DetailsFieldValue value={person.is_active ? 'Tak' : 'Nie'} />
-        )}
-      </DetailsFieldCard>
+        </div>
+      ) : null}
     </div>
   )
 
@@ -195,8 +220,8 @@ export default async function AdminPersonDetailsPage({
       />
 
       <DetailsPageContent
-        title={displayName}
-        breadcrumb="Admin / Ludzie"
+        title={null}
+        breadcrumb={null}
         saved={saved}
         error={error}
         isEdit={isEdit}
