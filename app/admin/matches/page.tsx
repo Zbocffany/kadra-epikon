@@ -63,6 +63,16 @@ function getCompetitionLevelTooltip(competitionName: string, matchLevelName: str
   return `${competitionName} - ${matchLevelName}`
 }
 
+function getDaysUntilMatch(dateStr: string): number | null {
+  const matchDate = new Date(dateStr)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  matchDate.setHours(0, 0, 0, 0)
+  const diff = matchDate.getTime() - today.getTime()
+  const days = Math.ceil(diff / (1000 * 60 * 60 * 24))
+  return days > 0 ? days : null
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function AdminMatchesPage({ searchParams }: { searchParams: SearchParams }) {
@@ -192,7 +202,17 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
                         >
                           {match.final_score}
                         </span>
-                      ) : null}
+                      ) : (() => {
+                        const daysUntil = getDaysUntilMatch(match.match_date)
+                        return daysUntil !== null ? (
+                          <span
+                            className="inline-flex items-center rounded-md border border-blue-500 bg-black px-2 py-0.5 text-xs font-bold text-blue-400"
+                            style={{ fontSize: '0.95em', fontWeight: 700 }}
+                          >
+                            Dni do: {daysUntil}
+                          </span>
+                        ) : null
+                      })()}
                     </td>
                     <td className="px-8 py-3 whitespace-nowrap">
                       <span
