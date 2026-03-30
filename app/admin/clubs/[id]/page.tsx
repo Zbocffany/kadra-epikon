@@ -208,54 +208,59 @@ export default async function AdminClubDetailsPage({
             {fields}
 
             <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-6">
-              <p className="mb-5 text-xs font-semibold uppercase tracking-widest text-neutral-500">
-                Historia
-              </p>
+              <details open={historyEvents.length > 0} className="overflow-hidden rounded-lg border border-neutral-800 group/det">
+                <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-neutral-500 marker:content-none">
+                  <span>Historia</span>
+                  <span className="text-sm font-bold leading-none text-neutral-400 transition-transform duration-150 group-open/det:rotate-180">▾</span>
+                </summary>
 
-              <div className="mb-4 flex items-center justify-end">
-                <Link
-                  href={`/admin/clubs/${id}?history=new`}
-                  className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
-                >
-                  + Dodaj zdarzenie
-                </Link>
-              </div>
+                <div className="p-3">
+                  <div className="mb-4 flex items-center justify-end">
+                    <Link
+                      href={`/admin/clubs/${id}?history=new`}
+                      className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
+                    >
+                      + Dodaj zdarzenie
+                    </Link>
+                  </div>
 
-              {historyEvents.length > 0 ? (
-                <div className="overflow-x-auto rounded-lg border border-neutral-800">
-                  <table className="min-w-full divide-y divide-neutral-800 text-sm">
-                    <thead className="bg-neutral-900/80 text-neutral-400">
-                      <tr>
-                        <th className="px-4 py-3 text-left font-medium">Data zdarzenia</th>
-                        <th className="px-4 py-3 text-left font-medium">Nazwa zdarzenia</th>
-                        <th className="px-4 py-3 text-right font-medium">Szczegóły</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-neutral-800 bg-neutral-900/40 text-neutral-200">
-                      {historyEvents.map((event) => {
-                        return (
-                          <tr key={event.id}>
-                            <td className="px-4 py-3 font-mono text-xs text-neutral-300">
-                              {formatEventDate(event.event_date, event.event_date_precision)}
-                            </td>
-                            <td className="px-4 py-3">{event.title ?? '—'}</td>
-                            <td className="px-4 py-3 text-right">
-                              <Link
-                                href={`/admin/clubs/${id}?history=${event.id}`}
-                                className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-                              >
-                                Pokaż więcej
-                              </Link>
-                            </td>
+                  {historyEvents.length > 0 ? (
+                    <div className="overflow-x-auto rounded-lg border border-neutral-800">
+                      <table className="min-w-full divide-y divide-neutral-800 text-sm">
+                        <thead className="bg-neutral-900/80 text-neutral-400">
+                          <tr>
+                            <th className="px-4 py-3 text-left font-medium">Data zdarzenia</th>
+                            <th className="px-4 py-3 text-left font-medium">Nazwa zdarzenia</th>
+                            <th className="px-4 py-3 text-right font-medium">Szczegóły</th>
                           </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                        </thead>
+                        <tbody className="divide-y divide-neutral-800 bg-neutral-900/40 text-neutral-200">
+                          {historyEvents.map((event) => {
+                            return (
+                              <tr key={event.id}>
+                                <td className="px-4 py-3 font-mono text-xs text-neutral-300">
+                                  {formatEventDate(event.event_date, event.event_date_precision)}
+                                </td>
+                                <td className="px-4 py-3">{event.title ?? '—'}</td>
+                                <td className="px-4 py-3 text-right">
+                                  <Link
+                                    href={`/admin/clubs/${id}?history=${event.id}`}
+                                    className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+                                  >
+                                    Pokaż więcej
+                                  </Link>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="mb-1 text-sm text-neutral-500">Brak wpisów w historii.</p>
+                  )}
                 </div>
-              ) : (
-                <p className="mb-5 text-sm text-neutral-500">Brak wpisów w historii.</p>
-              )}
+              </details>
             </div>
           </>
         }

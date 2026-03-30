@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 480" role="img" aria-labelledby="title desc">
+  <title id="title">Flag of the Soviet Union</title>
+  <desc id="desc">Red field with gold star and stylized hammer and sickle in the canton.</desc>
+  <rect width="640" height="480" fill="#d52b1e"/>
+
+  <!-- Star -->
+  <polygon
+    fill="#ffde00"
+    points="126,38 135,64 162,64 140,80 149,106 126,90 103,106 112,80 90,64 117,64"
+  />
+
+  <!-- Stylized sickle -->
+  <path
+    d="M154 126c-33 6-58 33-58 67 0 25 14 48 36 60l12-20c-14-8-23-23-23-40 0-22 16-41 37-45l-4-22z"
+    fill="#ffde00"
+  />
+
+  <!-- Stylized hammer (handle + head) -->
+  <rect x="132" y="154" width="12" height="112" rx="2" transform="rotate(-35 138 210)" fill="#ffde00"/>
+  <rect x="109" y="140" width="44" height="14" rx="2" transform="rotate(-35 131 147)" fill="#ffde00"/>
+</svg>

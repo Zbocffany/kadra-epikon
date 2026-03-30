@@ -18,6 +18,7 @@ export type AdminCityListItem = {
 export type AdminCountryOption = {
   id: string
   name: string
+  fifa_code?: string | null
 }
 
 export type AdminCityDetails = {
@@ -187,7 +188,7 @@ export async function getAdminCountriesOptions(): Promise<AdminCountryOption[]> 
 
   const { data, error } = await supabase
     .from('tbl_Countries')
-    .select('id, name')
+    .select('id, name, fifa_code')
     .order('name', { ascending: true })
 
   if (error) throw new Error(`tbl_Countries: ${error.message}`)

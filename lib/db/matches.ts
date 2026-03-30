@@ -113,6 +113,8 @@ export type AdminMatchDetails = AdminMatch & {
   match_level_id: string | null
   home_team_id: string
   away_team_id: string
+  home_team_fifa_code: string | null
+  away_team_fifa_code: string | null
   match_city_id: string | null
   match_stadium_id: string | null
 }
@@ -357,6 +359,48 @@ async function getTeamDisplayMap(teamIds: string[]): Promise<Map<string, string>
   )
 }
 
+async function getTeamCountryFifaCodeMap(teamIds: string[]): Promise<Map<string, string | null>> {
+  const supabase = createServiceRoleClient()
+  type TeamCountryRow = { id: string; country_id: string | null }
+  type CountryRow = { id: string; fifa_code: string | null }
+
+  if (!teamIds.length) {
+    return new Map()
+  }
+
+  const { data: teams, error: teamError } = await runSelectWithRetry<TeamCountryRow>(async () =>
+    await supabase
+      .from('tbl_Teams')
+      .select('id, country_id')
+      .in('id', teamIds)
+  )
+
+  if (teamError) throw new Error(`tbl_Teams: ${teamError.message}`)
+
+  const countryIds = [...new Set((teams ?? []).map((t) => t.country_id).filter(Boolean))]
+  const { data: countries, error: countryError } = countryIds.length
+    ? await runSelectWithRetry<CountryRow>(async () =>
+        await supabase
+          .from('tbl_Countries')
+          .select('id, fifa_code')
+          .in('id', countryIds)
+      )
+    : { data: [] as CountryRow[], error: null }
+
+  if (countryError && !isTransientGatewayError(countryError)) {
+    throw new Error(`tbl_Countries: ${countryError.message}`)
+  }
+
+  const countryFifaMap = new Map((countries ?? []).map((c) => [c.id, c.fifa_code ?? null]))
+
+  return new Map(
+    (teams ?? []).map((t) => [
+      t.id,
+      t.country_id ? (countryFifaMap.get(t.country_id) ?? null) : null,
+    ])
+  )
+}
+
 /**
  * Returns all matches for the admin list, sorted by match_date descending.
  *
@@ -547,13 +591,14 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
   if (matchError) throw new Error(`tbl_Matches: ${matchError.message}`)
   if (!match) return null
 
-  const [{ data: competition, error: competitionError }, teamNameMap] = await Promise.all([
+  const [{ data: competition, error: competitionError }, teamNameMap, teamFifaMap] = await Promise.all([
     supabase
       .from('tbl_Competitions')
       .select('id, name')
       .eq('id', match.competition_id)
       .maybeSingle(),
     getTeamDisplayMap([match.home_team_id, match.away_team_id]),
+    getTeamCountryFifaCodeMap([match.home_team_id, match.away_team_id]),
   ])
 
   if (competitionError) throw new Error(`tbl_Competitions: ${competitionError.message}`)
@@ -607,6 +652,8 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
     match_level_id: matchLevelId,
     home_team_id: match.home_team_id,
     away_team_id: match.away_team_id,
+    home_team_fifa_code: teamFifaMap.get(match.home_team_id) ?? null,
+    away_team_fifa_code: teamFifaMap.get(match.away_team_id) ?? null,
     match_city_id: match.match_city_id ?? null,
     match_stadium_id: match.match_stadium_id ?? null,
   }

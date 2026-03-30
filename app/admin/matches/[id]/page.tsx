@@ -39,6 +39,7 @@ import {
   type AdminTeamOption,
   type PlayerPosition,
 } from '@/lib/db/matches'
+import CountryFlag from '@/components/CountryFlag'
 import { getAdminPersonBirthCityOptions, type AdminPersonBirthCityOption } from '@/lib/db/people'
 import { getAdminCountriesOptions, type AdminCountryOption } from '@/lib/db/cities'
 import { getAdminFederations, type AdminFederation } from '@/lib/db/countries'
@@ -435,6 +436,8 @@ function MatchEventsSectionEdit({
 function MatchLineupsSummarySection({
   homeTeamName,
   awayTeamName,
+  homeTeamFifaCode,
+  awayTeamFifaCode,
   score,
   halftimeScore,
   events,
@@ -444,6 +447,8 @@ function MatchLineupsSummarySection({
 }: {
   homeTeamName: string
   awayTeamName: string
+  homeTeamFifaCode: string | null
+  awayTeamFifaCode: string | null
   score: string
   halftimeScore: string
   events: AdminMatchEvent[]
@@ -482,10 +487,6 @@ function MatchLineupsSummarySection({
     MATCH_PENALTY_SAVED: 'Obroniony karny',
     MATCH_PENALTY_MISSED: 'Nietrafiony karny',
     SUBSTITUTION: 'Zmiana',
-  }
-
-  function isFirstHalf(event: AdminMatchEvent): boolean {
-    return event.minute <= 45
   }
 
   function renderMinute(event: AdminMatchEvent): string {
@@ -759,12 +760,18 @@ function MatchLineupsSummarySection({
     <section className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-5 sm:p-6">
       <div className="rounded-2xl border border-neutral-700 bg-neutral-900/60 px-5 py-3">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-          <p className="truncate text-left text-2xl font-bold text-neutral-100 sm:text-3xl">{homeTeamName}</p>
+          <div className="flex items-center gap-2">
+            <CountryFlag fifaCode={homeTeamFifaCode} countryName={homeTeamName} className="h-5 w-[30px]" />
+            <p className="truncate text-left text-2xl font-bold text-neutral-100 sm:text-3xl">{homeTeamName}</p>
+          </div>
           <div className="text-center">
             <p className="text-2xl font-bold text-neutral-100 sm:text-3xl">{score}</p>
             <p className="mt-0.5 text-[11px] font-medium text-neutral-400">Do przerwy: {halftimeScore}</p>
           </div>
-          <p className="truncate text-right text-2xl font-bold text-neutral-100 sm:text-3xl">{awayTeamName}</p>
+          <div className="flex items-center justify-end gap-2">
+            <p className="truncate text-right text-2xl font-bold text-neutral-100 sm:text-3xl">{awayTeamName}</p>
+            <CountryFlag fifaCode={awayTeamFifaCode} countryName={awayTeamName} className="h-5 w-[30px]" />
+          </div>
         </div>
       </div>
       <div className="mt-4 space-y-3">
@@ -810,15 +817,11 @@ export default async function AdminMatchDetailsPage({
     getAdminMatchEvents(match.id),
   ])
 
-  const latestPlayerClubTeamByPersonId = await getLatestPlayerClubTeamByPersonIds(
-    participants.people.map((person) => person.id),
-    { excludeMatchId: match.id }
-  )
-
-  const latestPlayerPositionByPersonId = await getLatestPlayerPositionByPersonIds(
-    participants.people.map((person) => person.id),
-    { excludeMatchId: match.id }
-  )
+  const personIds = participants.people.map((person) => person.id)
+  const [latestPlayerClubTeamByPersonId, latestPlayerPositionByPersonId] = await Promise.all([
+    getLatestPlayerClubTeamByPersonIds(personIds, { excludeMatchId: match.id }),
+    getLatestPlayerPositionByPersonIds(personIds, { excludeMatchId: match.id }),
+  ])
 
   const eventPeopleById = new Map<string, MatchEventPersonOption>()
 
@@ -1268,6 +1271,8 @@ export default async function AdminMatchDetailsPage({
       <MatchLineupsSummarySection
         homeTeamName={match.home_team_name}
         awayTeamName={match.away_team_name}
+        homeTeamFifaCode={match.home_team_fifa_code}
+        awayTeamFifaCode={match.away_team_fifa_code}
         score={summaryScoreLabel}
         halftimeScore={halftimeScoreLabel}
         events={events}

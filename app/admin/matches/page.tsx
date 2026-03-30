@@ -73,6 +73,41 @@ function getDaysUntilMatch(dateStr: string): number | null {
   return days > 0 ? days : null
 }
 
+function getPolandMatchOutcome(match: AdminMatch): 'WIN' | 'LOSS' | 'DRAW' | null {
+  if (!match.final_score) return null
+
+  const scoreMatch = match.final_score.match(/(\d+)\s*[:\-]\s*(\d+)/)
+  if (!scoreMatch) return null
+
+  const homeGoals = Number(scoreMatch[1])
+  const awayGoals = Number(scoreMatch[2])
+
+  const homeName = (match.home_team_name ?? '').trim().toLowerCase()
+  const awayName = (match.away_team_name ?? '').trim().toLowerCase()
+  const isPolandHome = homeName.startsWith('polska')
+  const isPolandAway = awayName.startsWith('polska')
+
+  if (!isPolandHome && !isPolandAway) return null
+
+  if (homeGoals === awayGoals) return 'DRAW'
+
+  if (isPolandHome) {
+    return homeGoals > awayGoals ? 'WIN' : 'LOSS'
+  }
+
+  return awayGoals > homeGoals ? 'WIN' : 'LOSS'
+}
+
+function getScoreBadgeClass(match: AdminMatch): string {
+  const outcome = getPolandMatchOutcome(match)
+
+  if (outcome === 'WIN') return 'border-emerald-500'
+  if (outcome === 'LOSS') return 'border-red-500'
+  if (outcome === 'DRAW') return 'border-neutral-500'
+
+  return 'border-neutral-400'
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default async function AdminMatchesPage({ searchParams }: { searchParams: SearchParams }) {
@@ -197,7 +232,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
                     <td className="px-6 py-3 whitespace-nowrap text-left">
                       {match.final_score ? (
                         <span
-                          className="inline-flex items-center rounded-md border border-neutral-400 bg-black px-2 py-0.5 text-xs font-bold text-white"
+                          className={`inline-flex items-center rounded-md border bg-black px-2 py-0.5 text-xs font-bold text-white ${getScoreBadgeClass(match)}`}
                           style={{ fontSize: '0.95em', fontWeight: 700 }}
                         >
                           {match.final_score}

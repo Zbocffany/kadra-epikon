@@ -50,6 +50,7 @@ const FIFA_FLAG_CODE_MAP: Record<string, string> = {
   CRO: 'hr',
   CTA: 'cf',
   CUB: 'cu',
+  CIS: 'cis',
   CUW: 'cw',
   CYP: 'cy',
   CZE: 'cz',
@@ -209,6 +210,7 @@ const FIFA_FLAG_CODE_MAP: Record<string, string> = {
   UAE: 'ae',
   UGA: 'ug',
   UKR: 'ua',
+  USR: 'su',
   URU: 'uy',
   USA: 'us',
   UZB: 'uz',
@@ -226,7 +228,9 @@ const FIFA_FLAG_CODE_MAP: Record<string, string> = {
 
 export function getFlagAssetCode(fifaCode: string | null | undefined): string | null {
   if (!fifaCode) return null
-  return FIFA_FLAG_CODE_MAP[fifaCode.toUpperCase()] ?? null
+  const normalized = fifaCode.trim().toUpperCase()
+  if (!normalized) return null
+  return FIFA_FLAG_CODE_MAP[normalized] ?? null
 }
 
 export function getFlagAssetPath(fifaCode: string | null | undefined): string | null {
