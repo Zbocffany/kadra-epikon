@@ -18,7 +18,7 @@ interface AdminTableProps<T extends Record<string, unknown> = Record<string, unk
  * Generic admin table component for displaying lists of items.
  * Handles:
  * - Column headers from config
- * - Row striping (odd/even background)
+ * - Consistent row background styling
  * - Custom cell rendering via render functions
  * - Empty state fallback
  *
@@ -63,10 +63,8 @@ export default function AdminTable<T extends Record<string, unknown>>({
         <tbody>
           {data.map((row, i) => (
             <tr
-              key={String(row[idField])}
-              className={`border-b border-neutral-800 last:border-b-0 ${
-                i % 2 === 0 ? 'bg-neutral-950' : 'bg-neutral-900/40'
-              }`}
+              key={String(row[idField] ?? i)}
+              className="border-b border-neutral-800 bg-neutral-950 last:border-b-0 transition-colors hover:bg-neutral-900/60"
             >
               {columns.map((col) => (
                 <td key={col.key} className={`px-4 py-3 ${col.className ?? ''}`}>

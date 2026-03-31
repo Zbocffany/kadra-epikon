@@ -60,6 +60,28 @@ function formatDate(dateStr: string) {
   return `${day}.${month}.${year}`
 }
 
+function formatEventPersonDisplayName(person: AdminMatchParticipantPersonOption): string {
+  const firstName = person.firstName.trim()
+  const lastName = person.lastName.trim()
+  const nickname = person.nickname.trim()
+
+  if (lastName) {
+    const firstNameParts = firstName.split(/\s+/).filter(Boolean).slice(0, 2)
+    const initials = firstNameParts.map((part) => part[0]?.toUpperCase()).filter(Boolean).join('.')
+
+    if (initials) {
+      return `${initials}. ${lastName}`
+    }
+
+    return lastName
+  }
+
+  if (nickname) return nickname
+  if (firstName) return firstName
+
+  return 'Nieznany'
+}
+
 function MatchDetailCard({
   label,
   children,
@@ -286,27 +308,27 @@ function MatchTeamParticipantsView({
             <tbody>
               {starters.map((player, index) => (
                 <tr key={player.id}>
-                  <td className="bg-neutral-950 px-3 py-2 text-sm text-neutral-500">{index + 1}</td>
-                  <td className="bg-neutral-950 py-2 pl-0 pr-2">
+                  <td className="bg-neutral-950 px-3 py-1.5 text-sm text-neutral-500">{index + 1}</td>
+                  <td className="bg-neutral-950 py-1.5 pl-0 pr-2">
                     <PositionBadge position={player.player_position} />
                   </td>
-                  <td className="bg-neutral-950 px-3 py-2 text-sm">{renderPlayerNameWithIcons(player, 'text-neutral-100')}</td>
+                  <td className="bg-neutral-950 px-3 py-1.5 text-sm">{renderPlayerNameWithIcons(player, 'text-neutral-100')}</td>
                 </tr>
               ))}
               {bench.length > 0 && (
                 <tr>
-                  <td colSpan={3} className="bg-neutral-950 px-3 py-3 text-xs font-semibold uppercase tracking-widest text-neutral-500">
+                  <td colSpan={3} className="bg-neutral-950 px-3 py-2.5 text-xs font-semibold uppercase tracking-widest text-neutral-500">
                     Ławka rezerwowych
                   </td>
                 </tr>
               )}
               {bench.map((player, index) => (
                 <tr key={player.id}>
-                  <td className="bg-neutral-900/40 px-3 py-2 text-sm text-neutral-600">{starters.length + index + 1}</td>
-                  <td className="bg-neutral-900/40 py-2 pl-0 pr-2">
+                  <td className="bg-neutral-900/40 px-3 py-1.5 text-sm text-neutral-600">{starters.length + index + 1}</td>
+                  <td className="bg-neutral-900/40 py-1.5 pl-0 pr-2">
                     <PositionBadge position={player.player_position} />
                   </td>
-                  <td className="bg-neutral-900/40 px-3 py-2 text-sm">{renderPlayerNameWithIcons(player, 'text-neutral-300')}</td>
+                  <td className="bg-neutral-900/40 px-3 py-1.5 text-sm">{renderPlayerNameWithIcons(player, 'text-neutral-300')}</td>
                 </tr>
               ))}
             </tbody>
@@ -474,6 +496,12 @@ function MatchLineupsSummarySection({
 
   const GOAL_TYPES = new Set<AdminMatchEvent['event_type']>(['GOAL', 'OWN_GOAL', 'PENALTY_GOAL'])
 
+  type ScorerEntry = {
+    id: string
+    minuteLabel: string
+    scorerName: string
+  }
+
   const EVENT_TYPE_LABEL: Record<AdminMatchEvent['event_type'], string> = {
     GOAL: 'Gol',
     OWN_GOAL: 'Gol samobojczy',
@@ -494,6 +522,31 @@ function MatchLineupsSummarySection({
       return `${event.minute}+${event.minute_extra}'`
     }
     return `${event.minute}'`
+  }
+
+  const goalEventsChronological = [...events]
+    .filter((event) => GOAL_TYPES.has(event.event_type))
+    .sort(compareEventsChronologically)
+
+  const homeScorers: ScorerEntry[] = []
+  const awayScorers: ScorerEntry[] = []
+
+  for (const event of goalEventsChronological) {
+    const target = event.team_id === homeTeamId
+      ? homeScorers
+      : event.team_id === awayTeamId
+        ? awayScorers
+        : null
+
+    if (!target) continue
+
+    target.push({
+      id: event.id,
+      minuteLabel: renderMinute(event),
+      scorerName: event.primary_person_id
+        ? (personNameById.get(event.primary_person_id) ?? 'Nieznany')
+        : 'Nieznany',
+    })
   }
 
   function getEventIconName(eventType: AdminMatchEvent['event_type']): 'goal' | 'ownGoal' | 'penaltyGoal' | 'missedPenalty' | 'savedPenalty' | 'yellowCard' | 'secondYellowCard' | 'redCard' | 'substitution' | null {
@@ -773,6 +826,32 @@ function MatchLineupsSummarySection({
             <CountryFlag fifaCode={awayTeamFifaCode} countryName={awayTeamName} className="h-5 w-[30px]" />
           </div>
         </div>
+
+        {(homeScorers.length > 0 || awayScorers.length > 0) ? (
+          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-start gap-4">
+            <div className="space-y-1">
+              {homeScorers.map((entry) => (
+                <div key={entry.id} className="flex items-center gap-2 text-[13px]">
+                  <span className="inline-flex shrink-0 items-center rounded-md border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-neutral-200">
+                    {entry.minuteLabel}
+                  </span>
+                  <span className="truncate font-semibold text-neutral-100">{entry.scorerName}</span>
+                </div>
+              ))}
+            </div>
+            <div />
+            <div className="space-y-1">
+              {awayScorers.map((entry) => (
+                <div key={entry.id} className="flex items-center justify-end gap-2 text-[13px]">
+                  <span className="truncate font-semibold text-neutral-100">{entry.scorerName}</span>
+                  <span className="inline-flex shrink-0 items-center rounded-md border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-neutral-200">
+                    {entry.minuteLabel}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
       </div>
       <div className="mt-4 space-y-3">
         {phaseSections.length === 0 ? (
@@ -846,7 +925,15 @@ export default async function AdminMatchDetailsPage({
 
   const eventPeople = [...eventPeopleById.values()]
     .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
-  const personNameById = new Map(eventPeople.map((person) => [person.id, person.label]))
+  const peopleById = new Map(participants.people.map((person) => [person.id, person]))
+  const personNameById = new Map(
+    eventPeople.map((person) => [
+      person.id,
+      peopleById.get(person.id)
+        ? formatEventPersonDisplayName(peopleById.get(person.id) as AdminMatchParticipantPersonOption)
+        : person.label,
+    ])
+  )
 
   const eventTeams = [
     options.teams.find((team) => team.id === match.home_team_id) ?? {

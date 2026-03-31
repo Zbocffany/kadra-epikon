@@ -105,6 +105,8 @@ export type AdminMatch = {
   match_level_name: string | null
   home_team_name: string
   away_team_name: string
+  home_team_fifa_code: string | null
+  away_team_fifa_code: string | null
   final_score: string | null
 }
 
@@ -514,12 +516,13 @@ async function mapAdminMatches(
     }
   }
 
-  const [{ data: matchEvents, error: matchEventsError }, teamNameMap] = await Promise.all([
+  const [{ data: matchEvents, error: matchEventsError }, teamNameMap, teamFifaMap] = await Promise.all([
     supabase
       .from('tbl_Match_Events')
       .select('match_id, team_id, event_type')
       .in('match_id', matches.map((match) => match.id)),
     getTeamDisplayMap(teamIds),
+    getTeamCountryFifaCodeMap(teamIds),
   ])
 
   if (matchEventsError) throw new Error(`tbl_Match_Events: ${matchEventsError.message}`)
@@ -573,6 +576,8 @@ async function mapAdminMatches(
     })(),
     home_team_name: teamNameMap.get(m.home_team_id) ?? '—',
     away_team_name: teamNameMap.get(m.away_team_id) ?? '—',
+    home_team_fifa_code: teamFifaMap.get(m.home_team_id) ?? null,
+    away_team_fifa_code: teamFifaMap.get(m.away_team_id) ?? null,
     final_score: getFinalScore(m),
   }))
 }

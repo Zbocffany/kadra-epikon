@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { createMatch } from './actions'
 import MatchCreateModal from './MatchCreateModal'
 import AdminPagination from '@/components/admin/AdminPagination'
+import CountryFlag from '@/components/CountryFlag'
 import { getAdminMatchesPage } from '@/lib/db/matches'
 import { getAdminMatchCreateOptions } from '@/lib/db/matches'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
@@ -73,6 +74,22 @@ function getDaysUntilMatch(dateStr: string): number | null {
   return days > 0 ? days : null
 }
 
+function getScheduledCountdownLabel(match: AdminMatch): string | null {
+  if (match.match_status !== 'SCHEDULED') return null
+
+  const matchDate = new Date(match.match_date)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  matchDate.setHours(0, 0, 0, 0)
+
+  const diffMs = matchDate.getTime() - today.getTime()
+  const days = Math.ceil(diffMs / (1000 * 60 * 60 * 24))
+
+  if (days === 0) return 'Dzisiaj'
+  if (days > 0) return `Dni do: ${days}`
+  return null
+}
+
 function getPolandMatchOutcome(match: AdminMatch): 'WIN' | 'LOSS' | 'DRAW' | null {
   if (!match.final_score) return null
 
@@ -106,6 +123,32 @@ function getScoreBadgeClass(match: AdminMatch): string {
   if (outcome === 'DRAW') return 'border-neutral-500'
 
   return 'border-neutral-400'
+}
+
+function renderScoreWithFlags(match: AdminMatch) {
+  const label = match.final_score ?? getScheduledCountdownLabel(match)
+  if (!label) return null
+
+  return (
+    <span className="inline-flex items-center gap-[0.5cm]">
+      <CountryFlag
+        fifaCode={match.home_team_fifa_code}
+        countryName={match.home_team_name}
+        className="h-[22px] w-[33px]"
+      />
+      <span
+        className={`inline-flex items-center rounded-md border bg-black px-2 py-0.5 text-xs font-bold ${match.final_score ? `text-white ${getScoreBadgeClass(match)}` : 'border-blue-500 text-blue-400'}`}
+        style={{ fontSize: '0.95em', fontWeight: 700 }}
+      >
+        {label}
+      </span>
+      <CountryFlag
+        fifaCode={match.away_team_fifa_code}
+        countryName={match.away_team_name}
+        className="h-[22px] w-[33px]"
+      />
+    </span>
+  )
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -149,6 +192,19 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
 
   const pagination = getPaginationMeta(totalMatches, page, pageSize)
   const isCreateModalOpen = create === '1' || Boolean(error)
+  const upcomingMatches = [...matches]
+    .filter((match) => match.match_status === 'SCHEDULED')
+    .sort((a, b) => a.match_date.localeCompare(b.match_date))
+  const completedAndOtherMatches = matches.filter((match) => match.match_status !== 'SCHEDULED')
+  const matchesByYear = completedAndOtherMatches.reduce<Record<string, AdminMatch[]>>((acc, match) => {
+    const year = match.match_date.slice(0, 4)
+    if (!acc[year]) {
+      acc[year] = []
+    }
+    acc[year].push(match)
+    return acc
+  }, {})
+  const years = Object.keys(matchesByYear).sort((a, b) => Number(b) - Number(a))
 
   return (
     <main className="min-h-screen px-4 py-10 sm:px-8">
@@ -156,9 +212,6 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
-              Admin
-            </p>
             <h1 className="mt-1 text-3xl font-bold tracking-tight">
               Mecze
             </h1>
@@ -171,10 +224,105 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
               Dodaj mecz
             </Link>
             <span className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs text-neutral-400">
-              {totalMatches} {totalMatches === 1 ? 'mecz' : 'meczów'}
+              Mecze: {totalMatches}
             </span>
           </div>
         </div>
+
+        {!fetchError && (
+          <details className="mb-6 group overflow-hidden rounded-xl border border-neutral-800 bg-neutral-950" open>
+            <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-4 py-2.5 marker:content-none">
+              <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-bold text-neutral-100">
+                Najbliższe mecze
+              </span>
+              <span className="inline-flex items-center gap-3">
+                <span className="text-xs text-neutral-400">Mecze: {upcomingMatches.length}</span>
+                <span className="text-sm font-bold leading-none text-neutral-400 transition-transform duration-150 group-open:rotate-180">▾</span>
+              </span>
+            </summary>
+
+            <div className="border-t border-neutral-800 bg-neutral-950">
+              {upcomingMatches.length === 0 ? (
+                <p className="rounded-md px-2 py-2 text-sm text-neutral-500">Brak nadchodzących meczów.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-sm table-auto">
+                    <colgroup>
+                      <col className="w-[7.5rem]" />
+                      <col className="w-[20rem]" />
+                      <col className="w-[14rem]" />
+                      <col className="w-[12rem]" />
+                      <col className="w-[8rem]" />
+                    </colgroup>
+                    <tbody>
+                      {upcomingMatches.map((match) => {
+                        const competition = getCompetitionDisplay(match.competition_name)
+                        const showLevel = Boolean(
+                          match.match_level_name
+                          && match.competition_name !== 'Towarzyski'
+                          && match.competition_name !== 'Nieoficjalny'
+                        )
+                        const matchHref = `/admin/matches/${match.id}`
+
+                        return (
+                          <tr
+                            key={match.id}
+                            className="border-t border-neutral-800 bg-neutral-950 transition-colors hover:bg-neutral-900/60"
+                          >
+                            <td className="whitespace-nowrap">
+                              <Link href={matchHref} className="block px-3 py-3" aria-label={`Otwórz mecz ${match.home_team_name} - ${match.away_team_name}`}>
+                                <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200">
+                                  {formatDate(match.match_date)}
+                                </span>
+                              </Link>
+                            </td>
+                            <td className="whitespace-nowrap font-semibold text-neutral-100">
+                              <Link href={matchHref} className="block pl-1 pr-2 py-3">
+                                {match.home_team_name} – {match.away_team_name}
+                              </Link>
+                            </td>
+                            <td className="whitespace-nowrap text-left">
+                              <Link href={matchHref} className="block pl-0 pr-2 py-3">
+                                {renderScoreWithFlags(match)}
+                              </Link>
+                            </td>
+                            <td className="whitespace-nowrap">
+                              <Link href={matchHref} className="block px-8 py-3">
+                                <span
+                                  title={getCompetitionLevelTooltip(match.competition_name, match.match_level_name)}
+                                  className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-neutral-200"
+                                >
+                                  <span className={`font-semibold ${competition.isCompact ? 'text-[10px]' : 'text-xs'}`}>
+                                    {competition.label}
+                                  </span>
+                                  {showLevel ? (
+                                    <>
+                                      <span className="text-[10px] text-neutral-500">/</span>
+                                      <span className="text-xs font-semibold text-neutral-200">
+                                        {match.match_level_name}
+                                      </span>
+                                    </>
+                                  ) : null}
+                                </span>
+                              </Link>
+                            </td>
+                            <td className="text-right whitespace-nowrap">
+                              <Link href={matchHref} className="flex justify-end px-2 py-3">
+                                <span className="inline-flex">
+                                  <EditorialStatusBadge status={match.editorial_status} />
+                                </span>
+                              </Link>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </details>
+        )}
 
         {/* Error state */}
         {fetchError && (
@@ -191,99 +339,103 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
           </div>
         )}
 
-        {/* Table */}
+        {/* Table with collapsible year groups */}
         {matches.length > 0 && (
-          <div className="overflow-x-auto rounded-xl border border-neutral-800">
-            <table className="w-full border-collapse text-sm table-auto">
-              <colgroup>
-                <col />
-                <col />
-                <col />
-                <col />
-                <col />
-                <col />
-              </colgroup>
-              <tbody>
-                {matches.map((match, i) => (
-                  (() => {
-                    const competition = getCompetitionDisplay(match.competition_name)
-                    const showLevel = Boolean(
-                      match.match_level_name
-                      && match.competition_name !== 'Towarzyski'
-                      && match.competition_name !== 'Nieoficjalny'
-                    )
-                    return (
-                  <tr
-                    key={match.id}
-                    className={`border-b border-neutral-800 transition-colors hover:bg-neutral-900/60 ${
-                      i % 2 === 0 ? 'bg-neutral-950' : 'bg-neutral-900/30'
-                    }`}
-                  >
-                    <td className="pl-4 pr-0 py-3 whitespace-nowrap">
-                      <span
-                        className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200"
-                      >
-                        {formatDate(match.match_date)}
-                      </span>
-                    </td>
-                    <td className="pl-2 pr-4 py-3 whitespace-nowrap font-semibold text-neutral-100">
-                      {match.home_team_name} – {match.away_team_name}
-                    </td>
-                    <td className="px-6 py-3 whitespace-nowrap text-left">
-                      {match.final_score ? (
-                        <span
-                          className={`inline-flex items-center rounded-md border bg-black px-2 py-0.5 text-xs font-bold text-white ${getScoreBadgeClass(match)}`}
-                          style={{ fontSize: '0.95em', fontWeight: 700 }}
-                        >
-                          {match.final_score}
-                        </span>
-                      ) : (() => {
-                        const daysUntil = getDaysUntilMatch(match.match_date)
-                        return daysUntil !== null ? (
-                          <span
-                            className="inline-flex items-center rounded-md border border-blue-500 bg-black px-2 py-0.5 text-xs font-bold text-blue-400"
-                            style={{ fontSize: '0.95em', fontWeight: 700 }}
-                          >
-                            Dni do: {daysUntil}
-                          </span>
-                        ) : null
-                      })()}
-                    </td>
-                    <td className="px-8 py-3 whitespace-nowrap">
-                      <span
-                        title={getCompetitionLevelTooltip(match.competition_name, match.match_level_name)}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-neutral-200"
-                      >
-                        <span className={`font-semibold ${competition.isCompact ? 'text-[10px]' : 'text-xs'}`}>
-                          {competition.label}
-                        </span>
-                        {showLevel ? (
-                          <>
-                            <span className="text-[10px] text-neutral-500">/</span>
-                            <span className="text-xs font-semibold text-neutral-200">
-                              {match.match_level_name}
-                            </span>
-                          </>
-                        ) : null}
-                      </span>
-                    </td>
-                    <td className="px-2 py-3 text-right whitespace-nowrap">
-                      <EditorialStatusBadge status={match.editorial_status} />
-                    </td>
-                    <td className="pl-1 pr-4 py-3 text-right whitespace-nowrap">
-                      <Link
-                        href={`/admin/matches/${match.id}`}
-                        className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-                      >
-                        Szczegóły
-                      </Link>
-                    </td>
-                  </tr>
-                    )
-                  })()
-                ))}
-              </tbody>
-            </table>
+          <div className="overflow-hidden rounded-xl border border-neutral-800">
+            <div className="divide-y divide-neutral-800">
+              {years.length === 0 && (
+                <div className="px-4 py-5 text-sm text-neutral-500">Brak meczów poza zaplanowanymi na tej stronie.</div>
+              )}
+              {years.map((year, yearIndex) => (
+                <details key={year} open={yearIndex === 0} className="group bg-neutral-950">
+                  <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-4 py-2 marker:content-none">
+                    <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-bold text-neutral-100">
+                      {year}
+                    </span>
+                    <span className="inline-flex items-center gap-3">
+                      <span className="text-xs text-neutral-400">Mecze: {matchesByYear[year].length}</span>
+                      <span className="text-sm font-bold leading-none text-neutral-400 transition-transform duration-150 group-open:rotate-180">▾</span>
+                    </span>
+                  </summary>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full border-collapse text-sm table-auto">
+                      <colgroup>
+                        <col className="w-[7.5rem]" />
+                        <col className="w-[20rem]" />
+                        <col className="w-[14rem]" />
+                        <col className="w-[12rem]" />
+                        <col className="w-[8rem]" />
+                      </colgroup>
+                      <tbody>
+                        {matchesByYear[year].map((match) => {
+                          const competition = getCompetitionDisplay(match.competition_name)
+                          const showLevel = Boolean(
+                            match.match_level_name
+                            && match.competition_name !== 'Towarzyski'
+                            && match.competition_name !== 'Nieoficjalny'
+                          )
+                          const matchHref = `/admin/matches/${match.id}`
+
+                          return (
+                            <tr
+                              key={match.id}
+                              className="border-t border-neutral-800 bg-neutral-950 transition-colors hover:bg-neutral-900/60"
+                            >
+                              <td className="whitespace-nowrap">
+                                <Link href={matchHref} className="block px-3 py-3" aria-label={`Otwórz mecz ${match.home_team_name} - ${match.away_team_name}`}>
+                                  <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200">
+                                    {formatDate(match.match_date)}
+                                  </span>
+                                </Link>
+                              </td>
+                              <td className="whitespace-nowrap font-semibold text-neutral-100">
+                                <Link href={matchHref} className="block pl-1 pr-2 py-3">
+                                  {match.home_team_name} – {match.away_team_name}
+                                </Link>
+                              </td>
+                              <td className="whitespace-nowrap text-left">
+                                <Link href={matchHref} className="block pl-0 pr-2 py-3">
+                                  {renderScoreWithFlags(match)}
+                                </Link>
+                              </td>
+                              <td className="whitespace-nowrap">
+                                <Link href={matchHref} className="block px-8 py-3">
+                                  <span
+                                    title={getCompetitionLevelTooltip(match.competition_name, match.match_level_name)}
+                                    className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-neutral-200"
+                                  >
+                                    <span className={`font-semibold ${competition.isCompact ? 'text-[10px]' : 'text-xs'}`}>
+                                      {competition.label}
+                                    </span>
+                                    {showLevel ? (
+                                      <>
+                                        <span className="text-[10px] text-neutral-500">/</span>
+                                        <span className="text-xs font-semibold text-neutral-200">
+                                          {match.match_level_name}
+                                        </span>
+                                      </>
+                                    ) : null}
+                                  </span>
+                                </Link>
+                              </td>
+                              <td className="text-right whitespace-nowrap">
+                                <Link href={matchHref} className="flex justify-end px-2 py-3">
+                                  <span className="inline-flex">
+                                    <EditorialStatusBadge status={match.editorial_status} />
+                                  </span>
+                                </Link>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              ))}
+            </div>
+
             <AdminPagination
               basePath="/admin/matches"
               searchParams={resolvedSearchParams}
