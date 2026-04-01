@@ -99,11 +99,15 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
             return (
               <span
                 key={`${person.id}-${role}`}
-                className={`inline-flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold ${meta.className}`}
+                className={`relative inline-flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border text-[11px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65)] ${meta.className}`}
                 title={meta.label}
                 aria-label={meta.label}
               >
-                {meta.initial}
+                <span
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_30%,rgba(255,255,255,0)_58%),linear-gradient(130deg,rgba(255,255,255,0.28)_0%,rgba(255,255,255,0)_50%)]"
+                />
+                <span className="absolute inset-0 z-10 flex items-center justify-center text-[11px] font-black leading-none">{meta.initial}</span>
               </span>
             )
           })}
@@ -116,11 +120,15 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
       label: 'Aktywna',
       render: (person) => person.is_active ? (
         <span
-          className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-emerald-500 bg-emerald-500/15 text-emerald-400"
+          className="relative inline-flex h-5 w-5 items-center justify-center overflow-hidden rounded-full border border-emerald-500 bg-emerald-500/15 text-emerald-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.56),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65)]"
           title="Aktywna"
           aria-label="Aktywna"
         >
-          <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.62)_0%,rgba(255,255,255,0.22)_28%,rgba(255,255,255,0)_58%),linear-gradient(130deg,rgba(255,255,255,0.3)_0%,rgba(255,255,255,0)_52%)]"
+          />
+          <svg viewBox="0 0 20 20" fill="none" className="relative z-10 h-3.5 w-3.5" aria-hidden="true">
             <path
               d="M4.5 10.5L8.25 14.25L15.5 7"
               stroke="currentColor"
@@ -132,10 +140,15 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
         </span>
       ) : (
         <span
-          className="inline-flex h-5 w-5 rounded-full border-2 border-red-500"
+          className="relative inline-flex h-5 w-5 overflow-hidden rounded-full border-2 border-red-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_1px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.65)]"
           title="Nieaktywna"
           aria-label="Nieaktywna"
-        />
+        >
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.44)_0%,rgba(255,255,255,0.1)_28%,rgba(255,255,255,0)_58%),linear-gradient(130deg,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0)_52%)]"
+          />
+        </span>
       ),
       className: 'text-neutral-400 text-center',
     },

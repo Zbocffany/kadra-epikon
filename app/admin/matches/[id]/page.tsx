@@ -204,10 +204,16 @@ function PositionBadge({ position }: { position: PlayerPosition | null }) {
 
   return (
     <span
-      className={`inline-flex h-5 w-5 items-center justify-center rounded-full border border-neutral-300 bg-black ring-1 ring-neutral-700/70 text-[11px] font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.6),inset_0_-1px_1px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.08),0_2px_4px_rgba(0,0,0,0.9),0_6px_10px_rgba(0,0,0,0.45)] [text-shadow:0_1px_1px_rgba(0,0,0,0.9)] ${letterClass}`}
+      className={`relative inline-flex h-5 w-5 items-center justify-center overflow-hidden rounded-full border border-neutral-300 bg-black ring-1 ring-neutral-700/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),inset_0_-1px_1px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.08),0_2px_4px_rgba(0,0,0,0.9),0_6px_10px_rgba(0,0,0,0.45)] ${letterClass}`}
       title={label ?? undefined}
     >
-      {letter}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_30%,rgba(255,255,255,0)_58%),linear-gradient(130deg,rgba(255,255,255,0.28)_0%,rgba(255,255,255,0)_50%)]"
+      />
+      <span className="absolute inset-0 z-10 flex items-center justify-center text-[11px] font-black leading-none [text-shadow:0_1px_1px_rgba(0,0,0,0.9)]">
+        {letter}
+      </span>
     </span>
   )
 }
@@ -562,6 +568,33 @@ function MatchLineupsSummarySection({
     return null
   }
 
+  function renderGlossyScorerBadge(iconName: 'goal' | 'ownGoal' | 'penaltyGoal', label: string) {
+    return (
+      <span className="relative inline-flex items-center overflow-hidden rounded-md border border-neutral-500/80 bg-neutral-900 px-1.5 py-0.5 text-sm font-semibold text-neutral-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
+        />
+        <span className="relative z-10 inline-flex items-center">
+          <Icon name={iconName} className="mr-1 h-4 w-4 shrink-0" />
+          {label}
+        </span>
+      </span>
+    )
+  }
+
+  function renderGlossyEventScore(label: string) {
+    return (
+      <span className="relative inline-flex items-center overflow-hidden rounded-md border border-neutral-500/80 bg-neutral-900 px-1.5 py-0.5 text-xs font-semibold text-neutral-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]">
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
+        />
+        <span className="relative z-10">{label}</span>
+      </span>
+    )
+  }
+
   function renderEventText(event: AdminMatchEvent): ReactNode {
     const primary = event.primary_person_id ? (personNameById.get(event.primary_person_id) ?? 'Nieznany') : null
     const secondary = event.secondary_person_id ? (personNameById.get(event.secondary_person_id) ?? 'Nieznany') : null
@@ -580,10 +613,7 @@ function MatchLineupsSummarySection({
     if (event.event_type === 'GOAL') {
       return (
         <>
-          <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-sm font-semibold text-neutral-100">
-            <Icon name="goal" className="mr-1 h-4 w-4 shrink-0" />
-            {primary ?? 'Nieznany'}
-          </span>
+          {renderGlossyScorerBadge('goal', primary ?? 'Nieznany')}
           {secondary ? (
             <span className="font-normal text-neutral-500"> {secondary}</span>
           ) : null}
@@ -594,10 +624,7 @@ function MatchLineupsSummarySection({
     if (event.event_type === 'PENALTY_GOAL') {
       return (
         <>
-          <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-sm font-semibold text-neutral-100">
-            <Icon name="penaltyGoal" className="mr-1 h-4 w-4 shrink-0" />
-            {primary ?? 'Nieznany'}
-          </span>
+          {renderGlossyScorerBadge('penaltyGoal', primary ?? 'Nieznany')}
           <span className="font-normal text-neutral-500"> (Rzut karny)</span>
         </>
       )
@@ -606,10 +633,7 @@ function MatchLineupsSummarySection({
     if (event.event_type === 'OWN_GOAL') {
       return (
         <>
-          <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-sm font-semibold text-neutral-100">
-            <Icon name="ownGoal" className="mr-1 h-4 w-4 shrink-0" />
-            {primary ?? 'Nieznany'}
-          </span>
+          {renderGlossyScorerBadge('ownGoal', primary ?? 'Nieznany')}
           <span className="font-normal text-neutral-500"> (Gol samobójczy)</span>
         </>
       )
@@ -769,37 +793,33 @@ function MatchLineupsSummarySection({
               )
 
               return (
-                <div key={event.id} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 bg-neutral-950 px-3 py-2">
-                  <div className="min-w-0">
-                    {side === 'home' ? (
-                      <div className="flex items-center gap-2">
-                        <span className={minuteClass}>{minuteLabel}</span>
-                        <div className="min-w-0 truncate">{content}</div>
-                      </div>
-                    ) : null}
-                  </div>
+                <div key={event.id} className="bg-neutral-950 px-3 py-2">
+                  {runningScore ? (
+                    <div className="mb-1 flex justify-center">
+                      {renderGlossyEventScore(runningScore)}
+                    </div>
+                  ) : null}
 
-                  <div>
-                    {runningScore ? (
-                      <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-xs font-semibold text-neutral-200">
-                        {runningScore}
-                      </span>
-                    ) : side === 'neutral' ? (
-                      <div className="flex items-center justify-center gap-2">
-                        <span className={minuteClass}>{minuteLabel}</span>
-                        {content}
-                      </div>
-                    ) : null}
-                  </div>
+                  {side === 'home' ? (
+                    <div className="flex w-full items-center gap-2">
+                      <span className={minuteClass}>{minuteLabel}</span>
+                      <div className="min-w-0">{content}</div>
+                    </div>
+                  ) : null}
 
-                  <div className="min-w-0 text-right">
-                    {side === 'away' ? (
-                      <div className="flex items-center justify-end gap-2">
-                        <div className="min-w-0 truncate">{content}</div>
-                        <span className={minuteClass}>{minuteLabel}</span>
-                      </div>
-                    ) : null}
-                  </div>
+                  {side === 'away' ? (
+                    <div className="flex w-full items-center justify-end gap-2">
+                      <div className="min-w-0 text-right">{content}</div>
+                      <span className={minuteClass}>{minuteLabel}</span>
+                    </div>
+                  ) : null}
+
+                  {side === 'neutral' ? (
+                    <div className="flex w-full items-center justify-center gap-2">
+                      <span className={minuteClass}>{minuteLabel}</span>
+                      {content}
+                    </div>
+                  ) : null}
                 </div>
               )
             })}
@@ -896,6 +916,13 @@ export default async function AdminMatchDetailsPage({
     getAdminMatchEvents(match.id),
   ])
 
+  const teamsWithCurrentMatchMap = new Map(options.teams.map((team) => [team.id, team.label]))
+  teamsWithCurrentMatchMap.set(match.home_team_id, match.home_team_name)
+  teamsWithCurrentMatchMap.set(match.away_team_id, match.away_team_name)
+  const teamsWithCurrentMatch = [...teamsWithCurrentMatchMap.entries()]
+    .map(([id, label]) => ({ id, label }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
+
   const personIds = participants.people.map((person) => person.id)
   const [latestPlayerClubTeamByPersonId, latestPlayerPositionByPersonId] = await Promise.all([
     getLatestPlayerClubTeamByPersonIds(personIds, { excludeMatchId: match.id }),
@@ -936,11 +963,11 @@ export default async function AdminMatchDetailsPage({
   )
 
   const eventTeams = [
-    options.teams.find((team) => team.id === match.home_team_id) ?? {
+    teamsWithCurrentMatch.find((team) => team.id === match.home_team_id) ?? {
       id: match.home_team_id,
       label: match.home_team_name,
     },
-    options.teams.find((team) => team.id === match.away_team_id) ?? {
+    teamsWithCurrentMatch.find((team) => team.id === match.away_team_id) ?? {
       id: match.away_team_id,
       label: match.away_team_name,
     },
@@ -1044,7 +1071,7 @@ export default async function AdminMatchDetailsPage({
           hideLabel
           required
           selectedId={match.home_team_id}
-          options={options.teams.map((team) => ({ id: team.id, label: team.label }))}
+          options={teamsWithCurrentMatch.map((team) => ({ id: team.id, label: team.label }))}
           displayKey="label"
           placeholder="Wpisz, aby filtrować gospodarza..."
           addButtonLabel="Dodaj klub"
@@ -1067,7 +1094,7 @@ export default async function AdminMatchDetailsPage({
           hideLabel
           required
           selectedId={match.away_team_id}
-          options={options.teams.map((team) => ({ id: team.id, label: team.label }))}
+          options={teamsWithCurrentMatch.map((team) => ({ id: team.id, label: team.label }))}
           displayKey="label"
           placeholder="Wpisz, aby filtrować gościa..."
           addButtonLabel="Dodaj klub"
@@ -1307,14 +1334,24 @@ export default async function AdminMatchDetailsPage({
         breadcrumb={
           <div className="flex items-center gap-3">
             <span>{matchDateTimeLabel}</span>
-            {competitionName && (
-              <span
-                className="inline-flex items-center rounded-md border border-neutral-400 px-2 py-0.5 font-bold text-xs text-white bg-black"
-                style={{ fontSize: '0.95em', fontWeight: 700 }}
-              >
-                {competitionName}
-              </span>
-            )}
+            {competitionName ? (
+              <div className="flex items-center gap-2">
+                <span
+                  className="inline-flex items-center rounded-md border border-neutral-400 px-2 py-0.5 font-bold text-xs text-white bg-black"
+                  style={{ fontSize: '0.95em', fontWeight: 700 }}
+                >
+                  {competitionName}
+                </span>
+                {match.match_level_name ? (
+                  <span
+                    className="inline-flex items-center rounded-md border border-neutral-400 px-2 py-0.5 font-bold text-xs text-white bg-black"
+                    style={{ fontSize: '0.95em', fontWeight: 700 }}
+                  >
+                    {match.match_level_name}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         }
         subtitle={(

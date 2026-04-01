@@ -129,24 +129,46 @@ function renderScoreWithFlags(match: AdminMatch) {
   const label = match.final_score ?? getScheduledCountdownLabel(match)
   if (!label) return null
 
+  const badgeClass = match.final_score
+    ? `text-white ${getScoreBadgeClass(match)}`
+    : 'border-blue-500 text-blue-400'
+
   return (
     <span className="inline-flex items-center gap-[0.5cm]">
       <CountryFlag
         fifaCode={match.home_team_fifa_code}
         countryName={match.home_team_name}
-        className="h-[22px] w-[33px]"
+        glossy
+        className="h-[22px] w-[33px] ring-1 ring-neutral-500/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_1px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.7),0_4px_8px_rgba(0,0,0,0.45)]"
       />
       <span
-        className={`inline-flex items-center rounded-md border bg-black px-2 py-0.5 text-xs font-bold ${match.final_score ? `text-white ${getScoreBadgeClass(match)}` : 'border-blue-500 text-blue-400'}`}
+        className={`relative inline-flex items-center overflow-hidden rounded-md border bg-black px-2 py-0.5 text-xs font-bold shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${badgeClass}`}
         style={{ fontSize: '0.95em', fontWeight: 700 }}
       >
-        {label}
+        <span
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
+        />
+        <span className="relative z-10">{label}</span>
       </span>
       <CountryFlag
         fifaCode={match.away_team_fifa_code}
         countryName={match.away_team_name}
-        className="h-[22px] w-[33px]"
+        glossy
+        className="h-[22px] w-[33px] ring-1 ring-neutral-500/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_1px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.7),0_4px_8px_rgba(0,0,0,0.45)]"
       />
+    </span>
+  )
+}
+
+function GlossySummaryBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="relative inline-flex items-center overflow-hidden rounded-md border border-neutral-500/80 bg-neutral-900 px-2.5 py-1 text-xs font-black text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]">
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
+      />
+      <span className="relative z-10">{children}</span>
     </span>
   )
 }
@@ -230,7 +252,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
         </div>
 
         {!fetchError && (
-          <details className="mb-6 group overflow-hidden rounded-xl border border-neutral-800 bg-neutral-950" open>
+          <details className="mb-6 group overflow-visible rounded-xl border border-neutral-800 bg-neutral-950" open>
             <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-4 py-2.5 marker:content-none">
               <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-bold text-neutral-100">
                 Najbliższe mecze
@@ -245,7 +267,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
               {upcomingMatches.length === 0 ? (
                 <p className="rounded-md px-2 py-2 text-sm text-neutral-500">Brak nadchodzących meczów.</p>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto pt-6 -mt-6">
                   <table className="w-full border-collapse text-sm table-auto">
                     <colgroup>
                       <col className="w-[7.5rem]" />
@@ -341,7 +363,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
 
         {/* Table with collapsible year groups */}
         {matches.length > 0 && (
-          <div className="overflow-hidden rounded-xl border border-neutral-800">
+          <div className="overflow-visible rounded-xl border border-neutral-800">
             <div className="divide-y divide-neutral-800">
               {years.length === 0 && (
                 <div className="px-4 py-5 text-sm text-neutral-500">Brak meczów poza zaplanowanymi na tej stronie.</div>
@@ -349,16 +371,14 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
               {years.map((year, yearIndex) => (
                 <details key={year} open={yearIndex === 0} className="group bg-neutral-950">
                   <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-4 py-2 marker:content-none">
-                    <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-bold text-neutral-100">
-                      {year}
-                    </span>
+                    <GlossySummaryBadge>{year}</GlossySummaryBadge>
                     <span className="inline-flex items-center gap-3">
                       <span className="text-xs text-neutral-400">Mecze: {matchesByYear[year].length}</span>
                       <span className="text-sm font-bold leading-none text-neutral-400 transition-transform duration-150 group-open:rotate-180">▾</span>
                     </span>
                   </summary>
 
-                  <div className="overflow-x-auto">
+                  <div className="overflow-x-auto pt-6 -mt-6">
                     <table className="w-full border-collapse text-sm table-auto">
                       <colgroup>
                         <col className="w-[7.5rem]" />

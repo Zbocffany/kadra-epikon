@@ -13,7 +13,12 @@ function isTransientGatewayError(error: QueryError): boolean {
     msg.includes('504') ||
     msg.includes('bad gateway') ||
     msg.includes('gateway timeout') ||
-    msg.includes('<!doctype html>')
+    msg.includes('<!doctype html>') ||
+    msg.includes('fetch failed') ||
+    msg.includes('network error') ||
+    msg.includes('econnreset') ||
+    msg.includes('econnrefused') ||
+    msg.includes('etimedout')
   )
 }
 
@@ -851,6 +856,8 @@ export async function getAdminMatchCreateOptions(): Promise<{
   stadiums: AdminStadiumOption[]
 }> {
   const supabase = createServiceRoleClient()
+  type TeamOptionRow = { id: string; country_id: string | null; club_id: string | null }
+  type NamedRow = { id: string; name: string }
 
   const [
     { data: competitions, error: competitionsError },
@@ -862,7 +869,7 @@ export async function getAdminMatchCreateOptions(): Promise<{
       .from('tbl_Competitions')
       .select('id, name')
       .order('name', { ascending: true }),
-    supabase.from('tbl_Teams').select('id').order('id', { ascending: true }),
+    supabase.from('tbl_Teams').select('id, country_id, club_id').order('id', { ascending: true }),
     supabase.from('tbl_Cities').select('id, city_name').order('city_name', { ascending: true }),
     supabase.from('tbl_Stadiums').select('id, name, stadium_city_id').order('name', { ascending: true }),
   ])
@@ -889,11 +896,31 @@ export async function getAdminMatchCreateOptions(): Promise<{
 
   const cityNameMap = new Map((cities ?? []).map((city) => [city.id, city.city_name]))
 
-  const teamIds = (teams ?? []).map((t) => t.id)
-  const teamDisplayMap = await getTeamDisplayMap(teamIds)
+  const typedTeams = (teams ?? []) as TeamOptionRow[]
+  const countryIds = [...new Set(typedTeams.map((team) => team.country_id).filter(Boolean))]
+  const clubIds = [...new Set(typedTeams.map((team) => team.club_id).filter(Boolean))]
+  const [countriesByTeam, clubsByTeam] = await Promise.all([
+    countryIds.length
+      ? supabase.from('tbl_Countries').select('id, name').in('id', countryIds)
+      : Promise.resolve({ data: [] as NamedRow[], error: null }),
+    clubIds.length
+      ? supabase.from('tbl_Clubs').select('id, name').in('id', clubIds)
+      : Promise.resolve({ data: [] as NamedRow[], error: null }),
+  ])
 
-  const teamOptions = teamIds
-    .map((id) => ({ id, label: teamDisplayMap.get(id) ?? '—' }))
+  if (countriesByTeam.error) throw new Error(`tbl_Countries: ${countriesByTeam.error.message}`)
+  if (clubsByTeam.error) throw new Error(`tbl_Clubs: ${clubsByTeam.error.message}`)
+
+  const countryNameById = new Map((countriesByTeam.data ?? []).map((country) => [country.id, country.name]))
+  const clubNameById = new Map((clubsByTeam.data ?? []).map((club) => [club.id, club.name]))
+
+  const teamOptions = typedTeams
+    .map((team) => ({
+      id: team.id,
+      label: team.country_id
+        ? (countryNameById.get(team.country_id) ?? '—')
+        : (team.club_id ? (clubNameById.get(team.club_id) ?? '—') : '—'),
+    }))
     .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
 
   const cityOptions = (cities ?? []).map((city) => ({
