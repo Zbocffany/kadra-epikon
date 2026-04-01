@@ -12,6 +12,7 @@ import RefereePersonField from './RefereePersonField'
 import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
+import MatchReadOnlyPage from '@/components/matches/MatchReadOnlyPage'
 import { Icon, type AppIconName } from '@/components/icons'
 import { deleteMatch, saveMatchFull } from '../actions'
 import { createClubInline } from '@/app/admin/clubs/actions'
@@ -953,16 +954,6 @@ export default async function AdminMatchDetailsPage({
 
   const eventPeople = [...eventPeopleById.values()]
     .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
-  const peopleById = new Map(participants.people.map((person) => [person.id, person]))
-  const personNameById = new Map(
-    eventPeople.map((person) => [
-      person.id,
-      peopleById.get(person.id)
-        ? formatEventPersonDisplayName(peopleById.get(person.id) as AdminMatchParticipantPersonOption)
-        : person.label,
-    ])
-  )
-
   const eventTeams = [
     teamsWithCurrentMatch.find((team) => team.id === match.home_team_id) ?? {
       id: match.home_team_id,
@@ -1182,9 +1173,6 @@ export default async function AdminMatchDetailsPage({
   const matchDateTimeLabel = `${formatDate(match.match_date)}${match.match_time ? ` ${match.match_time.slice(0, 5)}` : ''}`
   const currentReferee = participants.referees[0] ?? null
   const displayScore = getDisplayScore(events, match.result_type, match.home_team_id, match.away_team_id)
-  const summaryScore = calculateMatchScore(events, match.home_team_id, match.away_team_id)
-  const summaryScoreLabel = `${summaryScore.homeGoals}:${summaryScore.awayGoals}`
-  const halftimeScoreLabel = `${summaryScore.homeGoalsHT}:${summaryScore.awayGoalsHT}`
 
   if (isEdit) {
     return (
@@ -1318,124 +1306,33 @@ export default async function AdminMatchDetailsPage({
   }
 
   return (
-    <DetailsPageContainer maxWidthClass="max-w-5xl">
-      <DetailsPageHeader
-        title={matchTitle}
-        backLabel="Powrót do listy meczów"
-        backHref="/admin/matches"
-        editHref={`/admin/matches/${match.id}?mode=edit`}
-        deleteAction={deleteMatch}
-        deleteId={match.id}
-        deleteConfirmMessage={deleteWarningMessage}
-      />
-
-
-      <DetailsPageContent
-        title={null}
-        breadcrumb={
-          <div className="flex items-center gap-3">
-            <span>{matchDateTimeLabel}</span>
-            {competitionName ? (
-              <div className="flex items-center gap-2">
-                <span
-                  className="inline-flex items-center rounded-md border border-neutral-400 px-2 py-0.5 font-bold text-xs text-white bg-black"
-                  style={{ fontSize: '0.95em', fontWeight: 700 }}
-                >
-                  {competitionName}
-                </span>
-                {match.match_level_name ? (
-                  <span
-                    className="inline-flex items-center rounded-md border border-neutral-400 px-2 py-0.5 font-bold text-xs text-white bg-black"
-                    style={{ fontSize: '0.95em', fontWeight: 700 }}
-                  >
-                    {match.match_level_name}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        }
-        subtitle={(
-          <div className="mt-2">
-            {stadiumSummary ? (
-              <span
-                className={
-                  'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset bg-neutral-800 text-neutral-300 ring-neutral-700'
-                }
-              >
-                {stadiumSummary}
-              </span>
-            ) : null}
-            {stadiumSummary && currentReferee ? <span className="block h-2" /> : null}
-            {currentReferee ? (
-              <span
-                className={
-                  'inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset bg-neutral-800 text-neutral-300 ring-neutral-700'
-                }
-              >
-                Sędzia: {currentReferee.person_name}
-                {currentReferee.country_code ? ` (${currentReferee.country_code})` : ''}
-              </span>
-            ) : null}
-          </div>
-        )}
-        headerRight={(
-          <div className="flex items-center gap-2">
-            <ResultTypeBadge resultType={match.result_type} />
-            <MatchStatusBadge status={match.match_status} />
-            <EditorialStatusBadge status={match.editorial_status} />
-          </div>
-        )}
-        saved={saved}
-        error={error}
-        isEdit={false}
-        editContent={null}
-        viewContent={fields}
-      />
-
-      <MatchLineupsSummarySection
-        homeTeamName={match.home_team_name}
-        awayTeamName={match.away_team_name}
-        homeTeamFifaCode={match.home_team_fifa_code}
-        awayTeamFifaCode={match.away_team_fifa_code}
-        score={summaryScoreLabel}
-        halftimeScore={halftimeScoreLabel}
-        events={events}
-        homeTeamId={match.home_team_id}
-        awayTeamId={match.away_team_id}
-        personNameById={personNameById}
-      />
-
-      <section className="mt-6 grid gap-6 xl:grid-cols-2">
-        <MatchTeamParticipantsSection
-          namePrefix="home_"
-          title={match.home_team_name}
-          participants={participants.homeParticipants}
-          events={events}
-          people={participants.people}
-          clubTeams={clubTeams}
-          latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
-          latestPlayerPositionByPersonId={latestPlayerPositionByPersonId}
-          isEdit={false}
-          cities={cities}
-          countries={countries}
-          federations={federations}
+    <MatchReadOnlyPage
+      match={match}
+      participants={participants}
+      events={events}
+      backHref="/admin/matches"
+      backLabel="Powrót do listy meczów"
+      competitionName={competitionName}
+      matchDateTimeLabel={matchDateTimeLabel}
+      stadiumSummary={stadiumSummary}
+      topBar={(
+        <DetailsPageHeader
+          title={matchTitle}
+          backLabel="Powrót do listy meczów"
+          backHref="/admin/matches"
+          editHref={`/admin/matches/${match.id}?mode=edit`}
+          deleteAction={deleteMatch}
+          deleteId={match.id}
+          deleteConfirmMessage={deleteWarningMessage}
         />
-        <MatchTeamParticipantsSection
-          namePrefix="away_"
-          title={match.away_team_name}
-          participants={participants.awayParticipants}
-          events={events}
-          people={participants.people}
-          clubTeams={clubTeams}
-          latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
-          latestPlayerPositionByPersonId={latestPlayerPositionByPersonId}
-          isEdit={false}
-          cities={cities}
-          countries={countries}
-          federations={federations}
-        />
-      </section>
-    </DetailsPageContainer>
+      )}
+      headerRight={(
+        <div className="flex items-center gap-2">
+          <ResultTypeBadge resultType={match.result_type} />
+          <MatchStatusBadge status={match.match_status} />
+          <EditorialStatusBadge status={match.editorial_status} />
+        </div>
+      )}
+    />
   )
 }
