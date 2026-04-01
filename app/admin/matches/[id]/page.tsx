@@ -11,6 +11,7 @@ import EditMatchLocationFields from './EditMatchLocationFields'
 import RefereePersonField from './RefereePersonField'
 import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
 import AdminSelectField from '@/components/admin/AdminSelectField'
+import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
 import { Icon, type AppIconName } from '@/components/icons'
 import { deleteMatch, saveMatchFull } from '../actions'
 import { createClubInline } from '@/app/admin/clubs/actions'
@@ -748,7 +749,7 @@ function MatchLineupsSummarySection({
           <span>{title}</span>
           <span className="inline-flex items-center gap-2">
             <span>{getHalfScore(halfEvents)}</span>
-            <span className="text-sm font-bold leading-none text-neutral-400 transition-transform duration-150 group-open:rotate-180">▾</span>
+            <GlossyDisclosureCircle rotateClassName="group-open:rotate-180" />
           </span>
         </summary>
 

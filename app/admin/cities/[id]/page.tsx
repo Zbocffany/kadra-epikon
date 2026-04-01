@@ -11,6 +11,7 @@ import { getAdminFederations } from '@/lib/db/countries'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
 import AdminCancelLink from '@/components/admin/AdminCancelLink'
+import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
 import CountryFlag from '@/components/CountryFlag'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import {
@@ -235,7 +236,7 @@ export default async function AdminCityDetailsPage({
         <details open className="overflow-hidden rounded-lg border border-neutral-800 group/det">
           <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-neutral-500 marker:content-none">
             <span>Historia</span>
-            <span className="text-sm font-bold leading-none text-neutral-400 transition-transform duration-150 group-open/det:rotate-180">▾</span>
+            <GlossyDisclosureCircle rotateClassName="group-open/det:rotate-180" />
           </summary>
 
           <div className="p-3">

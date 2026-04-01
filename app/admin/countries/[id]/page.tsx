@@ -19,6 +19,7 @@ import {
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
 import AdminCancelLink from '@/components/admin/AdminCancelLink'
+import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
 import CountryFlag from '@/components/CountryFlag'
 import {
   DetailsPageContainer,
@@ -238,7 +239,7 @@ export default async function AdminCountryDetailsPage({
         <details open={historyEvents.length > 0} className="overflow-hidden rounded-lg border border-neutral-800 group/det">
           <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-neutral-500 marker:content-none">
             <span>Historia</span>
-            <span className="text-sm font-bold leading-none text-neutral-400 transition-transform duration-150 group-open/det:rotate-180">▾</span>
+            <GlossyDisclosureCircle rotateClassName="group-open/det:rotate-180" />
           </summary>
 
           <div className="p-3">
