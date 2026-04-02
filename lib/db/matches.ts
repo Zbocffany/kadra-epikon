@@ -186,6 +186,17 @@ export type AdminMatchEvent = {
   event_order: number | null
 }
 
+export type AdminMatchFilterOptions = {
+  fromDate?: string
+  toDate?: string
+  status?: MatchStatus
+}
+
+export type AdminMatchYearBounds = {
+  minYear: number
+  maxYear: number
+}
+
 type MatchParticipantRow = {
   id: string
   team_id: string | null
@@ -415,15 +426,27 @@ async function getTeamCountryFifaCodeMap(teamIds: string[]): Promise<Map<string,
  * FK-ambiguity issues (two FK columns from tbl_Matches → tbl_Teams).
  * Score is intentionally omitted: derive it from tbl_Match_Events if needed.
  */
-export async function getAdminMatches(): Promise<AdminMatch[]> {
+export async function getAdminMatches(options?: AdminMatchFilterOptions): Promise<AdminMatch[]> {
   const supabase = createServiceRoleClient()
 
   // 1. Matches
-  const { data: matches, error: matchError } = await supabase
+  let matchesQuery = supabase
     .from('tbl_Matches')
     .select(
       'id, match_date, match_time, match_status, result_type, editorial_status, competition_id, home_team_id, away_team_id'
     )
+
+  if (options?.status) {
+    matchesQuery = matchesQuery.eq('match_status', options.status)
+  }
+  if (options?.fromDate) {
+    matchesQuery = matchesQuery.gte('match_date', options.fromDate)
+  }
+  if (options?.toDate) {
+    matchesQuery = matchesQuery.lte('match_date', options.toDate)
+  }
+
+  const { data: matches, error: matchError } = await matchesQuery
     .order('match_date', { ascending: false })
     .order('match_time', { ascending: false })
     .order('id', { ascending: false })
@@ -432,6 +455,29 @@ export async function getAdminMatches(): Promise<AdminMatch[]> {
   if (!matches?.length) return []
 
   return mapAdminMatches(supabase, matches)
+}
+
+export async function getAdminMatchYearBounds(): Promise<AdminMatchYearBounds | null> {
+  const supabase = createServiceRoleClient()
+
+  const [{ data: earliest, error: earliestError }, { data: latest, error: latestError }] = await Promise.all([
+    supabase.from('tbl_Matches').select('match_date').order('match_date', { ascending: true }).limit(1),
+    supabase.from('tbl_Matches').select('match_date').order('match_date', { ascending: false }).limit(1),
+  ])
+
+  if (earliestError) throw new Error(`tbl_Matches (earliest): ${earliestError.message}`)
+  if (latestError) throw new Error(`tbl_Matches (latest): ${latestError.message}`)
+
+  const minDate = earliest?.[0]?.match_date as string | undefined
+  const maxDate = latest?.[0]?.match_date as string | undefined
+  if (!minDate || !maxDate) {
+    return null
+  }
+
+  return {
+    minYear: Number(minDate.slice(0, 4)),
+    maxYear: Number(maxDate.slice(0, 4)),
+  }
 }
 
 export async function getAdminMatchesPage(
