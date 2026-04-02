@@ -1000,7 +1000,7 @@ export async function getAdminClubTeamOptions(): Promise<AdminTeamOption[]> {
 
 export async function getLatestPlayerClubTeamByPersonIds(
   personIds: string[],
-  options?: { excludeMatchId?: string }
+  options?: { excludeMatchId?: string; targetMatchDate?: string }
 ): Promise<Record<string, string | null>> {
   const supabase = createServiceRoleClient()
 
@@ -1041,29 +1041,38 @@ export async function getLatestPlayerClubTeamByPersonIds(
 
   const matchDateMap = new Map((matches ?? []).map((match: MatchDateRow) => [match.id, match.match_date]))
 
-  const bestByPerson = new Map<string, { clubTeamId: string | null; matchDate: string; matchId: string }>()
+  const calculateDateDistance = (dateStr: string, targetDate: string | undefined): number => {
+    if (!targetDate) return 0
+    const dateDiff = new Date(dateStr).getTime() - new Date(targetDate).getTime()
+    return Math.abs(dateDiff)
+  }
+
+  const bestByPerson = new Map<string, { clubTeamId: string | null; matchDate: string; matchId: string; distance: number }>()
   for (const row of rows) {
     const matchDate = matchDateMap.get(row.match_id)
     if (!matchDate) continue
 
+    const distance = calculateDateDistance(matchDate, options?.targetMatchDate)
     const current = bestByPerson.get(row.person_id)
     if (!current) {
       bestByPerson.set(row.person_id, {
         clubTeamId: row.club_team_id,
         matchDate,
         matchId: row.match_id,
+        distance,
       })
       continue
     }
 
-    const isNewer = matchDate > current.matchDate
-      || (matchDate === current.matchDate && row.match_id > current.matchId)
+    const isCloser = distance < current.distance
+      || (distance === current.distance && row.match_id > current.matchId)
 
-    if (isNewer) {
+    if (isCloser) {
       bestByPerson.set(row.person_id, {
         clubTeamId: row.club_team_id,
         matchDate,
         matchId: row.match_id,
+        distance,
       })
     }
   }

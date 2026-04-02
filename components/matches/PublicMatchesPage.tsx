@@ -1,6 +1,6 @@
 import MatchesListView from '@/components/matches/MatchesListView'
-import { getAdminMatchesPage, type AdminMatch } from '@/lib/db/matches'
-import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
+import { getAdminMatches, type AdminMatch } from '@/lib/db/matches'
+import type { RawSearchParams } from '@/lib/pagination'
 
 type PublicMatchesPageProps = {
   searchParams: RawSearchParams
@@ -11,20 +11,14 @@ type PublicMatchesPageProps = {
 
 export default async function PublicMatchesPage({
   searchParams,
-  basePath,
   detailBasePath,
   title = 'Mecze reprezentacji',
 }: PublicMatchesPageProps) {
-  const { page, pageSize } = parsePaginationParams(searchParams)
-
   let matches: AdminMatch[] = []
-  let totalMatches = 0
   let fetchError: string | null = null
 
   try {
-    const fetchedMatches = await getAdminMatchesPage(page, pageSize)
-    matches = fetchedMatches.items
-    totalMatches = fetchedMatches.total
+    matches = await getAdminMatches()
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
@@ -32,12 +26,9 @@ export default async function PublicMatchesPage({
   return (
     <MatchesListView
       title={title}
-      totalMatches={totalMatches}
+      totalMatches={matches.length}
       matches={matches}
       fetchError={fetchError}
-      pagination={getPaginationMeta(totalMatches, page, pageSize)}
-      searchParams={searchParams}
-      basePath={basePath}
       detailBasePath={detailBasePath}
       showEditorialStatus={false}
     />

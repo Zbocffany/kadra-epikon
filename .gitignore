@@ -32,6 +32,11 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.venv/
+venv/
+scripts/import_matches/__pycache__/
+scripts/import_matches/output/*
+!scripts/import_matches/output/.gitkeep
 
 # vercel
 .vercel

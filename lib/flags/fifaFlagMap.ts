@@ -184,6 +184,7 @@ const FIFA_FLAG_CODE_MAP: Record<string, string> = {
   SOL: 'sb',
   SOM: 'so',
   SRB: 'rs',
+  SCG: 'rs',
   SRI: 'lk',
   SSD: 'ss',
   STP: 'st',
@@ -222,6 +223,7 @@ const FIFA_FLAG_CODE_MAP: Record<string, string> = {
   VIR: 'vi',
   WAL: 'gb-wls',
   YEM: 'ye',
+  YUG: 'rs',
   ZAM: 'zm',
   ZIM: 'zw',
 }

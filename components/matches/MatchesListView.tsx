@@ -1,19 +1,8 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import AdminPagination from '@/components/admin/AdminPagination'
 import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
 import CountryFlag from '@/components/CountryFlag'
 import type { AdminMatch, EditorialStatus } from '@/lib/db/matches'
-import type { RawSearchParams } from '@/lib/pagination'
-
-type PaginationMeta = {
-  page: number
-  pageSize: number
-  totalPages: number
-  total: number
-  from: number
-  to: number
-}
 
 function EditorialStatusBadge({ status }: { status: EditorialStatus }) {
   const styles: Record<string, string> = {
@@ -168,9 +157,6 @@ type MatchesListViewProps = {
   totalMatches: number
   matches: AdminMatch[]
   fetchError: string | null
-  pagination: PaginationMeta
-  searchParams: RawSearchParams
-  basePath: string
   detailBasePath: string
   showEditorialStatus?: boolean
   headerActions?: ReactNode
@@ -181,9 +167,6 @@ export default function MatchesListView({
   totalMatches,
   matches,
   fetchError,
-  pagination,
-  searchParams,
-  basePath,
   detailBasePath,
   showEditorialStatus = true,
   headerActions,
@@ -202,7 +185,7 @@ export default function MatchesListView({
 
   return (
     <main className="min-h-screen px-4 py-10 sm:px-8">
-      <div className="mx-auto max-w-7xl">
+      <div className="mx-auto max-w-6xl">
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="mt-1 text-3xl font-bold tracking-tight">{title}</h1>
@@ -322,8 +305,8 @@ export default function MatchesListView({
               {years.length === 0 && (
                 <div className="px-4 py-5 text-sm text-neutral-500">Brak meczów poza zaplanowanymi na tej stronie.</div>
               )}
-              {years.map((year, yearIndex) => (
-                <details key={year} open={yearIndex === 0} className="group bg-neutral-950">
+              {years.map((year) => (
+                <details key={year} className="group bg-neutral-950">
                   <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-4 py-2 marker:content-none">
                     <GlossySummaryBadge>{year}</GlossySummaryBadge>
                     <span className="inline-flex items-center gap-3">
@@ -404,18 +387,6 @@ export default function MatchesListView({
                 </details>
               ))}
             </div>
-
-            <AdminPagination
-              basePath={basePath}
-              searchParams={searchParams}
-              page={pagination.page}
-              pageSize={pagination.pageSize}
-              totalPages={pagination.totalPages}
-              totalItems={pagination.total}
-              from={pagination.from}
-              to={pagination.to}
-              itemLabel={pagination.total === 1 ? 'meczu' : 'meczów'}
-            />
           </div>
         )}
       </div>

@@ -2,19 +2,17 @@ import Link from 'next/link'
 import { createMatch } from './actions'
 import MatchCreateModal from './MatchCreateModal'
 import MatchesListView from '@/components/matches/MatchesListView'
-import { getAdminMatchesPage, getAdminMatchCreateOptions, type AdminMatch, type AdminStadiumOption } from '@/lib/db/matches'
+import { getAdminMatches, getAdminMatchCreateOptions, type AdminMatch, type AdminStadiumOption } from '@/lib/db/matches'
 import { getAdminCountriesOptions, type AdminCountryOption } from '@/lib/db/cities'
 import { getAdminFederations, type AdminFederation } from '@/lib/db/countries'
-import { getPaginationMeta, parsePaginationParams, type RawSearchParams } from '@/lib/pagination'
+import type { RawSearchParams } from '@/lib/pagination'
 
 type SearchParams = Promise<RawSearchParams>
 
 export default async function AdminMatchesPage({ searchParams }: { searchParams: SearchParams }) {
   const resolvedSearchParams = await searchParams
   const { create, error } = resolvedSearchParams
-  const { page, pageSize } = parsePaginationParams(resolvedSearchParams)
   let matches: AdminMatch[] = []
-  let totalMatches = 0
   let competitionOptions: { id: string; name: string }[] = []
   let teamOptions: { id: string; label: string }[] = []
   let cityOptions: { id: string; name: string }[] = []
@@ -26,14 +24,13 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
 
   try {
     const [fetchedMatches, options, countries, federations] = await Promise.all([
-      getAdminMatchesPage(page, pageSize),
+      getAdminMatches(),
       getAdminMatchCreateOptions(),
       getAdminCountriesOptions(),
       getAdminFederations(),
     ])
 
-    matches = fetchedMatches.items
-    totalMatches = fetchedMatches.total
+    matches = fetchedMatches
     competitionOptions = options.competitions
     teamOptions = options.teams
     cityOptions = options.cities
@@ -46,18 +43,14 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
     matches = []
   }
 
-  const pagination = getPaginationMeta(totalMatches, page, pageSize)
   const isCreateModalOpen = create === '1' || Boolean(error)
   return (
     <>
       <MatchesListView
         title="Mecze"
-        totalMatches={totalMatches}
+        totalMatches={matches.length}
         matches={matches}
         fetchError={fetchError}
-        pagination={pagination}
-        searchParams={resolvedSearchParams}
-        basePath="/admin/matches"
         detailBasePath="/admin/matches"
         headerActions={(
           <Link
