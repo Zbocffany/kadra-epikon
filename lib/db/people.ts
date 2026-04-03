@@ -260,17 +260,28 @@ export async function getAdminPersonBirthCityOptions(): Promise<AdminPersonBirth
 
   const cityIds = cities.map((city) => city.id)
 
-  const { data: periods, error: periodsError } = await supabase
-    .from('tbl_City_Country_Periods')
-    .select('city_id, country_id, valid_from, valid_to')
-    .in('city_id', cityIds)
+  // Avoid oversized `.in(...)` queries that can fail at fetch layer when city count is high.
+  const periods: CityCountryPeriod[] = []
+  const batchSize = 250
 
-  if (periodsError) {
-    throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
+  for (let start = 0; start < cityIds.length; start += batchSize) {
+    const cityIdsBatch = cityIds.slice(start, start + batchSize)
+    const { data: periodsBatch, error: periodsError } = await supabase
+      .from('tbl_City_Country_Periods')
+      .select('city_id, country_id, valid_from, valid_to')
+      .in('city_id', cityIdsBatch)
+
+    if (periodsError) {
+      throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
+    }
+
+    if (periodsBatch?.length) {
+      periods.push(...periodsBatch)
+    }
   }
 
   const periodsByCity = new Map<string, CityCountryPeriod[]>()
-  for (const period of periods ?? []) {
+  for (const period of periods) {
     const arr = periodsByCity.get(period.city_id) ?? []
     arr.push(period)
     periodsByCity.set(period.city_id, arr)

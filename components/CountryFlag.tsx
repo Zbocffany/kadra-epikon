@@ -8,7 +8,7 @@ type CountryFlagProps = {
 }
 
 const tooltipClassName =
-  'pointer-events-none absolute bottom-full left-1/2 z-30 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-neutral-500 bg-black px-2 py-1 text-[11px] font-bold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/flag:opacity-100 group-focus-within/flag:opacity-100'
+  'pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-neutral-500 bg-black px-2 py-1 text-[11px] font-bold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/flag:opacity-100 group-focus-within/flag:opacity-100'
 
 export default function CountryFlag({ fifaCode, countryName, className, glossy = true }: CountryFlagProps) {
   const src = getFlagAssetPath(fifaCode)

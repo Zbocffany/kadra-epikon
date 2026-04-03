@@ -142,7 +142,7 @@ function renderScoreWithFlags(match: AdminMatch) {
 
 function GlossySummaryBadge({ children }: { children: ReactNode }) {
   return (
-    <span className="relative inline-flex items-center overflow-hidden rounded-md border border-neutral-500/80 bg-neutral-900 px-3 py-1.5 text-sm font-black text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]">
+    <span className="relative inline-flex items-center overflow-hidden rounded-md border border-neutral-500/80 bg-neutral-900 px-[11px] py-[5px] text-[13px] font-black text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]">
       <span
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
@@ -181,30 +181,30 @@ function getYearPolandResultStats(yearMatches: AdminMatch[]): YearPolandResultSt
 
 function GlossyYearStatsBadge({ stats }: { stats: YearPolandResultStats }) {
   return (
-    <span className="relative inline-flex h-[31px] items-center gap-2.5 overflow-hidden rounded-md border border-neutral-500/80 bg-neutral-900 dark:bg-neutral-900 px-2.5 py-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]">
+    <span className="relative inline-flex h-[28px] items-center gap-[9px] overflow-hidden rounded-md border border-neutral-500/80 bg-neutral-900 dark:bg-neutral-900 px-[9px] py-[3px] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]">
       <span
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
       />
-      <span className="relative z-10 min-w-7 text-center text-sm font-black text-white" title="Liczba meczów w roku">
+      <span className="relative z-10 min-w-6 text-center text-[13px] font-black text-white" title="Liczba meczów w roku">
         {stats.totalMatches}
       </span>
-      <span className="relative z-10 inline-flex items-center gap-2">
+      <span className="relative z-10 inline-flex items-center gap-[7px]">
         <span
           title="Zwycięstwa Polski"
-          className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-emerald-600 dark:border-black/70 bg-white dark:bg-neutral-950 text-[12px] font-black text-emerald-600 dark:text-emerald-300 shadow-[inset_0_2px_3px_rgba(0,0,0,0.05),inset_0_-1px_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_2px_3px_rgba(0,0,0,0.9),inset_0_-1px_1px_rgba(255,255,255,0.12)]"
+          className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full border border-emerald-600 dark:border-black/70 bg-white dark:bg-neutral-950 text-[11px] font-black text-emerald-600 dark:text-emerald-300 shadow-[inset_0_2px_3px_rgba(0,0,0,0.05),inset_0_-1px_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_2px_3px_rgba(0,0,0,0.9),inset_0_-1px_1px_rgba(255,255,255,0.12)]"
         >
           {stats.wins}
         </span>
         <span
           title="Remisy Polski"
-          className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-neutral-400 dark:border-black/70 bg-white dark:bg-neutral-950 text-[12px] font-black text-neutral-800 dark:text-neutral-200 shadow-[inset_0_2px_3px_rgba(0,0,0,0.05),inset_0_-1px_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_2px_3px_rgba(0,0,0,0.9),inset_0_-1px_1px_rgba(255,255,255,0.12)]"
+          className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full border border-neutral-400 dark:border-black/70 bg-white dark:bg-neutral-950 text-[11px] font-black text-neutral-800 dark:text-neutral-200 shadow-[inset_0_2px_3px_rgba(0,0,0,0.05),inset_0_-1px_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_2px_3px_rgba(0,0,0,0.9),inset_0_-1px_1px_rgba(255,255,255,0.12)]"
         >
           {stats.draws}
         </span>
         <span
           title="Porażki Polski"
-          className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-red-600 dark:border-black/70 bg-white dark:bg-neutral-950 text-[12px] font-black text-red-600 dark:text-red-300 shadow-[inset_0_2px_3px_rgba(0,0,0,0.05),inset_0_-1px_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_2px_3px_rgba(0,0,0,0.9),inset_0_-1px_1px_rgba(255,255,255,0.12)]"
+          className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full border border-red-600 dark:border-black/70 bg-white dark:bg-neutral-950 text-[11px] font-black text-red-600 dark:text-red-300 shadow-[inset_0_2px_3px_rgba(0,0,0,0.05),inset_0_-1px_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_2px_3px_rgba(0,0,0,0.9),inset_0_-1px_1px_rgba(255,255,255,0.12)]"
         >
           {stats.losses}
         </span>
@@ -268,7 +268,7 @@ export default function MatchesListView({
         <div className="flex flex-col gap-6 lg:flex-row">
           {leftFilters.length > 0 ? (
             <aside className="lg:w-52 lg:shrink-0">
-              <div className="flex flex-wrap gap-3 lg:flex-col">
+              <div className="flex flex-wrap gap-[11px] lg:flex-col">
                 {leftFilters.map((filter) => (
                   <Link
                     key={filter.key}
@@ -276,7 +276,7 @@ export default function MatchesListView({
                     className="inline-flex"
                     aria-current={filter.isActive ? 'page' : undefined}
                   >
-                    <span className={`relative inline-flex items-center overflow-hidden rounded-md border px-3 py-1.5 text-sm font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${filter.isActive ? 'border-blue-400 bg-blue-950 text-blue-100 shadow-[0_0_16px_rgba(96,165,250,0.4)]' : 'border-neutral-700 bg-neutral-900 text-neutral-300 hover:border-neutral-500 hover:text-white'}`}>
+                    <span className={`relative inline-flex items-center overflow-hidden rounded-md border px-[11px] py-[5px] text-[13px] font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${filter.isActive ? 'border-blue-400 bg-blue-950 text-blue-100 shadow-[0_0_16px_rgba(96,165,250,0.4)]' : 'border-neutral-700 bg-neutral-900 text-neutral-300 hover:border-neutral-500 hover:text-white'}`}>
                         <span
                           aria-hidden="true"
                           className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
@@ -399,7 +399,7 @@ export default function MatchesListView({
                   )}
                   {years.map((year) => (
                     <details key={year} className="group bg-neutral-950">
-                      <summary className="relative z-20 grid cursor-pointer list-none grid-cols-[auto_1fr_auto] items-center gap-4 bg-neutral-900 px-5 py-2.5 marker:content-none pointer-events-auto">
+                      <summary className="relative z-20 grid cursor-pointer list-none grid-cols-[auto_1fr_auto] items-center gap-[14px] bg-neutral-900 px-[18px] py-[9px] marker:content-none pointer-events-auto">
                         <GlossySummaryBadge>{year}</GlossySummaryBadge>
                         <span className="flex items-center justify-center">
                           <GlossyYearStatsBadge stats={getYearPolandResultStats(matchesByYear[year])} />

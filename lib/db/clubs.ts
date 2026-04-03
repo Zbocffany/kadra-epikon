@@ -32,6 +32,34 @@ function sortPeriods(periods: CityCountryPeriod[]): CityCountryPeriod[] {
   })
 }
 
+async function getCityCountryPeriodsByCityIds(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  cityIds: string[]
+): Promise<CityCountryPeriod[]> {
+  if (!cityIds.length) return []
+
+  const periods: CityCountryPeriod[] = []
+  const batchSize = 250
+
+  for (let start = 0; start < cityIds.length; start += batchSize) {
+    const cityIdsBatch = cityIds.slice(start, start + batchSize)
+    const { data: periodsBatch, error: periodsError } = await supabase
+      .from('tbl_City_Country_Periods')
+      .select('city_id, country_id, valid_from, valid_to')
+      .in('city_id', cityIdsBatch)
+
+    if (periodsError) {
+      throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
+    }
+
+    if (periodsBatch?.length) {
+      periods.push(...periodsBatch)
+    }
+  }
+
+  return periods
+}
+
 export type AdminClubDetails = {
   id: string
   name: string
@@ -89,25 +117,21 @@ export async function getAdminClubs(): Promise<AdminClub[]> {
 
   const [
     { data: cities, error: citiesError },
-    { data: periods, error: periodsError },
+    periods,
   ] = await Promise.all([
     supabase
       .from('tbl_Cities')
       .select('id, city_name')
       .in('id', cityIds),
-    supabase
-      .from('tbl_City_Country_Periods')
-      .select('city_id, country_id, valid_from, valid_to')
-      .in('city_id', cityIds),
+    getCityCountryPeriodsByCityIds(supabase, cityIds),
   ])
 
   if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
-  if (periodsError) throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
 
   const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
 
   const periodsByCity = new Map<string, CityCountryPeriod[]>()
-  for (const period of periods ?? []) {
+  for (const period of periods) {
     const list = periodsByCity.get(period.city_id) ?? []
     list.push(period)
     periodsByCity.set(period.city_id, list)
@@ -173,25 +197,21 @@ export async function getAdminClubsPage(
 
   const [
     { data: cities, error: citiesError },
-    { data: periods, error: periodsError },
+    periods,
   ] = await Promise.all([
     supabase
       .from('tbl_Cities')
       .select('id, city_name')
       .in('id', cityIds),
-    supabase
-      .from('tbl_City_Country_Periods')
-      .select('city_id, country_id, valid_from, valid_to')
-      .in('city_id', cityIds),
+    getCityCountryPeriodsByCityIds(supabase, cityIds),
   ])
 
   if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
-  if (periodsError) throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
 
   const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
 
   const periodsByCity = new Map<string, CityCountryPeriod[]>()
-  for (const period of periods ?? []) {
+  for (const period of periods) {
     const list = periodsByCity.get(period.city_id) ?? []
     list.push(period)
     periodsByCity.set(period.city_id, list)
@@ -246,15 +266,10 @@ export async function getAdminCities(): Promise<AdminCity[]> {
 
   const cityIds = cities.map((c) => c.id)
 
-  const { data: periods, error: periodsError } = await supabase
-    .from('tbl_City_Country_Periods')
-    .select('city_id, country_id, valid_from, valid_to')
-    .in('city_id', cityIds)
-
-  if (periodsError) throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
+  const periods = await getCityCountryPeriodsByCityIds(supabase, cityIds)
 
   const periodsByCity = new Map<string, CityCountryPeriod[]>()
-  for (const period of periods ?? []) {
+  for (const period of periods) {
     const list = periodsByCity.get(period.city_id) ?? []
     list.push(period)
     periodsByCity.set(period.city_id, list)
