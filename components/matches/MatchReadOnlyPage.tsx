@@ -128,7 +128,7 @@ function MatchTeamParticipantsView({ participants, events }: { participants: Adm
     const minute = event.event_type === 'SUBSTITUTION' ? formatEventMinute(event) : null
     if (iconName) appendIcon(event.primary_person_id, iconName, minute, false)
     if (event.secondary_person_id) {
-      if (event.event_type === 'GOAL') appendIcon(event.secondary_person_id, 'assist')
+      if (event.event_type === 'GOAL' || event.event_type === 'OWN_GOAL') appendIcon(event.secondary_person_id, 'assist')
       else if (iconName) appendIcon(event.secondary_person_id, iconName, minute, true)
     }
   }
@@ -227,7 +227,7 @@ function MatchLineupsSummarySection({
   })
   const chronologicalEvents = [...events].sort(compareEventsChronologically)
   const GOAL_TYPES = new Set<AdminMatchEvent['event_type']>(['GOAL', 'OWN_GOAL', 'PENALTY_GOAL'])
-  type ScorerEntry = { id: string; minuteLabel: string; scorerName: string }
+  type ScorerEntry = { id: string; minuteLabel: string; scorerName: string; eventType: AdminMatchEvent['event_type'] }
 
   function renderMinute(event: AdminMatchEvent): string {
     return event.minute_extra && event.minute_extra > 0 ? `${event.minute}+${event.minute_extra}'` : `${event.minute}'`
@@ -239,7 +239,7 @@ function MatchLineupsSummarySection({
   for (const event of goalEventsChronological) {
     const target = event.team_id === match.home_team_id ? homeScorers : event.team_id === match.away_team_id ? awayScorers : null
     if (!target) continue
-    target.push({ id: event.id, minuteLabel: renderMinute(event), scorerName: event.primary_person_id ? (personNameById.get(event.primary_person_id) ?? 'Nieznany') : 'Nieznany' })
+    target.push({ id: event.id, minuteLabel: renderMinute(event), scorerName: event.primary_person_id ? (personNameById.get(event.primary_person_id) ?? 'Nieznany') : 'Nieznany', eventType: event.event_type })
   }
 
   function getEventIconName(eventType: AdminMatchEvent['event_type']): 'goal' | 'ownGoal' | 'penaltyGoal' | 'missedPenalty' | 'savedPenalty' | 'yellowCard' | 'secondYellowCard' | 'redCard' | 'substitution' | null {
@@ -359,10 +359,9 @@ function MatchLineupsSummarySection({
 
               return (
                 <div key={event.id} className="bg-neutral-950 px-3 py-2">
-                  {runningScore ? <div className="mb-1 flex justify-center">{renderGlossyEventScore(runningScore)}</div> : null}
-                  {side === 'home' ? <div className="flex w-full items-center gap-2"><span className={minuteClass}>{minuteLabel}</span><div className="min-w-0">{content}</div></div> : null}
-                  {side === 'away' ? <div className="flex w-full items-center justify-end gap-2"><div className="min-w-0 text-right">{content}</div><span className={minuteClass}>{minuteLabel}</span></div> : null}
-                  {side === 'neutral' ? <div className="flex w-full items-center justify-center gap-2"><span className={minuteClass}>{minuteLabel}</span>{content}</div> : null}
+                  {side === 'home' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><div className="flex items-center gap-2"><span className={minuteClass}>{minuteLabel}</span><div className="min-w-0">{content}</div></div>{runningScore ? renderGlossyEventScore(runningScore) : <span />}<span /></div> : null}
+                  {side === 'away' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><span />{runningScore ? renderGlossyEventScore(runningScore) : <span />}<div className="flex items-center justify-end gap-2"><div className="min-w-0 text-right">{content}</div><span className={minuteClass}>{minuteLabel}</span></div></div> : null}
+                  {side === 'neutral' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><span /><div className="flex items-center gap-2"><span className={minuteClass}>{minuteLabel}</span>{content}{runningScore ? renderGlossyEventScore(runningScore) : null}</div><span /></div> : null}
                 </div>
               )
             })}
@@ -387,9 +386,9 @@ function MatchLineupsSummarySection({
 
         {(homeScorers.length > 0 || awayScorers.length > 0) ? (
           <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-start gap-4">
-            <div className="space-y-1">{homeScorers.map((entry) => <div key={entry.id} className="flex items-center gap-2 text-[13px]"><span className="inline-flex shrink-0 items-center rounded-md border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-neutral-200">{entry.minuteLabel}</span><span className="truncate font-semibold text-neutral-100">{entry.scorerName}</span></div>)}</div>
+            <div className="space-y-1">{homeScorers.map((entry) => <div key={entry.id} className="flex items-center gap-2 text-[13px]"><span className="inline-flex shrink-0 items-center rounded-md border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-neutral-200">{entry.minuteLabel}</span><span className="truncate font-semibold text-neutral-100">{entry.scorerName}{entry.eventType === 'PENALTY_GOAL' ? <span className="ml-1 font-normal text-neutral-400">(k.)</span> : entry.eventType === 'OWN_GOAL' ? <span className="ml-1 font-normal text-neutral-400">(sam.)</span> : null}</span></div>)}</div>
             <div />
-            <div className="space-y-1">{awayScorers.map((entry) => <div key={entry.id} className="flex items-center justify-end gap-2 text-[13px]"><span className="truncate font-semibold text-neutral-100">{entry.scorerName}</span><span className="inline-flex shrink-0 items-center rounded-md border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-neutral-200">{entry.minuteLabel}</span></div>)}</div>
+            <div className="space-y-1">{awayScorers.map((entry) => <div key={entry.id} className="flex items-center justify-end gap-2 text-[13px]"><span className="truncate font-semibold text-neutral-100">{entry.scorerName}{entry.eventType === 'PENALTY_GOAL' ? <span className="ml-1 font-normal text-neutral-400">(k.)</span> : entry.eventType === 'OWN_GOAL' ? <span className="ml-1 font-normal text-neutral-400">(sam.)</span> : null}</span><span className="inline-flex shrink-0 items-center rounded-md border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-neutral-200">{entry.minuteLabel}</span></div>)}</div>
           </div>
         ) : null}
       </div>

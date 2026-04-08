@@ -8,6 +8,7 @@ export type InlineCreateState = {
   id?: string
   label?: string
   error?: string
+  warning?: string
   version: number
 }
 

@@ -17,9 +17,11 @@ type SearchParams = Promise<RawSearchParams>
 function CityCreateFields({
   countries,
   federations,
+  defaultCityName,
 }: {
   countries: AdminCountryOption[]
   federations: AdminFederation[]
+  defaultCityName?: string
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
@@ -34,6 +36,7 @@ function CityCreateFields({
           required
           autoComplete="off"
           placeholder="np. Warszawa"
+          defaultValue={defaultCityName ?? ''}
           className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 placeholder:text-neutral-600 focus:border-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-500"
         />
       </div>
@@ -123,7 +126,10 @@ function CityCreateFields({
 
 export default async function AdminCitiesPage({ searchParams }: { searchParams: SearchParams }) {
   const resolvedSearchParams = await searchParams
-  const { error: formError, create } = resolvedSearchParams
+  const { error: formError, create, warn_dup: warnDupParam, pc_name: pcNameParam } = resolvedSearchParams
+
+  const warnDup = warnDupParam === '1'
+  const pendingCityName = typeof pcNameParam === 'string' ? decodeURIComponent(pcNameParam) : ''
 
   let cities: AdminCityListItem[] = []
   let countries: AdminCountryOption[] = []
@@ -143,7 +149,7 @@ export default async function AdminCitiesPage({ searchParams }: { searchParams: 
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
 
-  const isCreateModalOpen = create === '1' || Boolean(formError)
+  const isCreateModalOpen = create === '1' || Boolean(formError) || warnDup
 
   return (
     <AdminListLayout
@@ -172,8 +178,15 @@ export default async function AdminCitiesPage({ searchParams }: { searchParams: 
                   <h2 className="text-lg font-semibold text-neutral-100">Dodaj miasto</h2>
                 </div>
 
+                {warnDup && (
+                  <div className="mb-4 rounded-md border border-amber-700 bg-amber-950/50 px-3 py-2 text-sm text-amber-300">
+                    Miasto <strong>&quot;{pendingCityName}&quot;</strong> już istnieje w bazie. Wybierz kraj i kliknij &quot;Dodaj miasto&quot;, aby dodać mimo to.
+                  </div>
+                )}
+
                 <form action={createCity} className="space-y-4">
-                  <CityCreateFields countries={countries} federations={federations} />
+                  {warnDup && <input type="hidden" name="force" value="1" />}
+                  <CityCreateFields countries={countries} federations={federations} defaultCityName={pendingCityName} />
 
                   <div className="flex items-center justify-end gap-2 pt-2">
                     <button

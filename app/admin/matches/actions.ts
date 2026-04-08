@@ -1498,8 +1498,8 @@ export async function createMatch(formData: FormData): Promise<void> {
     match_time: input.matchTime,
     match_stadium_id: input.matchStadiumId,
     match_city_id: matchCityId,
-    match_status: 'SCHEDULED',
-    result_type: null,
+    match_status: input.matchStatus,
+    result_type: input.resultType,
     editorial_status: 'DRAFT',
   }
 

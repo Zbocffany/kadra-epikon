@@ -12,6 +12,7 @@ interface AdminTableProps<T extends Record<string, unknown> = Record<string, unk
   columns: AdminTableColumn<T>[]
   emptyMessage: string
   idField?: string
+  showHeader?: boolean
 }
 
 /**
@@ -39,6 +40,7 @@ export default function AdminTable<T extends Record<string, unknown>>({
   columns,
   emptyMessage,
   idField = 'id',
+  showHeader = true,
 }: AdminTableProps<T>) {
   if (!data.length) {
     return (
@@ -52,6 +54,7 @@ export default function AdminTable<T extends Record<string, unknown>>({
     <div className="overflow-x-auto rounded-xl border border-neutral-800">
       <table className="w-full border-collapse text-sm">
         <thead>
+          {showHeader && (
           <tr className="border-b border-neutral-800 bg-neutral-900 text-left">
             {columns.map((col) => (
               <th key={col.key} className={`px-4 py-3 font-medium text-neutral-400`}>
@@ -59,6 +62,7 @@ export default function AdminTable<T extends Record<string, unknown>>({
               </th>
             ))}
           </tr>
+          )}
         </thead>
         <tbody>
           {data.map((row, i) => (

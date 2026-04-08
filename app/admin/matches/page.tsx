@@ -6,8 +6,10 @@ import {
   getAdminMatches,
   getAdminMatchCreateOptions,
   getAdminMatchYearBounds,
+  getMatchesYearStats,
   type AdminMatch,
   type AdminStadiumOption,
+  type MatchYearStatsData,
 } from '@/lib/db/matches'
 import { getAdminCountriesOptions, type AdminCountryOption } from '@/lib/db/cities'
 import { getAdminFederations, type AdminFederation } from '@/lib/db/countries'
@@ -74,6 +76,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
   let decadeFilters: DecadeFilter[] = []
   let selectedPeriod = 'upcoming'
   let fetchError: string | null = null
+  let yearStats: MatchYearStatsData | undefined = undefined
 
   try {
     const [yearBounds, options, countries, federations] = await Promise.all([
@@ -105,6 +108,10 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
     federationOptions = federations
     stadiumOptions = options.stadiums
     matchLevelOptions = options.matchLevels
+
+    if (selectedPeriod !== 'upcoming') {
+      yearStats = await getMatchesYearStats(matches)
+    }
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
     matches = []
@@ -120,6 +127,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
         fetchError={fetchError}
         detailBasePath="/admin/matches"
         displayMode={selectedPeriod === 'upcoming' ? 'upcoming' : 'history'}
+        yearStats={yearStats}
         leftFilters={[
           {
             key: 'upcoming',

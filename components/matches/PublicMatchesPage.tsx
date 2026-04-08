@@ -1,5 +1,5 @@
 import MatchesListView from '@/components/matches/MatchesListView'
-import { getAdminMatchYearBounds, getAdminMatches, type AdminMatch } from '@/lib/db/matches'
+import { getAdminMatchYearBounds, getAdminMatches, getMatchesYearStats, type AdminMatch, type MatchYearStatsData } from '@/lib/db/matches'
 import type { RawSearchParams } from '@/lib/pagination'
 
 type PublicMatchesPageProps = {
@@ -64,6 +64,7 @@ export default async function PublicMatchesPage({
   let decadeFilters: DecadeFilter[] = []
   let selectedPeriod = 'upcoming'
   let fetchError: string | null = null
+  let yearStats: MatchYearStatsData | undefined = undefined
 
   try {
     const yearBounds = await getAdminMatchYearBounds()
@@ -82,6 +83,10 @@ export default async function PublicMatchesPage({
     } else {
       matches = []
     }
+
+    if (selectedPeriod !== 'upcoming') {
+      yearStats = await getMatchesYearStats(matches)
+    }
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
     matches = []
@@ -96,6 +101,7 @@ export default async function PublicMatchesPage({
       detailBasePath={detailBasePath}
       showEditorialStatus={false}
       displayMode={selectedPeriod === 'upcoming' ? 'upcoming' : 'history'}
+      yearStats={yearStats}
       leftFilters={[
         {
           key: 'upcoming',

@@ -44,20 +44,19 @@ export default function ClubsSearchTable({ clubs }: { clubs: AdminClub[] }) {
     <AdminSearchableTable
       data={clubs}
       columns={columns}
-      searchLabel="Wyszukaj klub"
       searchPlaceholder="Wpisz nazwę klubu albo miasto..."
-      priorityHint="Najpierw pokazują się kluby, których nazwa zaczyna się od wpisanej frazy, a potem pozostałe dopasowania."
+      showHeader={false}
       emptyMessage="Brak klubów w bazie danych."
       emptySearchMessage="Brak klubów pasujących do wyszukiwanej frazy."
       getPrimaryText={(club) => club.name}
       getSecondaryTexts={(club) => [club.city_name, club.country_name]}
       filterConfig={{
-        label: 'Miasto',
+        label: '',
         allLabel: 'Wszystkie miasta',
         getValue: (club) => club.city_name,
       }}
       secondaryFilterConfig={{
-        label: 'Kraj',
+        label: '',
         allLabel: 'Wszystkie kraje',
         getValue: (club) => club.country_name,
       }}

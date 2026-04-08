@@ -28,6 +28,7 @@ export type AdminPersonListItem = {
   last_name: string | null
   nickname: string | null
   birth_date: string | null
+  death_date: string | null
   is_active: boolean | null
   birth_city_id: string | null
   birth_country_id: string | null
@@ -323,7 +324,7 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
 
   const { data: people, error: peopleError } = await supabase
     .from('tbl_People')
-    .select('id, first_name, last_name, nickname, birth_date, is_active, birth_city_id, birth_country_id')
+    .select('id, first_name, last_name, nickname, birth_date, death_date, is_active, birth_city_id, birth_country_id')
 
   if (peopleError) throw new Error(`tbl_People: ${peopleError.message}`)
   if (!people?.length) return []
@@ -370,6 +371,7 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
         last_name: person.last_name,
         nickname: person.nickname,
         birth_date: person.birth_date,
+        death_date: person.death_date,
         is_active: person.is_active,
         birth_city_id: person.birth_city_id,
         birth_country_id: person.birth_country_id,
@@ -398,7 +400,7 @@ export async function getAdminPeoplePage(
 
   const { data: people, error: peopleError, count } = await supabase
     .from('tbl_People')
-    .select('id, first_name, last_name, nickname, birth_date, is_active, birth_city_id, birth_country_id', {
+    .select('id, first_name, last_name, nickname, birth_date, death_date, is_active, birth_city_id, birth_country_id', {
       count: 'exact',
     })
     .order('last_name', { ascending: true, nullsFirst: false })
@@ -451,6 +453,7 @@ export async function getAdminPeoplePage(
         last_name: person.last_name,
         nickname: person.nickname,
         birth_date: person.birth_date,
+        death_date: person.death_date,
         is_active: person.is_active,
         birth_city_id: person.birth_city_id,
         birth_country_id: person.birth_country_id,
@@ -476,7 +479,7 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
 
   const { data: person, error: personError } = await supabase
     .from('tbl_People')
-    .select('id, first_name, last_name, nickname, birth_date, is_active, birth_city_id, birth_country_id')
+    .select('id, first_name, last_name, nickname, birth_date, death_date, is_active, birth_city_id, birth_country_id')
     .eq('id', id)
     .maybeSingle()
 
@@ -524,6 +527,7 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     last_name: person.last_name,
     nickname: person.nickname,
     birth_date: person.birth_date,
+    death_date: person.death_date,
     is_active: person.is_active,
     birth_city_id: person.birth_city_id,
     birth_country_id: person.birth_country_id,

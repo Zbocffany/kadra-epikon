@@ -38,9 +38,8 @@ export default function CitiesSearchTable({ cities }: { cities: AdminCityListIte
     <AdminSearchableTable
       data={cities}
       columns={columns}
-      searchLabel="Wyszukaj miasto"
       searchPlaceholder="Wpisz nazwę miasta albo kraju..."
-      priorityHint="Najpierw pokazują się miasta, których nazwa zaczyna się od wpisanej frazy, a potem pozostałe dopasowania."
+      showHeader={false}
       emptyMessage="Brak miast w bazie danych."
       emptySearchMessage="Brak miast pasujących do wyszukiwanej frazy."
       getPrimaryText={(city) => city.city_name}

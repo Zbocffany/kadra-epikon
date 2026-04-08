@@ -264,7 +264,7 @@ function MatchTeamParticipantsView({
     }
 
     if (event.secondary_person_id) {
-      if (event.event_type === 'GOAL') {
+      if (event.event_type === 'GOAL' || event.event_type === 'OWN_GOAL') {
         appendIcon(event.secondary_person_id, 'assist')
       } else if (iconName) {
         appendIcon(event.secondary_person_id, iconName, minute, true)
@@ -439,13 +439,11 @@ function MatchEventsSectionEdit({
   people,
   teams,
   matchId,
-  wasSaved,
 }: {
   events: AdminMatchEvent[]
   people: MatchEventPersonOption[]
   teams: AdminTeamOption[]
   matchId: string
-  wasSaved: boolean
 }) {
   return (
     <section className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-6">
@@ -456,7 +454,6 @@ function MatchEventsSectionEdit({
           people={people}
           teams={teams}
           matchId={matchId}
-          clearDraft={wasSaved}
         />
       </div>
     </section>
@@ -508,6 +505,7 @@ function MatchLineupsSummarySection({
     id: string
     minuteLabel: string
     scorerName: string
+    eventType: AdminMatchEvent['event_type']
   }
 
   const EVENT_TYPE_LABEL: Record<AdminMatchEvent['event_type'], string> = {
@@ -554,6 +552,7 @@ function MatchLineupsSummarySection({
       scorerName: event.primary_person_id
         ? (personNameById.get(event.primary_person_id) ?? 'Nieznany')
         : 'Nieznany',
+      eventType: event.event_type,
     })
   }
 
@@ -796,30 +795,37 @@ function MatchLineupsSummarySection({
 
               return (
                 <div key={event.id} className="bg-neutral-950 px-3 py-2">
-                  {runningScore ? (
-                    <div className="mb-1 flex justify-center">
-                      {renderGlossyEventScore(runningScore)}
-                    </div>
-                  ) : null}
-
                   {side === 'home' ? (
-                    <div className="flex w-full items-center gap-2">
-                      <span className={minuteClass}>{minuteLabel}</span>
-                      <div className="min-w-0">{content}</div>
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className={minuteClass}>{minuteLabel}</span>
+                        <div className="min-w-0">{content}</div>
+                      </div>
+                      {runningScore ? renderGlossyEventScore(runningScore) : <span />}
+                      <span />
                     </div>
                   ) : null}
 
                   {side === 'away' ? (
-                    <div className="flex w-full items-center justify-end gap-2">
-                      <div className="min-w-0 text-right">{content}</div>
-                      <span className={minuteClass}>{minuteLabel}</span>
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                      <span />
+                      {runningScore ? renderGlossyEventScore(runningScore) : <span />}
+                      <div className="flex items-center justify-end gap-2">
+                        <div className="min-w-0 text-right">{content}</div>
+                        <span className={minuteClass}>{minuteLabel}</span>
+                      </div>
                     </div>
                   ) : null}
 
                   {side === 'neutral' ? (
-                    <div className="flex w-full items-center justify-center gap-2">
-                      <span className={minuteClass}>{minuteLabel}</span>
-                      {content}
+                    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+                      <span />
+                      <div className="flex items-center gap-2">
+                        <span className={minuteClass}>{minuteLabel}</span>
+                        {content}
+                        {runningScore ? renderGlossyEventScore(runningScore) : null}
+                      </div>
+                      <span />
                     </div>
                   ) : null}
                 </div>
@@ -857,7 +863,7 @@ function MatchLineupsSummarySection({
                   <span className="inline-flex shrink-0 items-center rounded-md border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-neutral-200">
                     {entry.minuteLabel}
                   </span>
-                  <span className="truncate font-semibold text-neutral-100">{entry.scorerName}</span>
+                  <span className="truncate font-semibold text-neutral-100">{entry.scorerName}{entry.eventType === 'PENALTY_GOAL' ? <span className="ml-1 font-normal text-neutral-400">(k.)</span> : entry.eventType === 'OWN_GOAL' ? <span className="ml-1 font-normal text-neutral-400">(sam.)</span> : null}</span>
                 </div>
               ))}
             </div>
@@ -865,7 +871,7 @@ function MatchLineupsSummarySection({
             <div className="space-y-1">
               {awayScorers.map((entry) => (
                 <div key={entry.id} className="flex items-center justify-end gap-2 text-[13px]">
-                  <span className="truncate font-semibold text-neutral-100">{entry.scorerName}</span>
+                  <span className="truncate font-semibold text-neutral-100">{entry.scorerName}{entry.eventType === 'PENALTY_GOAL' ? <span className="ml-1 font-normal text-neutral-400">(k.)</span> : entry.eventType === 'OWN_GOAL' ? <span className="ml-1 font-normal text-neutral-400">(sam.)</span> : null}</span>
                   <span className="inline-flex shrink-0 items-center rounded-md border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-neutral-200">
                     {entry.minuteLabel}
                   </span>
@@ -1268,7 +1274,6 @@ export default async function AdminMatchDetailsPage({
             people={eventPeople}
             teams={eventTeams}
             matchId={match.id}
-            wasSaved={saved === '1'}
           />
 
           <div className="mt-8 flex items-center justify-end gap-2">

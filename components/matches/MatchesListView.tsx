@@ -1,8 +1,11 @@
+'use client'
+
+import { useState } from 'react'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
 import CountryFlag from '@/components/CountryFlag'
-import type { AdminMatch, EditorialStatus } from '@/lib/db/matches'
+import type { AdminMatch, EditorialStatus, MatchYearStatsData } from '@/lib/db/matches'
 
 function EditorialStatusBadge({ status }: { status: EditorialStatus }) {
   const styles: Record<string, string> = {
@@ -157,18 +160,43 @@ type YearPolandResultStats = {
   wins: number
   draws: number
   losses: number
+  goalsScored: number
+  goalsConceded: number
+}
+
+function getPolandGoals(match: AdminMatch): { scored: number; conceded: number } | null {
+  if (!match.final_score) return null
+  const scoreMatch = match.final_score.match(/(\d+)\s*[:\-]\s*(\d+)/)
+  if (!scoreMatch) return null
+  const homeGoals = Number(scoreMatch[1])
+  const awayGoals = Number(scoreMatch[2])
+  const homeName = (match.home_team_name ?? '').trim().toLowerCase()
+  const awayName = (match.away_team_name ?? '').trim().toLowerCase()
+  const isPolandHome = homeName.startsWith('polska')
+  const isPolandAway = awayName.startsWith('polska')
+  if (!isPolandHome && !isPolandAway) return null
+  return isPolandHome
+    ? { scored: homeGoals, conceded: awayGoals }
+    : { scored: awayGoals, conceded: homeGoals }
 }
 
 function getYearPolandResultStats(yearMatches: AdminMatch[]): YearPolandResultStats {
   let wins = 0
   let draws = 0
   let losses = 0
+  let goalsScored = 0
+  let goalsConceded = 0
 
   for (const match of yearMatches) {
     const outcome = getPolandMatchOutcome(match)
     if (outcome === 'WIN') wins += 1
     if (outcome === 'DRAW') draws += 1
     if (outcome === 'LOSS') losses += 1
+    const goals = getPolandGoals(match)
+    if (goals) {
+      goalsScored += goals.scored
+      goalsConceded += goals.conceded
+    }
   }
 
   return {
@@ -176,39 +204,21 @@ function getYearPolandResultStats(yearMatches: AdminMatch[]): YearPolandResultSt
     wins,
     draws,
     losses,
+    goalsScored,
+    goalsConceded,
   }
 }
 
 function GlossyYearStatsBadge({ stats }: { stats: YearPolandResultStats }) {
   return (
-    <span className="relative inline-flex h-[28px] items-center gap-[9px] overflow-hidden rounded-md border border-neutral-500/80 bg-neutral-900 dark:bg-neutral-900 px-[9px] py-[3px] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]">
+    <span className="relative inline-flex h-[28px] items-center gap-[7px] overflow-hidden rounded-md border border-neutral-500/80 bg-neutral-900 dark:bg-neutral-900 px-[9px] py-[3px] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]">
       <span
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
       />
-      <span className="relative z-10 min-w-6 text-center text-[13px] font-black text-white" title="Liczba meczów w roku">
-        {stats.totalMatches}
-      </span>
-      <span className="relative z-10 inline-flex items-center gap-[7px]">
-        <span
-          title="Zwycięstwa Polski"
-          className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full border border-emerald-600 dark:border-black/70 bg-white dark:bg-neutral-950 text-[11px] font-black text-emerald-600 dark:text-emerald-300 shadow-[inset_0_2px_3px_rgba(0,0,0,0.05),inset_0_-1px_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_2px_3px_rgba(0,0,0,0.9),inset_0_-1px_1px_rgba(255,255,255,0.12)]"
-        >
-          {stats.wins}
-        </span>
-        <span
-          title="Remisy Polski"
-          className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full border border-neutral-400 dark:border-black/70 bg-white dark:bg-neutral-950 text-[11px] font-black text-neutral-800 dark:text-neutral-200 shadow-[inset_0_2px_3px_rgba(0,0,0,0.05),inset_0_-1px_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_2px_3px_rgba(0,0,0,0.9),inset_0_-1px_1px_rgba(255,255,255,0.12)]"
-        >
-          {stats.draws}
-        </span>
-        <span
-          title="Porażki Polski"
-          className="inline-flex h-[22px] w-[22px] items-center justify-center rounded-full border border-red-600 dark:border-black/70 bg-white dark:bg-neutral-950 text-[11px] font-black text-red-600 dark:text-red-300 shadow-[inset_0_2px_3px_rgba(0,0,0,0.05),inset_0_-1px_1px_rgba(255,255,255,0.5)] dark:shadow-[inset_0_2px_3px_rgba(0,0,0,0.9),inset_0_-1px_1px_rgba(255,255,255,0.12)]"
-        >
-          {stats.losses}
-        </span>
-      </span>
+      <span className="relative z-10 text-[13px] font-black text-white" title="Liczba meczów">{stats.totalMatches}</span>
+      <span className="relative z-10 text-[13px] font-black text-white" title="Zwycięstwa-Remisy-Porażki">{stats.wins}-{stats.draws}-{stats.losses}</span>
+      <span className="relative z-10 text-[13px] font-black text-neutral-400">({stats.goalsScored}-{stats.goalsConceded})</span>
     </span>
   )
 }
@@ -223,6 +233,7 @@ type MatchesListViewProps = {
   headerActions?: ReactNode
   displayMode?: 'all' | 'upcoming' | 'history'
   leftFilters?: Array<{ key: string; label: string; href: string; isActive: boolean }>
+  yearStats?: MatchYearStatsData
 }
 
 export default function MatchesListView({
@@ -235,6 +246,7 @@ export default function MatchesListView({
   headerActions,
   displayMode = 'all',
   leftFilters = [],
+  yearStats,
 }: MatchesListViewProps) {
   const upcomingMatches = [...matches]
     .filter((match) => match.match_status === 'SCHEDULED')
@@ -250,6 +262,12 @@ export default function MatchesListView({
   const showUpcomingSection = displayMode !== 'history'
   const showHistorySection = displayMode !== 'upcoming'
 
+  type ActivePanel = 'coaches' | 'appearances' | 'goals' | null
+  const [activePanel, setActivePanel] = useState<ActivePanel>(null)
+  function togglePanel(panel: 'coaches' | 'appearances' | 'goals') {
+    setActivePanel((prev) => (prev === panel ? null : panel))
+  }
+
   return (
     <main className="min-h-screen px-4 py-10 sm:px-8">
       <div className="mx-auto max-w-7xl">
@@ -259,9 +277,6 @@ export default function MatchesListView({
           </div>
           <div className="flex items-center gap-2">
             {headerActions}
-            <span className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs text-neutral-400">
-              Mecze: {totalMatches}
-            </span>
           </div>
         </div>
 
@@ -276,7 +291,7 @@ export default function MatchesListView({
                     className="inline-flex"
                     aria-current={filter.isActive ? 'page' : undefined}
                   >
-                    <span className={`relative inline-flex items-center overflow-hidden rounded-md border px-[11px] py-[5px] text-[13px] font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${filter.isActive ? 'border-blue-400 bg-blue-950 text-blue-100 shadow-[0_0_16px_rgba(96,165,250,0.4)]' : 'border-neutral-700 bg-neutral-900 text-neutral-300 hover:border-neutral-500 hover:text-white'}`}>
+                    <span className={`relative inline-flex items-center overflow-hidden rounded-md border px-[11px] py-[5px] text-[13px] font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${filter.isActive ? 'border-red-500 bg-red-950 text-red-100 shadow-[0_0_16px_rgba(239,68,68,0.4)]' : 'border-neutral-700 bg-neutral-900 text-neutral-300 hover:border-neutral-500 hover:text-white'}`}>
                         <span
                           aria-hidden="true"
                           className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
@@ -393,6 +408,30 @@ export default function MatchesListView({
 
             {matches.length > 0 && showHistorySection ? (
               <div className="overflow-visible rounded-xl border border-neutral-800">
+                {yearStats && (
+                  <div className="flex gap-2 border-b border-neutral-800 bg-neutral-950 px-[18px] py-[9px]">
+                    {(
+                      [
+                        { key: 'coaches', label: 'Trenerzy' },
+                        { key: 'appearances', label: 'Występy' },
+                        { key: 'goals', label: 'Gole' },
+                      ] as const
+                    ).map(({ key, label }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => togglePanel(key)}
+                        className={`relative inline-flex items-center overflow-hidden rounded-md border px-[10px] py-[5px] text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${activePanel === key ? 'border-neutral-500 bg-neutral-700 text-white' : 'border-neutral-700 bg-neutral-900 text-neutral-400 hover:border-neutral-500 hover:text-neutral-200'}`}
+                      >
+                        <span
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
+                        />
+                        <span className="relative z-10">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="divide-y divide-neutral-800">
                   {years.length === 0 && (
                     <div className="px-4 py-5 text-sm text-neutral-500">Brak meczów poza zaplanowanymi na tej stronie.</div>
@@ -401,10 +440,19 @@ export default function MatchesListView({
                     <details key={year} className="group bg-neutral-950">
                       <summary className="relative z-20 grid cursor-pointer list-none grid-cols-[auto_1fr_auto] items-center gap-[14px] bg-neutral-900 px-[18px] py-[9px] marker:content-none pointer-events-auto">
                         <GlossySummaryBadge>{year}</GlossySummaryBadge>
-                        <span className="flex items-center justify-center">
-                          <GlossyYearStatsBadge stats={getYearPolandResultStats(matchesByYear[year])} />
+                        <span className="min-w-0 truncate text-center text-[13px] font-black text-neutral-300">
+                          {activePanel === 'coaches' && yearStats?.coaches[year]?.map((c, i) => (
+                            <span key={c.personId}>{i > 0 ? ', ' : ''}{c.name} ({c.matchCount})</span>
+                          ))}
+                          {activePanel === 'appearances' && yearStats?.topAppearances[year]?.map((p, i) => (
+                            <span key={p.personId}>{i > 0 ? ', ' : ''}{p.name} ({p.matchCount})</span>
+                          ))}
+                          {activePanel === 'goals' && yearStats?.topScorers[year]?.map((p, i) => (
+                            <span key={p.personId}>{i > 0 ? ', ' : ''}{p.name} ({p.goalCount})</span>
+                          ))}
                         </span>
                         <span className="inline-flex items-center justify-end gap-3">
+                          <GlossyYearStatsBadge stats={getYearPolandResultStats(matchesByYear[year])} />
                           <GlossyDisclosureCircle rotateClassName="group-open:rotate-180" />
                         </span>
                       </summary>

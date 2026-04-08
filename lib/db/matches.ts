@@ -197,6 +197,15 @@ export type AdminMatchYearBounds = {
   maxYear: number
 }
 
+export type YearCoachEntry = { personId: string; name: string; matchCount: number }
+export type YearAppearanceEntry = { personId: string; name: string; matchCount: number }
+export type YearGoalEntry = { personId: string; name: string; goalCount: number }
+export type MatchYearStatsData = {
+  coaches: Record<string, YearCoachEntry[]>
+  topAppearances: Record<string, YearAppearanceEntry[]>
+  topScorers: Record<string, YearGoalEntry[]>
+}
+
 type MatchParticipantRow = {
   id: string
   team_id: string | null
@@ -1201,4 +1210,126 @@ export async function getLatestPlayerPositionByPersonIds(
   return Object.fromEntries(
     [...bestByPerson.entries()].map(([personId, value]) => [personId, value.playerPosition])
   )
+}
+
+export async function getMatchesYearStats(
+  matchesInput: { id: string; match_date: string }[]
+): Promise<MatchYearStatsData> {
+  const empty: MatchYearStatsData = { coaches: {}, topAppearances: {}, topScorers: {} }
+  if (!matchesInput.length) return empty
+
+  const supabase = createServiceRoleClient()
+  const matchIds = matchesInput.map((m) => m.id)
+  const yearByMatchId = new Map(matchesInput.map((m) => [m.id, m.match_date.slice(0, 4)]))
+
+  // 1. Find Poland's team ID via country name
+  const { data: polandCountry } = await supabase
+    .from('tbl_Countries')
+    .select('id')
+    .ilike('name', 'Polska')
+    .maybeSingle()
+
+  if (!polandCountry) return empty
+
+  const { data: polandTeamRow } = await supabase
+    .from('tbl_Teams')
+    .select('id')
+    .eq('country_id', polandCountry.id)
+    .maybeSingle()
+
+  if (!polandTeamRow) return empty
+
+  const polandTeamId = (polandTeamRow as { id: string }).id
+
+  // 2. Get all Poland participants for these matches
+  const { data: participants, error: partError } = await supabase
+    .from('tbl_Match_Participants')
+    .select('match_id, person_id, role')
+    .in('match_id', matchIds)
+    .eq('team_id', polandTeamId)
+
+  if (partError || !participants?.length) return empty
+
+  // 3. Get person names
+  const personIds = [...new Set((participants as Array<{ person_id: string }>).map((p) => p.person_id))]
+  const { data: people } = await supabase
+    .from('tbl_People')
+    .select('id, first_name, last_name, nickname')
+    .in('id', personIds)
+
+  const personNameMap = new Map<string, string>()
+  for (const person of (people ?? []) as Array<{ id: string; first_name: string | null; last_name: string | null; nickname: string | null }>) {
+    const first = person.first_name?.trim() ?? ''
+    const last = person.last_name?.trim() ?? ''
+    const nickname = person.nickname?.trim() ?? ''
+    personNameMap.set(person.id, `${first} ${last}`.trim() || nickname || '—')
+  }
+
+  // 4. Aggregate coaches and appearances per year
+  const coachYearMap = new Map<string, Map<string, number>>()
+  const appearanceYearMap = new Map<string, Map<string, number>>()
+  const polandPlayersByMatch = new Map<string, Set<string>>()
+
+  for (const p of participants as Array<{ match_id: string; person_id: string; role: string }>) {
+    const year = yearByMatchId.get(p.match_id)
+    if (!year) continue
+
+    if (p.role === 'COACH') {
+      if (!coachYearMap.has(year)) coachYearMap.set(year, new Map())
+      const m = coachYearMap.get(year)!
+      m.set(p.person_id, (m.get(p.person_id) ?? 0) + 1)
+    } else if (p.role === 'PLAYER') {
+      if (!appearanceYearMap.has(year)) appearanceYearMap.set(year, new Map())
+      const m = appearanceYearMap.get(year)!
+      m.set(p.person_id, (m.get(p.person_id) ?? 0) + 1)
+
+      if (!polandPlayersByMatch.has(p.match_id)) polandPlayersByMatch.set(p.match_id, new Set())
+      polandPlayersByMatch.get(p.match_id)!.add(p.person_id)
+    }
+  }
+
+  // 5. Get goal events for these matches
+  const { data: goalEvents } = await supabase
+    .from('tbl_Match_Events')
+    .select('match_id, primary_person_id, event_type')
+    .in('match_id', matchIds)
+    .in('event_type', ['GOAL', 'PENALTY_GOAL'])
+    .not('primary_person_id', 'is', null)
+
+  const goalYearMap = new Map<string, Map<string, number>>()
+
+  for (const event of (goalEvents ?? []) as Array<{ match_id: string; primary_person_id: string; event_type: string }>) {
+    const year = yearByMatchId.get(event.match_id)
+    if (!year) continue
+    if (!polandPlayersByMatch.get(event.match_id)?.has(event.primary_person_id)) continue
+    if (!goalYearMap.has(year)) goalYearMap.set(year, new Map())
+    const m = goalYearMap.get(year)!
+    m.set(event.primary_person_id, (m.get(event.primary_person_id) ?? 0) + 1)
+  }
+
+  // 6. Convert to sorted result arrays
+  const coaches: Record<string, YearCoachEntry[]> = {}
+  for (const [year, countMap] of coachYearMap) {
+    coaches[year] = [...countMap.entries()]
+      .map(([personId, matchCount]) => ({ personId, name: personNameMap.get(personId) ?? '—', matchCount }))
+      .sort((a, b) => b.matchCount - a.matchCount || a.name.localeCompare(b.name, 'pl'))
+  }
+
+  const topAppearances: Record<string, YearAppearanceEntry[]> = {}
+  for (const [year, countMap] of appearanceYearMap) {
+    topAppearances[year] = [...countMap.entries()]
+      .map(([personId, matchCount]) => ({ personId, name: personNameMap.get(personId) ?? '—', matchCount }))
+      .sort((a, b) => b.matchCount - a.matchCount || a.name.localeCompare(b.name, 'pl'))
+      .slice(0, 2)
+  }
+
+  const topScorers: Record<string, YearGoalEntry[]> = {}
+  for (const [year, countMap] of goalYearMap) {
+    topScorers[year] = [...countMap.entries()]
+      .map(([personId, goalCount]) => ({ personId, name: personNameMap.get(personId) ?? '—', goalCount }))
+      .sort((a, b) => b.goalCount - a.goalCount || a.name.localeCompare(b.name, 'pl'))
+      .slice(0, 3)
+  }
+
+  return { coaches, topAppearances, topScorers }
 }

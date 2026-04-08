@@ -50,6 +50,7 @@ export default function MatchCreateModal({
   const [homeTeamId, setHomeTeamId] = useState('')
   const [awayTeamId, setAwayTeamId] = useState('')
   const [pendingStadiumCityId, setPendingStadiumCityId] = useState('')
+  const [matchStatus, setMatchStatus] = useState('FINISHED')
 
   const handleCityOptionCreated = (option: { id: string; label?: string }) => {
     setCityOptions((prev) => {
@@ -124,6 +125,45 @@ export default function MatchCreateModal({
                 type="time"
                 className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
               />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="match_status" className="text-sm font-medium text-neutral-300">
+                Status meczu <span className="text-red-400">*</span>
+              </label>
+              <select
+                id="match_status"
+                name="match_status"
+                value={matchStatus}
+                onChange={(e) => setMatchStatus(e.target.value)}
+                className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+              >
+                <option value="FINISHED">Zakończony</option>
+                <option value="SCHEDULED">Zaplanowany</option>
+                <option value="ABANDONED">Przerwany</option>
+                <option value="CANCELLED">Anulowany</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="result_type" className="text-sm font-medium text-neutral-300">
+                Sposób zakończenia
+              </label>
+              <select
+                id="result_type"
+                name="result_type"
+                defaultValue="REGULAR_TIME"
+                disabled={matchStatus !== 'FINISHED'}
+                className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 disabled:opacity-40"
+              >
+                <option value="">— brak —</option>
+                <option value="REGULAR_TIME">Czas regulaminowy</option>
+                <option value="EXTRA_TIME">Dogrywka</option>
+                <option value="EXTRA_TIME_AND_PENALTIES">Dogrywka + karne</option>
+                <option value="PENALTIES">Rzuty karne</option>
+                <option value="GOLDEN_GOAL">Złoty gol</option>
+                <option value="WALKOVER">Walkower</option>
+              </select>
             </div>
 
             <div className="flex flex-col gap-1.5">

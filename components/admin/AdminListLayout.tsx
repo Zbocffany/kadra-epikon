@@ -3,8 +3,8 @@
 interface AdminListLayoutProps {
   breadcrumb: string
   title: string
-  recordCount: number
-  recordLabel: string // singular (e.g., "kraj") or plural (e.g., "krajów")
+  recordCount?: number
+  recordLabel?: string // singular (e.g., "kraj") or plural (e.g., "krajów")
   fetchError?: string | null
   headerActions?: ReactNode
   children: ReactNode // Slot for add form + table (laid out vertically)
@@ -53,9 +53,6 @@ export default function AdminListLayout({
           </div>
           <div className="flex items-center gap-2">
             {headerActions}
-            <span className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1 text-xs text-neutral-400">
-              {recordCount} {recordLabel}
-            </span>
           </div>
         </div>
 

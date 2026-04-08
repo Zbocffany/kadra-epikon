@@ -48,9 +48,8 @@ export default function CountriesSearchTable({ countries }: { countries: AdminCo
     <AdminSearchableTable
       data={countries}
       columns={columns}
-      searchLabel="Wyszukaj kraj"
       searchPlaceholder="Wpisz nazwę kraju, kod FIFA albo federację..."
-      priorityHint="Najpierw pokazują się kraje, których nazwa zaczyna się od wpisanej frazy, a potem pozostałe dopasowania."
+      showHeader={false}
       emptyMessage="Brak krajów."
       emptySearchMessage="Brak krajów pasujących do wyszukiwanej frazy."
       getPrimaryText={(country) => country.name}

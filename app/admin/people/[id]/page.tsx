@@ -177,6 +177,7 @@ export default async function AdminPersonDetailsPage({
               createCountryAction={createCountryInline}
               showBirthDate={false}
               defaultBirthDate={person.birth_date}
+              defaultDeathDate={person.death_date}
               defaultCityId={person.birth_city_id}
               defaultCountryId={person.birth_country_id}
               syncScope={syncScope}

@@ -13,9 +13,9 @@ type FilterConfig<T> = {
 type AdminSearchableTableProps<T extends Record<string, unknown>> = {
   data: T[]
   columns: AdminTableColumn<T>[]
-  searchLabel: string
+  searchLabel?: string
   searchPlaceholder: string
-  priorityHint: string
+  priorityHint?: string
   emptyMessage: string
   emptySearchMessage: string
   getPrimaryText: (row: T) => string | null | undefined
@@ -27,6 +27,7 @@ type AdminSearchableTableProps<T extends Record<string, unknown>> = {
   filterWidthClass?: string
   secondaryFilterWidthClass?: string
   tertiaryFilterWidthClass?: string
+  showHeader?: boolean
 }
 
 function normalizeFilterValue(value: string | string[] | null | undefined): string[] {
@@ -86,6 +87,7 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
   filterWidthClass = 'md:w-60',
   secondaryFilterWidthClass = 'md:w-60',
   tertiaryFilterWidthClass = 'md:w-60',
+  showHeader = true,
 }: AdminSearchableTableProps<T>) {
   const [query, setQuery] = useState('')
   const [selectedFilter, setSelectedFilter] = useState('')
@@ -174,9 +176,11 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
         <div className="flex flex-col gap-4 md:flex-row md:items-end">
           <div className="flex-1">
             <div className="flex flex-col gap-1.5">
-              <label htmlFor="admin-search" className="text-sm font-medium text-neutral-300">
-                {searchLabel}
-              </label>
+              {searchLabel && (
+                <label htmlFor="admin-search" className="text-sm font-medium text-neutral-300">
+                  {searchLabel}
+                </label>
+              )}
               <input
                 id="admin-search"
                 type="text"
@@ -191,9 +195,11 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
           {filterConfig && (
             <div className={filterWidthClass}>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="admin-filter" className="text-sm font-medium text-neutral-300">
-                  {filterConfig.label}
-                </label>
+                {filterConfig.label && (
+                  <label htmlFor="admin-filter" className="text-sm font-medium text-neutral-300">
+                    {filterConfig.label}
+                  </label>
+                )}
                 <select
                   id="admin-filter"
                   value={selectedFilter}
@@ -214,9 +220,11 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
           {secondaryFilterConfig && (
             <div className={secondaryFilterWidthClass}>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor="admin-secondary-filter" className="text-sm font-medium text-neutral-300">
-                  {secondaryFilterConfig.label}
-                </label>
+                {secondaryFilterConfig.label && (
+                  <label htmlFor="admin-secondary-filter" className="text-sm font-medium text-neutral-300">
+                    {secondaryFilterConfig.label}
+                  </label>
+                )}
                 <select
                   id="admin-secondary-filter"
                   value={selectedSecondaryFilter}
@@ -258,13 +266,14 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
           )}
         </div>
 
-        <p className="mt-3 text-xs text-neutral-500">{priorityHint}</p>
+        {priorityHint && <p className="mt-3 text-xs text-neutral-500">{priorityHint}</p>}
       </div>
 
       <AdminTable
         data={filteredData}
         columns={columns}
         emptyMessage={query.trim() ? emptySearchMessage : emptyMessage}
+        showHeader={showHeader}
       />
 
       {summaryText && filteredData.length > 0 && (

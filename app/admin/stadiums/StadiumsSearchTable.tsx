@@ -44,9 +44,8 @@ export default function StadiumsSearchTable({ stadiums }: { stadiums: AdminStadi
     <AdminSearchableTable
       data={stadiums}
       columns={columns}
-      searchLabel="Wyszukaj stadion"
       searchPlaceholder="Wpisz nazwę stadionu, miasto albo kraj..."
-      priorityHint="Najpierw pokazują się stadiony, których nazwa zaczyna się od wpisanej frazy, a potem pozostałe dopasowania."
+      showHeader={false}
       emptyMessage="Brak stadionów w bazie danych."
       emptySearchMessage="Brak stadionów pasujących do wyszukiwanej frazy."
       getPrimaryText={(stadium) => stadium.name}

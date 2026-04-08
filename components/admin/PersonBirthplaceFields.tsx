@@ -17,6 +17,7 @@ type PersonBirthplaceFieldsProps = {
   createCountryAction: (prevState: InlineCreateState, formData: FormData) => Promise<InlineCreateState>
   showBirthDate?: boolean
   defaultBirthDate?: string | null
+  defaultDeathDate?: string | null
   defaultCityId?: string | null
   defaultCountryId?: string | null
   syncScope?: string
@@ -29,6 +30,7 @@ export default function PersonBirthplaceFields({
   createCountryAction,
   showBirthDate = true,
   defaultBirthDate,
+  defaultDeathDate,
   defaultCityId,
   defaultCountryId,
   syncScope,
@@ -96,6 +98,21 @@ export default function PersonBirthplaceFields({
             name="birth_date"
             type="date"
             defaultValue={defaultBirthDate ?? ''}
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+          />
+        </div>
+      )}
+
+      {showBirthDate && (
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="death_date" className="text-sm font-medium text-neutral-300">
+            Data śmierci
+          </label>
+          <input
+            id="death_date"
+            name="death_date"
+            type="date"
+            defaultValue={defaultDeathDate ?? ''}
             className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
           />
         </div>

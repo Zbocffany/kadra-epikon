@@ -1,5 +1,6 @@
 ﻿'use server'
 
+import { redirect } from 'next/navigation'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import type { InlineCreateState } from '@/lib/types/admin'
 import { requireAdminAccess } from '@/lib/auth/admin'
@@ -8,6 +9,7 @@ import {
   getTrimmedString,
   inlineError,
   inlineSuccess,
+  inlineWarning,
   redirectWithAdded,
   redirectWithError,
   redirectWithSaved,
@@ -70,6 +72,7 @@ export async function createCity(formData: FormData): Promise<void> {
   const cityName = getTrimmedString(formData, 'city_name')
   const countryId = getTrimmedString(formData, 'country_id')
   const voivodeship = getTrimmedNullable(formData, 'voivodeship')
+  const force = formData.get('force') === '1'
 
   if (!cityName) {
     redirectWithError('/admin/cities', 'Nazwa miasta jest wymagana.')
@@ -87,6 +90,17 @@ export async function createCity(formData: FormData): Promise<void> {
   }
 
   const supabase = createServiceRoleClient()
+
+  if (!force) {
+    const { data: existing } = await supabase
+      .from('tbl_Cities')
+      .select('id')
+      .ilike('city_name', cityName)
+    if (existing?.length) {
+      redirect(`/admin/cities?create=1&warn_dup=1&pc_name=${encodeURIComponent(cityName)}`)
+    }
+  }
+
   const cityId = crypto.randomUUID()
 
   const { error: cityError } = await supabase.from('tbl_Cities').insert({
@@ -125,6 +139,7 @@ export async function createCityInline(
   const cityName = getTrimmedString(formData, 'city_name')
   const countryId = getTrimmedString(formData, 'country_id')
   const voivodeship = getTrimmedNullable(formData, 'voivodeship')
+  const force = getTrimmedString(formData, 'force') === '1'
 
   if (!cityName) {
     return inlineError(prevState, 'Nazwa miasta jest wymagana.')
@@ -147,6 +162,17 @@ export async function createCityInline(
   }
 
   const supabase = createServiceRoleClient()
+
+  if (!force) {
+    const { data: existing } = await supabase
+      .from('tbl_Cities')
+      .select('id')
+      .ilike('city_name', cityName)
+    if (existing?.length) {
+      return inlineWarning(prevState, `Miasto "${cityName}" już istnieje w bazie. Czy na pewno chcesz dodać kolejny wpis?`)
+    }
+  }
+
   const cityId = crypto.randomUUID()
 
   const { error: cityError } = await supabase.from('tbl_Cities').insert({

@@ -111,6 +111,7 @@ export async function createPerson(formData: FormData): Promise<void> {
   const lastName = getTrimmedNullable(formData, 'last_name')
   const nickname = getTrimmedNullable(formData, 'nickname')
   const birthDate = getTrimmedNullable(formData, 'birth_date')
+  const deathDate = getTrimmedNullable(formData, 'death_date')
   const birthCityId = getTrimmedNullable(formData, 'birth_city_id')
   const birthCountryRaw = getTrimmedNullable(formData, 'birth_country_id')
   const representedCountryIds = formData
@@ -141,6 +142,7 @@ export async function createPerson(formData: FormData): Promise<void> {
     last_name: lastName,
     nickname,
     birth_date: birthDate,
+    death_date: deathDate,
     birth_city_id: birthCityId,
     birth_country_id: birthCountryId,
     is_active: isActive,
@@ -168,6 +170,7 @@ export async function updatePerson(formData: FormData): Promise<void> {
   const lastName = getTrimmedNullable(formData, 'last_name')
   const nickname = getTrimmedNullable(formData, 'nickname')
   const birthDate = getTrimmedNullable(formData, 'birth_date')
+  const deathDate = getTrimmedNullable(formData, 'death_date')
   const birthCityId = getTrimmedNullable(formData, 'birth_city_id')
   const birthCountryRaw = getTrimmedNullable(formData, 'birth_country_id')
   const representedCountryIds = formData
@@ -201,6 +204,7 @@ export async function updatePerson(formData: FormData): Promise<void> {
       last_name: lastName,
       nickname,
       birth_date: birthDate,
+      death_date: deathDate,
       birth_city_id: birthCityId,
       birth_country_id: birthCountryId,
       is_active: isActive,

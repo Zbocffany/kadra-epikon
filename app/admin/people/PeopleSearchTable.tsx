@@ -158,9 +158,8 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
     <AdminSearchableTable
       data={people}
       columns={columns}
-      searchLabel="Wyszukaj osobę"
       searchPlaceholder="Wpisz imię, nazwisko albo pseudonim..."
-      priorityHint="Najpierw pokazują się osoby, których nazwa zaczyna się od wpisanej frazy, a potem pozostałe dopasowania."
+      showHeader={false}
       emptyMessage="Brak osób w bazie danych."
       emptySearchMessage="Brak osób pasujących do wyszukiwanej frazy."
       getPrimaryText={(person) => getPersonDisplayName(person)}

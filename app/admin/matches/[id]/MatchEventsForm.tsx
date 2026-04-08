@@ -279,19 +279,15 @@ export default function MatchEventsForm({
   people,
   teams,
   matchId,
-  clearDraft,
 }: {
   events: AdminMatchEvent[]
   people: MatchEventPersonOption[]
   teams: AdminTeamOption[]
   matchId: string
-  clearDraft: boolean
 }) {
   const [rows, setRows] = useState<EventRow[]>(() => events.map(mapEventToRow))
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null)
   const [isTouched, setIsTouched] = useState(false)
-  const [isDraftHydrated, setIsDraftHydrated] = useState(false)
-  const storageKey = `match-events-draft:${matchId}`
 
   const peopleOptions = useMemo(
     () => [...people].sort((a, b) => a.label.localeCompare(b.label, 'pl')),
@@ -309,83 +305,28 @@ export default function MatchEventsForm({
     return peopleOptions.filter((person) => person.teamIds.includes(teamId))
   }
 
-  function persistDraft(nextRows: EventRow[]) {
-    if (typeof window === 'undefined' || clearDraft) return
-    window.sessionStorage.setItem(storageKey, JSON.stringify(nextRows))
-  }
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-
-    if (clearDraft) {
-      window.sessionStorage.removeItem(storageKey)
-      setIsDraftHydrated(true)
-      return
-    }
-
-    const raw = window.sessionStorage.getItem(storageKey)
-    if (!raw) {
-      setIsDraftHydrated(true)
-      return
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as EventRow[]
-      if (!Array.isArray(parsed)) {
-        setIsDraftHydrated(true)
-        return
-      }
-
-      setRows(parsed)
-      setIsTouched(true)
-    } catch {
-      window.sessionStorage.removeItem(storageKey)
-    } finally {
-      setIsDraftHydrated(true)
-    }
-  }, [clearDraft, storageKey])
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || clearDraft || !isDraftHydrated || !isTouched) return
-    window.sessionStorage.setItem(storageKey, JSON.stringify(rows))
-  }, [rows, clearDraft, isDraftHydrated, isTouched, storageKey])
-
   function updateRow(index: number, patch: Partial<EventRow>) {
     setIsTouched(true)
-    setRows((prev) => {
-      const nextRows = prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row))
-      persistDraft(nextRows)
-      return nextRows
-    })
+    setRows((prev) => prev.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)))
   }
 
   function addRow(group: EventGroup) {
     setIsTouched(true)
-    setRows((prev) => {
-      const nextRows = [...prev, buildEmptyRow(group)]
-      persistDraft(nextRows)
-      return nextRows
-    })
+    setRows((prev) => [...prev, buildEmptyRow(group)])
   }
 
   function removeRow(index: number) {
     setIsTouched(true)
-    setRows((prev) => {
-      const nextRows = prev.filter((_, rowIndex) => rowIndex !== index)
-      persistDraft(nextRows)
-      return nextRows
-    })
+    setRows((prev) => prev.filter((_, rowIndex) => rowIndex !== index))
   }
 
   function moveRow(fromIndex: number, toIndex: number) {
     if (fromIndex === toIndex) return
     setIsTouched(true)
-
     setRows((prev) => {
       const next = [...prev]
       const [moved] = next.splice(fromIndex, 1)
       next.splice(toIndex, 0, moved)
-      persistDraft(next)
       return next
     })
   }

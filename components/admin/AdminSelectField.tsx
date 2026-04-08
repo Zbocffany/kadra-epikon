@@ -94,6 +94,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   const [isOpen, setIsOpen] = useState(false)
   const [highlightedIndex, setHighlightedIndex] = useState(-1)
   const [createError, setCreateError] = useState<string | undefined>()
+  const [createWarning, setCreateWarning] = useState<string | undefined>()
   const [isPending, startTransition] = useTransition()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const inlineFormRef = useRef<HTMLDivElement>(null)
@@ -112,7 +113,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
     return typeof label === 'string' ? label : String(option.label || option.short_name || '—')
   }, [displayKey])
 
-  function handleInlineCreate() {
+  function handleInlineCreate(force = false) {
     if (!createAction || !inlineFormRef.current || isPending) return
     const elems = inlineFormRef.current.querySelectorAll<HTMLInputElement | HTMLSelectElement>(
       'input[name], select[name]'
@@ -125,7 +126,9 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
     }
     const formData = new FormData()
     elems.forEach((el) => formData.append(el.name, el.value))
+    if (force) formData.append('force', '1')
     setCreateError(undefined)
+    setCreateWarning(undefined)
     startTransition(async () => {
       const result = await createAction({ ok: false, version: 0 }, formData)
       if (result.ok && result.id && result.label) {
@@ -145,6 +148,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
         setDialogOpen(false)
       } else {
         setCreateError(result.error)
+        if (result.warning) setCreateWarning(result.warning)
       }
     })
   }
@@ -402,24 +406,41 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
               </div>
             )}
 
+            {createWarning && (
+              <div className="mb-3 rounded-md border border-amber-700 bg-amber-950/50 px-3 py-2 text-xs text-amber-300">
+                {createWarning}
+              </div>
+            )}
+
             <div ref={inlineFormRef}>{inlineForm}</div>
 
             <div className="mt-4 flex items-center justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setDialogOpen(false)}
+                onClick={() => { setDialogOpen(false); setCreateWarning(undefined) }}
                 className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
               >
                 Zamknij
               </button>
-              <button
-                type="button"
-                onClick={handleInlineCreate}
-                disabled={isPending}
-                className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white disabled:opacity-50"
-              >
-                {isPending ? 'Zapisywanie...' : 'Dodaj i wybierz'}
-              </button>
+              {createWarning ? (
+                <button
+                  type="button"
+                  onClick={() => handleInlineCreate(true)}
+                  disabled={isPending}
+                  className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-50"
+                >
+                  {isPending ? 'Zapisywanie...' : 'Dodaj mimo to'}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleInlineCreate()}
+                  disabled={isPending}
+                  className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white disabled:opacity-50"
+                >
+                  {isPending ? 'Zapisywanie...' : 'Dodaj i wybierz'}
+                </button>
+              )}
             </div>
           </div>
         </div>

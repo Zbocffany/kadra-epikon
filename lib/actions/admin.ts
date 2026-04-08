@@ -46,6 +46,14 @@ export function inlineError(prevState: InlineCreateState, message: string): Inli
   }
 }
 
+export function inlineWarning(prevState: InlineCreateState, message: string): InlineCreateState {
+  return {
+    ok: false,
+    warning: message,
+    version: prevState.version + 1,
+  }
+}
+
 export function inlineSuccess(
   prevState: InlineCreateState,
   id: string,
