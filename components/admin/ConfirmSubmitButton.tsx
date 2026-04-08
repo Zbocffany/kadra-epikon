@@ -59,7 +59,10 @@ export default function ConfirmSubmitButton({
 
   const handleConfirm = () => {
     setIsOpen(false)
-    submitButtonRef.current?.click()
+    const btn = submitButtonRef.current
+    if (!btn) return
+    btn.disabled = false
+    btn.click()
   }
 
   return (
@@ -76,6 +79,7 @@ export default function ConfirmSubmitButton({
       <button
         ref={submitButtonRef}
         type="submit"
+        disabled
         form={form}
         formAction={formAction}
         formEncType={formEncType}

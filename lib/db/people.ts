@@ -96,14 +96,17 @@ async function getRolesByPersonId(
     return new Map()
   }
 
-  const { data: participants, error: participantsError } = await supabase
-    .from('tbl_Match_Participants')
-    .select('person_id, role')
-    .in('person_id', personIds)
-
-  if (participantsError) {
-    throw new Error(`tbl_Match_Participants: ${participantsError.message}`)
+  const CHUNK_SIZE = 80
+  const allParticipants: { person_id: string; role: string }[] = []
+  for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Match_Participants')
+      .select('person_id, role')
+      .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
+    allParticipants.push(...(data ?? []))
   }
+  const participants = allParticipants
 
   const map = new Map<string, AdminPersonRole[]>()
 
@@ -130,16 +133,19 @@ async function getExplicitRepresentedCountryDataByPersonId(
     return new Map()
   }
 
-  const { data: links, error: linksError } = await supabase
-    .from('tbl_Person_Countries')
-    .select('person_id, country_id')
-    .in('person_id', personIds)
-
-  if (linksError) {
-    throw new Error(`tbl_Person_Countries: ${linksError.message}`)
+  const CHUNK_SIZE = 80
+  const allLinks: { person_id: string; country_id: string }[] = []
+  for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Person_Countries')
+      .select('person_id, country_id')
+      .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Person_Countries: ${error.message}`)
+    allLinks.push(...(data ?? []))
   }
+  const links = allLinks
 
-  const countryIds = [...new Set((links ?? []).map((row) => row.country_id).filter(Boolean))]
+  const countryIds = [...new Set(links.map((row) => row.country_id).filter(Boolean))]
   if (!countryIds.length) {
     return new Map()
   }
@@ -179,14 +185,17 @@ async function getExplicitRepresentedCountryIdsByPersonId(
     return new Map()
   }
 
-  const { data: links, error: linksError } = await supabase
-    .from('tbl_Person_Countries')
-    .select('person_id, country_id')
-    .in('person_id', personIds)
-
-  if (linksError) {
-    throw new Error(`tbl_Person_Countries: ${linksError.message}`)
+  const CHUNK_SIZE = 80
+  const allLinks: { person_id: string; country_id: string }[] = []
+  for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Person_Countries')
+      .select('person_id, country_id')
+      .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Person_Countries: ${error.message}`)
+    allLinks.push(...(data ?? []))
   }
+  const links = allLinks
 
   const map = new Map<string, string[]>()
 

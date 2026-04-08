@@ -35,7 +35,7 @@ export default function RootLayout({
   })();`;
 
   return (
-    <html lang="en" className="theme-dark">
+    <html lang="en" className="theme-dark" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>

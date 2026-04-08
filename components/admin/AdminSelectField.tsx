@@ -271,8 +271,8 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
               if (e.key === 'Enter') {
                 if (filteredOptions.length === 0) {
                   // No matches: Enter opens create dialog if there's a search query
+                  e.preventDefault()
                   if (canCreateInline && query.trim() !== '') {
-                    e.preventDefault()
                     setIsOpen(false)
                     setDialogOpen(true)
                   }

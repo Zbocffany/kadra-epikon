@@ -43,7 +43,7 @@ function getCompetitionDisplay(name: string): { label: string; fullName: string;
     return { label: 'NO', fullName: normalized, isCompact: false }
   }
   if (normalized === 'Towarzyski') {
-    return { label: normalized, fullName: normalized, isCompact: true }
+    return { label: normalized, fullName: normalized, isCompact: false }
   }
 
   return { label: normalized, fullName: normalized, isCompact: false }

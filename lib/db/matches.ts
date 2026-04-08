@@ -1063,38 +1063,44 @@ export async function getLatestPlayerClubTeamByPersonIds(
     return {}
   }
 
-  let participantsQuery = supabase
-    .from('tbl_Match_Participants')
-    .select('person_id, club_team_id, match_id')
-    .eq('role', 'PLAYER')
-    .in('person_id', personIds)
-
-  if (options?.excludeMatchId) {
-    participantsQuery = participantsQuery.neq('match_id', options.excludeMatchId)
+  const CHUNK_SIZE = 80
+  const chunks: string[][] = []
+  for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
+    chunks.push(personIds.slice(i, i + CHUNK_SIZE))
   }
 
-  const { data: participantRows, error: participantsError } = await participantsQuery
-
-  if (participantsError) {
-    throw new Error(`tbl_Match_Participants: ${participantsError.message}`)
+  const allRows: PlayerClubSuggestionRow[] = []
+  for (const chunk of chunks) {
+    let q = supabase
+      .from('tbl_Match_Participants')
+      .select('person_id, club_team_id, match_id')
+      .eq('role', 'PLAYER')
+      .in('person_id', chunk)
+    if (options?.excludeMatchId) {
+      q = q.neq('match_id', options.excludeMatchId)
+    }
+    const { data, error } = await q
+    if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
+    allRows.push(...((data ?? []) as PlayerClubSuggestionRow[]))
   }
 
-  const rows = (participantRows ?? []) as PlayerClubSuggestionRow[]
+  const rows = allRows
   if (!rows.length) {
     return {}
   }
 
   const matchIds = [...new Set(rows.map((row) => row.match_id))]
-  const { data: matches, error: matchesError } = await supabase
-    .from('tbl_Matches')
-    .select('id, match_date')
-    .in('id', matchIds)
-
-  if (matchesError) {
-    throw new Error(`tbl_Matches: ${matchesError.message}`)
+  const allMatches: MatchDateRow[] = []
+  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Matches')
+      .select('id, match_date')
+      .in('id', matchIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Matches: ${error.message}`)
+    allMatches.push(...((data ?? []) as MatchDateRow[]))
   }
 
-  const matchDateMap = new Map((matches ?? []).map((match: MatchDateRow) => [match.id, match.match_date]))
+  const matchDateMap = new Map(allMatches.map((match: MatchDateRow) => [match.id, match.match_date]))
 
   const calculateDateDistance = (dateStr: string, targetDate: string | undefined): number => {
     if (!targetDate) return 0
@@ -1147,38 +1153,39 @@ export async function getLatestPlayerPositionByPersonIds(
     return {}
   }
 
-  let participantsQuery = supabase
-    .from('tbl_Match_Participants')
-    .select('person_id, player_position, match_id')
-    .eq('role', 'PLAYER')
-    .in('person_id', personIds)
-
-  if (options?.excludeMatchId) {
-    participantsQuery = participantsQuery.neq('match_id', options.excludeMatchId)
+  const CHUNK_SIZE = 80
+  const allRows: PlayerClubSuggestionRow[] = []
+  for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
+    let q = supabase
+      .from('tbl_Match_Participants')
+      .select('person_id, player_position, match_id')
+      .eq('role', 'PLAYER')
+      .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
+    if (options?.excludeMatchId) {
+      q = q.neq('match_id', options.excludeMatchId)
+    }
+    const { data, error } = await q
+    if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
+    allRows.push(...((data ?? []) as PlayerClubSuggestionRow[]))
   }
 
-  const { data: participantRows, error: participantsError } = await participantsQuery
-
-  if (participantsError) {
-    throw new Error(`tbl_Match_Participants: ${participantsError.message}`)
-  }
-
-  const rows = (participantRows ?? []) as PlayerClubSuggestionRow[]
+  const rows = allRows
   if (!rows.length) {
     return {}
   }
 
   const matchIds = [...new Set(rows.map((row) => row.match_id))]
-  const { data: matches, error: matchesError } = await supabase
-    .from('tbl_Matches')
-    .select('id, match_date')
-    .in('id', matchIds)
-
-  if (matchesError) {
-    throw new Error(`tbl_Matches: ${matchesError.message}`)
+  const allMatches: MatchDateRow[] = []
+  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Matches')
+      .select('id, match_date')
+      .in('id', matchIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Matches: ${error.message}`)
+    allMatches.push(...((data ?? []) as MatchDateRow[]))
   }
 
-  const matchDateMap = new Map((matches ?? []).map((match: MatchDateRow) => [match.id, match.match_date]))
+  const matchDateMap = new Map(allMatches.map((match: MatchDateRow) => [match.id, match.match_date]))
 
   const bestByPerson = new Map<string, { playerPosition: PlayerPosition | null; matchDate: string; matchId: string }>()
   for (const row of rows) {
