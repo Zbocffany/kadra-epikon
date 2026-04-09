@@ -187,7 +187,7 @@ export default async function AdminClubDetailsPage({
           </span>
         ) : undefined}
         headerRight={club.country_fifa_code ? (
-          <CountryFlag fifaCode={club.country_fifa_code} countryName={club.country_name ?? undefined} className="h-10 w-[60px]" />
+          <CountryFlag fifaCode={club.country_fifa_code} countryName={club.country_name ?? '—'} className="h-10 w-[60px]" />
         ) : undefined}
         saved={saved}
         error={error}

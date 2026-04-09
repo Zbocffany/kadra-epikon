@@ -21,7 +21,7 @@ export default function ClubsSearchTable({ clubs }: { clubs: AdminClub[] }) {
       label: 'Nazwa',
       render: (club) => (
         <div className="flex items-center gap-2.5">
-          <CountryFlag fifaCode={club.country_fifa_code} countryName={club.country_name ?? undefined} className="h-3.5 w-[21px] shrink-0" />
+          <CountryFlag fifaCode={club.country_fifa_code} countryName={club.country_name ?? '—'} className="h-3.5 w-[21px] shrink-0" />
           <div className="relative inline-flex group/tooltip">
             <Link
               href={`/admin/clubs/${club.id}`}
