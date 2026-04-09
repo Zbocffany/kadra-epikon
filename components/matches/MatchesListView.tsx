@@ -115,6 +115,21 @@ function renderScoreWithFlags(match: AdminMatch) {
     ? `text-white ${getScoreBadgeClass(match)}`
     : 'border-blue-500 text-blue-400'
 
+  const shootout = match.shootout_score
+  let homeShootoutWin = false
+  let awayShootoutWin = false
+  if (shootout) {
+    const m = shootout.match(/(\d+):(\d+)/)
+    if (m) {
+      const h = Number(m[1])
+      const a = Number(m[2])
+      homeShootoutWin = h > a
+      awayShootoutWin = a > h
+    }
+  }
+
+  const starClass = 'absolute -top-2.5 z-10 text-[18px] leading-none text-amber-400 select-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]'
+
   return (
     <span className="inline-flex items-center gap-[0.5cm]">
       <CountryFlag
@@ -123,15 +138,24 @@ function renderScoreWithFlags(match: AdminMatch) {
         glossy
         className="h-[22px] w-[33px] ring-1 ring-neutral-500/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_1px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.7),0_4px_8px_rgba(0,0,0,0.45)]"
       />
-      <span
-        className={`relative inline-flex items-center overflow-hidden rounded-md border bg-black px-2 py-0.5 text-xs font-bold shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${badgeClass}`}
-        style={{ fontSize: '0.95em', fontWeight: 700 }}
-      >
+      <span className="group/score relative">
+        {homeShootoutWin && <span className={`${starClass} -left-3`}>★</span>}
+        {awayShootoutWin && <span className={`${starClass} -right-3`}>★</span>}
         <span
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
-        />
-        <span className="relative z-10">{label}</span>
+          className={`relative inline-flex items-center overflow-hidden rounded-md border bg-black px-2 py-0.5 text-xs font-bold shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${badgeClass}`}
+          style={{ fontSize: '0.95em', fontWeight: 700 }}
+        >
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
+          />
+          <span className="relative z-10">{label}</span>
+        </span>
+        {shootout && (
+          <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 -translate-x-1/2 whitespace-nowrap rounded border border-neutral-600 bg-neutral-900 px-2 py-0.5 text-[11px] font-semibold text-neutral-200 opacity-0 shadow-lg transition-opacity group-hover/score:opacity-100">
+            Karne {shootout}
+          </span>
+        )}
       </span>
       <CountryFlag
         fifaCode={match.away_team_fifa_code}

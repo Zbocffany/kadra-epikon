@@ -28,6 +28,10 @@ type AdminSearchableTableProps<T extends Record<string, unknown>> = {
   secondaryFilterWidthClass?: string
   tertiaryFilterWidthClass?: string
   showHeader?: boolean
+  defaultLimit?: number
+  defaultFilter?: string
+  defaultTertiaryFilter?: string
+  searchIgnoresFilters?: boolean
 }
 
 function normalizeFilterValue(value: string | string[] | null | undefined): string[] {
@@ -88,11 +92,15 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
   secondaryFilterWidthClass = 'md:w-60',
   tertiaryFilterWidthClass = 'md:w-60',
   showHeader = true,
+  defaultLimit,
+  defaultFilter,
+  defaultTertiaryFilter,
+  searchIgnoresFilters,
 }: AdminSearchableTableProps<T>) {
   const [query, setQuery] = useState('')
-  const [selectedFilter, setSelectedFilter] = useState('')
+  const [selectedFilter, setSelectedFilter] = useState(defaultFilter ?? '')
   const [selectedSecondaryFilter, setSelectedSecondaryFilter] = useState('')
-  const [selectedTertiaryFilter, setSelectedTertiaryFilter] = useState('')
+  const [selectedTertiaryFilter, setSelectedTertiaryFilter] = useState(defaultTertiaryFilter ?? '')
 
   const filterOptions = useMemo(() => {
     if (!filterConfig) return []
@@ -118,21 +126,24 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
   const filteredData = useMemo(() => {
     const normalizedQuery = normalizeText(query)
 
-    const baseByPrimaryFilter = filterConfig && selectedFilter
-      ? data.filter((row) => normalizeFilterValue(filterConfig.getValue(row)).includes(selectedFilter))
-      : data
+    // When searchIgnoresFilters is set and a query is active, search all data bypassing filters
+    const baseByAllFilters = searchIgnoresFilters && normalizedQuery ? data : (() => {
+      const baseByPrimaryFilter = filterConfig && selectedFilter
+        ? data.filter((row) => normalizeFilterValue(filterConfig.getValue(row)).includes(selectedFilter))
+        : data
 
-    const base = secondaryFilterConfig && selectedSecondaryFilter
-      ? baseByPrimaryFilter.filter((row) =>
-        normalizeFilterValue(secondaryFilterConfig.getValue(row)).includes(selectedSecondaryFilter)
-      )
-      : baseByPrimaryFilter
+      const base = secondaryFilterConfig && selectedSecondaryFilter
+        ? baseByPrimaryFilter.filter((row) =>
+          normalizeFilterValue(secondaryFilterConfig.getValue(row)).includes(selectedSecondaryFilter)
+        )
+        : baseByPrimaryFilter
 
-    const baseByAllFilters = tertiaryFilterConfig && selectedTertiaryFilter
-      ? base.filter((row) =>
-        normalizeFilterValue(tertiaryFilterConfig.getValue(row)).includes(selectedTertiaryFilter)
-      )
-      : base
+      return tertiaryFilterConfig && selectedTertiaryFilter
+        ? base.filter((row) =>
+          normalizeFilterValue(tertiaryFilterConfig.getValue(row)).includes(selectedTertiaryFilter)
+        )
+        : base
+    })()
 
     if (!normalizedQuery) {
       return baseByAllFilters
@@ -168,7 +179,11 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
     selectedFilter,
     selectedSecondaryFilter,
     selectedTertiaryFilter,
+    searchIgnoresFilters,
   ])
+
+  const isFiltered = query.trim() || selectedFilter || selectedSecondaryFilter || selectedTertiaryFilter
+  const displayedData = defaultLimit && !isFiltered ? filteredData.slice(0, defaultLimit) : filteredData
 
   return (
     <div className="space-y-4">
@@ -270,14 +285,14 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
       </div>
 
       <AdminTable
-        data={filteredData}
+        data={displayedData}
         columns={columns}
         emptyMessage={query.trim() ? emptySearchMessage : emptyMessage}
         showHeader={showHeader}
       />
 
       {summaryText && filteredData.length > 0 && (
-        <p className="text-xs text-neutral-500">{summaryText(filteredData.length, data.length)}</p>
+        <p className="text-xs text-neutral-500">{summaryText(displayedData.length, data.length)}</p>
       )}
     </div>
   )

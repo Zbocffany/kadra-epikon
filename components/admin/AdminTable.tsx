@@ -3,6 +3,7 @@ import { ReactNode } from 'react'
 export interface AdminTableColumn<T extends Record<string, unknown> = Record<string, unknown>> {
   key: string
   label: string
+  headerRender?: () => ReactNode
   render: (row: T, index: number) => ReactNode
   className?: string
 }
@@ -51,14 +52,14 @@ export default function AdminTable<T extends Record<string, unknown>>({
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-neutral-800">
-      <table className="w-full border-collapse text-sm">
+    <div className="overflow-visible rounded-xl border border-neutral-800">
+      <table className="w-full border-collapse text-sm overflow-visible">
         <thead>
           {showHeader && (
           <tr className="border-b border-neutral-800 bg-neutral-900 text-left">
             {columns.map((col) => (
               <th key={col.key} className={`px-4 py-3 font-medium text-neutral-400`}>
-                {col.label}
+                {col.headerRender ? col.headerRender() : col.label}
               </th>
             ))}
           </tr>

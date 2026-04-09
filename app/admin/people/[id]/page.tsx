@@ -76,10 +76,7 @@ export default async function AdminPersonDetailsPage({
   const displayName = getPersonDisplayName(person)
   const isEdit = mode === 'edit'
   const syncScope = `admin-people-edit-${person.id}`
-  const birthAge = getAge(person.birth_date)
-  const birthDateLabel = person.birth_date
-    ? `${formatDate(person.birth_date)}${birthAge !== null ? ` (${birthAge} l.)` : ''}`
-    : '—'
+  const birthDateFormatted = person.birth_date ? formatDate(person.birth_date) : '—'
 
   const visibleFlags: { fifaCode: string | null; countryName: string; key: string }[] = []
   const seenFlagKeys = new Set<string>()
@@ -97,29 +94,76 @@ export default async function AdminPersonDetailsPage({
     <div className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-lg font-semibold text-neutral-100">{displayName}</p>
-          <p className="mt-0.5 text-sm text-neutral-400">{birthDateLabel}</p>
-          <div className="mt-0.5 flex items-center gap-1.5 text-sm text-neutral-400">
-            <span>{person.birth_city_name ?? '—'}</span>
-            <span>(</span>
-            <CountryFlag
-              fifaCode={person.birth_country_fifa_code}
-              countryName={person.birth_country_name ?? '—'}
-              className="h-[13.5px] w-[20px]"
-            />
-            <span>)</span>
-          </div>
+          <p className="text-xl font-semibold text-neutral-100">{displayName}</p>
+          {!isEdit && (
+            <div className="mt-2 flex flex-col items-start gap-2">
+              {person.birth_date && (
+                <span className="inline-flex h-7 items-center rounded-md border border-neutral-600 bg-neutral-900 px-2.5 text-xs font-medium text-neutral-200">
+                  {birthDateFormatted}
+                  {getAge(person.birth_date) !== null && (
+                    <span className="ml-1 font-semibold">
+                      {person.death_date ? null : `(${getAge(person.birth_date)} l.)`}
+                    </span>
+                  )}
+                </span>
+              )}
+              {person.birth_city_name && (
+                <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-neutral-600 bg-neutral-900 px-2.5 text-xs font-medium text-neutral-200">
+                  {person.birth_city_name}
+                  {person.birth_country_fifa_code && (
+                    <CountryFlag
+                      fifaCode={person.birth_country_fifa_code}
+                      countryName={person.birth_country_name ?? '—'}
+                      className="h-[13.5px] w-[20px]"
+                    />
+                  )}
+                </span>
+              )}
+            </div>
+          )}
+          {isEdit && (
+            <div>
+              <p className="mt-0.5 text-sm text-neutral-400">
+                {birthDateFormatted}
+                {person.birth_date && getAge(person.birth_date) !== null && (
+                  <> <span className="font-semibold">({getAge(person.birth_date)} l.)</span></>
+                )}
+              </p>
+              <div className="mt-0.5 flex items-center gap-1.5 text-sm text-neutral-400">
+                <span>{person.birth_city_name ?? '—'}</span>
+                <CountryFlag
+                  fifaCode={person.birth_country_fifa_code}
+                  countryName={person.birth_country_name ?? '—'}
+                  className="h-[13.5px] w-[20px]"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          {visibleFlags.map((flag) => (
-            <CountryFlag
-              key={flag.key}
-              fifaCode={flag.fifaCode}
-              countryName={flag.countryName}
-              className="h-[30px] w-[45px]"
-            />
-          ))}
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            {visibleFlags.map((flag) => (
+              <CountryFlag
+                key={flag.key}
+                fifaCode={flag.fifaCode}
+                countryName={flag.countryName}
+                className="h-[30px] w-[45px]"
+              />
+            ))}
+          </div>
+          {!isEdit && person.roles.includes('PLAYER') && (
+            <div className="group/stats relative">
+              <span className="inline-flex h-7 items-center gap-1 rounded-md border border-neutral-600 bg-neutral-900 px-2.5 text-xs font-medium text-neutral-200">
+                <span className="font-bold">{person.appearance_count}</span>
+                <span className="text-neutral-500">/</span>
+                <span className="font-bold">{person.goal_count}</span>
+              </span>
+              <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-neutral-500 bg-black px-2 py-1 text-[11px] font-bold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/stats:opacity-100">
+                <span className="font-normal text-neutral-400">Występy</span> {person.appearance_count} <span className="mx-1 text-neutral-600">/</span> <span className="font-normal text-neutral-400">Gole</span> {person.goal_count}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -165,6 +209,17 @@ export default async function AdminPersonDetailsPage({
               name="birth_date"
               type="date"
               defaultValue={person.birth_date ?? ''}
+              className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5 sm:col-span-2">
+            <label htmlFor="death_date" className="text-sm font-medium text-neutral-300">Data śmierci</label>
+            <input
+              id="death_date"
+              name="death_date"
+              type="date"
+              defaultValue={person.death_date ?? ''}
               className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
             />
           </div>

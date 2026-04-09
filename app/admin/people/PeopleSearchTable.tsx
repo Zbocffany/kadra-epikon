@@ -1,11 +1,14 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import CountryFlag from '@/components/CountryFlag'
 import AdminSearchableTable from '@/components/admin/AdminSearchableTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import type { AdminPersonListItem, AdminPersonRole } from '@/lib/db/people'
 import { getPersonDisplayName } from '@/lib/db/people'
+import PitchIcon from '@/components/icons/PitchIcon'
+import { GoalIcon, AssistIcon, YellowCardIcon, RedCardIcon } from '@/components/icons'
 
 const ROLE_META: Record<AdminPersonRole, { initial: string; label: string; className: string }> = {
   PLAYER: {
@@ -25,10 +28,14 @@ const ROLE_META: Record<AdminPersonRole, { initial: string; label: string; class
   },
 }
 
-function formatDate(date: string | null): string {
-  if (!date) return '—'
-  const [year, month, day] = date.split('-')
-  return `${day}.${month}.${year}`
+function getAgeDisplay(person: AdminPersonListItem): string | null {
+  if (!person.birth_date) return null
+  const birth = new Date(person.birth_date)
+  const ref = person.death_date ? new Date(person.death_date) : new Date()
+  let age = ref.getFullYear() - birth.getFullYear()
+  const m = ref.getMonth() - birth.getMonth()
+  if (m < 0 || (m === 0 && ref.getDate() < birth.getDate())) age--
+  return person.death_date ? null : `(${age} l.)`
 }
 
 function getActivityLabel(person: AdminPersonListItem): string {
@@ -36,130 +43,138 @@ function getActivityLabel(person: AdminPersonListItem): string {
 }
 
 export default function PeopleSearchTable({ people }: { people: AdminPersonListItem[] }) {
+  type SortKey = 'appearance_count' | 'goal_count' | 'assist_count' | 'yellow_card_count' | 'red_card_count'
+  const [sortKey, setSortKey] = useState<SortKey>('appearance_count')
+  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((d) => d === 'desc' ? 'asc' : 'desc')
+    } else {
+      setSortKey(key)
+      setSortDir('desc')
+    }
+  }
+
+  const sorted = [...people].sort((a, b) => {
+    const diff = (a[sortKey] as number) - (b[sortKey] as number)
+    return sortDir === 'desc' ? -diff : diff
+  })
+
+  function statHeader(key: SortKey, icon: React.ReactNode, label: string) {
+    const active = sortKey === key
+    return (
+      <button
+        type="button"
+        onClick={() => handleSort(key)}
+        className={`flex items-center justify-center gap-0.5 mx-auto transition-opacity ${
+          active ? 'opacity-100' : 'opacity-50 hover:opacity-80'
+        }`}
+        title={label}
+      >
+        {icon}
+        <span className={`text-[10px] leading-none ${
+          active ? 'text-neutral-300' : 'text-neutral-500'
+        }`}>{sortDir === 'desc' && active ? '▼' : sortDir === 'asc' && active ? '▲' : ''}</span>
+      </button>
+    )
+  }
+
   const columns: AdminTableColumn<AdminPersonListItem>[] = [
     {
       key: 'index',
       label: '#',
       render: (_, index) => index + 1,
-      className: 'text-neutral-500',
+      className: 'text-neutral-500 w-8 pr-2',
     },
     {
       key: 'person',
       label: 'Osoba',
       render: (person) => (
-        <Link
-          href={`/admin/people/${person.id}`}
-          className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-        >
-          {getPersonDisplayName(person)}
-        </Link>
-      ),
-      className: 'font-medium',
-    },
-    {
-      key: 'birth_date',
-      label: 'Data ur.',
-      render: (person) => formatDate(person.birth_date),
-      className: 'text-neutral-300',
-    },
-    {
-      key: 'birth_city',
-      label: 'Miasto ur.',
-      render: (person) => person.birth_city_name ?? '—',
-      className: 'text-neutral-400',
-    },
-    {
-      key: 'birth_country',
-      label: 'Kraj',
-      render: (person) => {
-        if (person.represented_country_names.length === 0) return '—'
-
-        return (
-          <div className="flex items-center justify-center gap-1">
-            {person.represented_country_names.map((name, i) => (
-              <CountryFlag
-                key={`${name}-${i}`}
-                fifaCode={person.represented_country_fifa_codes[i] ?? null}
-                countryName={name}
-              />
-            ))}
-          </div>
-        )
-      },
-      className: 'text-center',
-    },
-    {
-      key: 'role',
-      label: 'Rola',
-      render: (person) => person.roles.length ? (
-        <div className="flex items-center justify-center gap-1.5">
-          {person.roles.map((role) => {
-            const meta = ROLE_META[role]
-
-            return (
-              <span
-                key={`${person.id}-${role}`}
-                className={`relative inline-flex h-6 w-6 items-center justify-center overflow-hidden rounded-full border text-[11px] font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65)] ${meta.className}`}
-                title={meta.label}
-                aria-label={meta.label}
-              >
-                <span
-                  aria-hidden="true"
-                  className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_30%,rgba(255,255,255,0)_58%),linear-gradient(130deg,rgba(255,255,255,0.28)_0%,rgba(255,255,255,0)_50%)]"
+        <div className="flex items-center gap-2.5">
+          {person.represented_country_fifa_codes.length > 0 ? (
+            <div className="flex items-center gap-0.5">
+              {person.represented_country_names.map((name, i) => (
+                <CountryFlag
+                  key={`${name}-${i}`}
+                  fifaCode={person.represented_country_fifa_codes[i] ?? null}
+                  countryName={name}
+                  className="h-3.5 w-[21px] shrink-0"
                 />
-                <span className="absolute inset-0 z-10 flex items-center justify-center text-[11px] font-black leading-none">{meta.initial}</span>
-              </span>
-            )
-          })}
+              ))}
+            </div>
+          ) : (
+            <span className="inline-block h-3.5 w-[21px] shrink-0" />
+          )}
+          <Link
+            href={`/admin/people/${person.id}`}
+            className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+          >
+            {getPersonDisplayName(person)}
+            {person.death_date && (
+              <span className="font-black text-neutral-500">&#x2020;</span>
+            )}
+            {getAgeDisplay(person) && (
+              <span className="text-neutral-500 font-normal">{getAgeDisplay(person)}</span>
+            )}
+          </Link>
         </div>
-      ) : '—',
+      ),
+      className: 'font-medium pl-2',
+    },
+    {
+      key: 'appearances',
+      label: 'Występy',
+      headerRender: () => statHeader('appearance_count', <PitchIcon className="h-5 w-5" />, 'Występy'),
+      render: (person) => person.roles.includes('PLAYER')
+        ? <span className="text-sm font-semibold text-neutral-300">{person.appearance_count || '–'}</span>
+        : null,
       className: 'text-center',
     },
     {
-      key: 'active',
-      label: 'Aktywna',
-      render: (person) => person.is_active ? (
-        <span
-          className="relative inline-flex h-5 w-5 items-center justify-center overflow-hidden rounded-full border border-emerald-500 bg-emerald-500/15 text-emerald-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.56),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65)]"
-          title="Aktywna"
-          aria-label="Aktywna"
-        >
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.62)_0%,rgba(255,255,255,0.22)_28%,rgba(255,255,255,0)_58%),linear-gradient(130deg,rgba(255,255,255,0.3)_0%,rgba(255,255,255,0)_52%)]"
-          />
-          <svg viewBox="0 0 20 20" fill="none" className="relative z-10 h-3.5 w-3.5" aria-hidden="true">
-            <path
-              d="M4.5 10.5L8.25 14.25L15.5 7"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </span>
-      ) : (
-        <span
-          className="relative inline-flex h-5 w-5 overflow-hidden rounded-full border-2 border-red-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_1px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.65)]"
-          title="Nieaktywna"
-          aria-label="Nieaktywna"
-        >
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.44)_0%,rgba(255,255,255,0.1)_28%,rgba(255,255,255,0)_58%),linear-gradient(130deg,rgba(255,255,255,0.2)_0%,rgba(255,255,255,0)_52%)]"
-          />
-        </span>
-      ),
-      className: 'text-neutral-400 text-center',
+      key: 'goals',
+      label: 'Bramki',
+      headerRender: () => statHeader('goal_count', <GoalIcon className="h-5 w-5" />, 'Bramki'),
+      render: (person) => person.roles.includes('PLAYER')
+        ? <span className="text-sm font-semibold text-neutral-300">{person.goal_count || '–'}</span>
+        : null,
+      className: 'text-center',
+    },
+    {
+      key: 'assists',
+      label: 'Asysty',
+      headerRender: () => statHeader('assist_count', <AssistIcon className="h-5 w-5" />, 'Asysty'),
+      render: (person) => person.roles.includes('PLAYER')
+        ? <span className="text-sm font-semibold text-neutral-300">{person.assist_count || '–'}</span>
+        : null,
+      className: 'text-center',
+    },
+    {
+      key: 'yellow_cards',
+      label: 'Żółte kartki',
+      headerRender: () => statHeader('yellow_card_count', <YellowCardIcon className="h-5 w-5" />, 'Żółte kartki'),
+      render: (person) => person.roles.includes('PLAYER')
+        ? <span className="text-sm font-semibold text-neutral-300">{person.yellow_card_count || '–'}</span>
+        : null,
+      className: 'text-center',
+    },
+    {
+      key: 'red_cards',
+      label: 'Czerwone kartki',
+      headerRender: () => statHeader('red_card_count', <RedCardIcon className="h-5 w-5" />, 'Czerwone kartki'),
+      render: (person) => person.roles.includes('PLAYER')
+        ? <span className="text-sm font-semibold text-neutral-300">{person.red_card_count || '–'}</span>
+        : null,
+      className: 'text-center',
     },
   ]
 
   return (
     <AdminSearchableTable
-      data={people}
+      data={sorted}
       columns={columns}
       searchPlaceholder="Wpisz imię, nazwisko albo pseudonim..."
-      showHeader={false}
+      showHeader={true}
       emptyMessage="Brak osób w bazie danych."
       emptySearchMessage="Brak osób pasujących do wyszukiwanej frazy."
       getPrimaryText={(person) => getPersonDisplayName(person)}
@@ -170,25 +185,28 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
         ...person.represented_country_names,
       ]}
       filterConfig={{
-        label: 'Kraj rep.',
+        label: '',
         allLabel: 'Wszystkie kraje',
         getValue: (person) => person.represented_country_names.length > 0
           ? person.represented_country_names
           : person.birth_country_name,
       }}
       secondaryFilterConfig={{
-        label: 'Aktywność',
+        label: '',
         allLabel: 'Wszystkie statusy',
         getValue: (person) => getActivityLabel(person),
       }}
       tertiaryFilterConfig={{
-        label: 'Funkcja',
+        label: '',
         allLabel: 'Wszystkie funkcje',
         getValue: (person) => person.role_labels,
       }}
       filterWidthClass="md:w-52"
       secondaryFilterWidthClass="md:w-52"
       tertiaryFilterWidthClass="md:w-52"
+      defaultFilter="Polska"
+      defaultTertiaryFilter="Piłkarz"
+      searchIgnoresFilters
       summaryText={(visible, total) =>
         `Wyświetlono ${visible} z ${total} osób. Kliknij osobę, aby przejść do strony szczegółów.`
       }

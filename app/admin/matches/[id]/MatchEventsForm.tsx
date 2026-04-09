@@ -63,6 +63,12 @@ const NO_SECONDARY_PERSON_TYPES = new Set<MatchEventType>([
 
 const EXTRA_TIME_ALLOWED_MINUTES = new Set(['45', '90', '115', '120'])
 
+const SHOOTOUT_TYPES = new Set<MatchEventType>([
+  'PENALTY_SHOOTOUT_SCORED',
+  'PENALTY_SHOOTOUT_MISSED',
+  'PENALTY_SHOOTOUT_SAVED',
+])
+
 function resolveGroup(eventType: MatchEventType): EventGroup {
   if (EVENT_TYPES_BY_GROUP.GOAL.includes(eventType)) return 'GOAL'
   if (EVENT_TYPES_BY_GROUP.CARD.includes(eventType)) return 'CARD'
@@ -387,7 +393,8 @@ export default function MatchEventsForm({
                 const peopleOptionsForTeam = getPeopleOptionsForTeam(row.teamId)
                 const opposingTeamId = teams.find((t) => t.id !== row.teamId)?.id ?? ''
                 const isPerson2Disabled = NO_SECONDARY_PERSON_TYPES.has(row.eventType)
-                const isMinuteExtraDisabled = !EXTRA_TIME_ALLOWED_MINUTES.has(row.minute)
+                const isShootoutEvent = SHOOTOUT_TYPES.has(row.eventType)
+                const isMinuteExtraDisabled = isShootoutEvent || !EXTRA_TIME_ALLOWED_MINUTES.has(row.minute)
                 const primaryPeopleOptions = row.eventType === 'OWN_GOAL'
                   ? getPeopleOptionsForTeam(opposingTeamId)
                   : peopleOptionsForTeam
@@ -418,12 +425,14 @@ export default function MatchEventsForm({
                     </button>
                   </td>
                   <td className="border-l border-neutral-800 bg-neutral-950 px-2 py-2">
+                    {isShootoutEvent && <input type="hidden" name="event_minute" value="121" />}
                     <input
                       type="text"
-                      name="event_minute"
+                      {...(!isShootoutEvent ? { name: 'event_minute' } : {})}
                       inputMode="numeric"
                       maxLength={3}
-                      value={row.minute}
+                      disabled={isShootoutEvent}
+                      value={isShootoutEvent ? '' : row.minute}
                       onChange={(event) => {
                         const nextMinute = sanitizeDigits(event.target.value, 3)
                         const allowExtra = EXTRA_TIME_ALLOWED_MINUTES.has(nextMinute)
@@ -432,7 +441,9 @@ export default function MatchEventsForm({
                           ...(!allowExtra ? { minuteExtra: '' } : {}),
                         })
                       }}
-                      className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm text-neutral-100"
+                      className={`w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 text-sm ${
+                        isShootoutEvent ? 'cursor-not-allowed text-neutral-600 opacity-40' : 'text-neutral-100'
+                      }`}
                     />
                   </td>
                   <td className="border-l border-neutral-800 bg-neutral-950 px-2 py-2">
@@ -459,8 +470,10 @@ export default function MatchEventsForm({
                         const isOwnGoal = nextType === 'OWN_GOAL'
                         const clearPrimary = wasOwnGoal !== isOwnGoal
                         const clearSecondary = NO_SECONDARY_PERSON_TYPES.has(nextType)
+                        const isNextShootout = SHOOTOUT_TYPES.has(nextType)
                         updateRow(index, {
                           eventType: nextType,
+                          ...(isNextShootout ? { minute: '121', minuteExtra: '' } : {}),
                           ...(clearPrimary ? { primaryPersonId: '' } : {}),
                           ...(clearSecondary ? { secondaryPersonId: '' } : {}),
                         })

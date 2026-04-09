@@ -264,9 +264,10 @@ function MatchLineupsSummarySection({
     )
   }
 
-  function renderGlossyEventScore(label: string) {
+  function renderGlossyEventScore(label: string, variant?: 'green' | 'red') {
+    const borderClass = variant === 'green' ? 'border-emerald-500' : variant === 'red' ? 'border-red-500' : 'border-neutral-500/80'
     return (
-      <span className="relative inline-flex items-center overflow-hidden rounded-md border border-neutral-500/80 bg-neutral-900 px-1.5 py-0.5 text-xs font-semibold text-neutral-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]">
+      <span className={`relative inline-flex items-center overflow-hidden rounded-md border ${borderClass} bg-neutral-900 px-1.5 py-0.5 text-xs font-semibold text-neutral-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]`}>
         <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]" />
         <span className="relative z-10">{label}</span>
       </span>
@@ -284,6 +285,7 @@ function MatchLineupsSummarySection({
     if (event.event_type === 'GOAL') return <>{renderGlossyScorerBadge('goal', primary ?? 'Nieznany')}{secondary ? <span className="font-normal text-neutral-500"> {secondary}</span> : null}</>
     if (event.event_type === 'PENALTY_GOAL') return <>{renderGlossyScorerBadge('penaltyGoal', primary ?? 'Nieznany')}<span className="font-normal text-neutral-500"> (Rzut karny)</span></>
     if (event.event_type === 'OWN_GOAL') return <>{renderGlossyScorerBadge('ownGoal', primary ?? 'Nieznany')}<span className="font-normal text-neutral-500"> (Gol samobójczy)</span></>
+    if (event.event_type === 'PENALTY_SHOOTOUT_SCORED') return <>{renderGlossyScorerBadge('penaltyGoal', primary ?? 'Nieznany')}</>
     if (event.event_type === 'PENALTY_SHOOTOUT_MISSED' || event.event_type === 'MATCH_PENALTY_MISSED') return <><span className="font-semibold text-neutral-100">{primary ?? 'Nieznany'}</span><span className="font-normal text-neutral-500"> (Nietrafiony karny)</span></>
     if (event.event_type === 'PENALTY_SHOOTOUT_SAVED' || event.event_type === 'MATCH_PENALTY_SAVED') return <><span className="font-semibold text-neutral-100">{primary ?? 'Nieznany'}</span><span className="font-normal text-neutral-500"> (Obroniony karny)</span></>
     if (event.event_type === 'YELLOW_CARD' || event.event_type === 'SECOND_YELLOW_CARD' || event.event_type === 'RED_CARD') return primary ?? 'Nieznany'
@@ -291,10 +293,14 @@ function MatchLineupsSummarySection({
   }
 
   function getHalfScore(halfEvents: AdminMatchEvent[]): string {
+    const isShootoutPhase = halfEvents.some(e => SHOOTOUT_TYPES.has(e.event_type))
     let homeGoals = 0
     let awayGoals = 0
     for (const event of halfEvents) {
-      if (!GOAL_TYPES.has(event.event_type)) continue
+      const isScored = isShootoutPhase
+        ? event.event_type === 'PENALTY_SHOOTOUT_SCORED'
+        : GOAL_TYPES.has(event.event_type)
+      if (!isScored) continue
       if (event.team_id === match.home_team_id) homeGoals += 1
       else if (event.team_id === match.away_team_id) awayGoals += 1
     }
@@ -316,14 +322,27 @@ function MatchLineupsSummarySection({
   for (const event of sortedEvents) phaseEventsMap.get(getPhaseKey(event))?.push(event)
   const phaseSections = phaseOrder.map((phase) => ({ phase, title: phaseTitles[phase], events: phaseEventsMap.get(phase) ?? [] })).filter((section) => section.events.length > 0)
 
+  const hasExtraTime = (phaseEventsMap.get('EXTRA_1') ?? []).length > 0 || (phaseEventsMap.get('EXTRA_2') ?? []).length > 0
+  const hasShootout = (phaseEventsMap.get('SHOOTOUT') ?? []).length > 0
+
   let runningHome = 0
   let runningAway = 0
   const runningScoreByEventId = new Map<string, string>()
+  let runningHomeShootout = 0
+  let runningAwayShootout = 0
+  const runningShootoutScoreByEventId = new Map<string, string>()
   for (const event of chronologicalEvents) {
     if (GOAL_TYPES.has(event.event_type)) {
       if (event.team_id === match.home_team_id) runningHome += 1
       else if (event.team_id === match.away_team_id) runningAway += 1
       runningScoreByEventId.set(event.id, `${runningHome} : ${runningAway}`)
+    }
+    if (event.event_type === 'PENALTY_SHOOTOUT_SCORED') {
+      if (event.team_id === match.home_team_id) runningHomeShootout += 1
+      else if (event.team_id === match.away_team_id) runningAwayShootout += 1
+    }
+    if (SHOOTOUT_TYPES.has(event.event_type)) {
+      runningShootoutScoreByEventId.set(event.id, `${runningHomeShootout} : ${runningAwayShootout}`)
     }
   }
 
@@ -341,11 +360,20 @@ function MatchLineupsSummarySection({
               const iconName = getEventIconName(event.event_type)
               const text = renderEventText(event)
               const minuteLabel = renderMinute(event)
-              const runningScore = runningScoreByEventId.get(event.id)
+              const runningScore = SHOOTOUT_TYPES.has(event.event_type)
+                ? runningShootoutScoreByEventId.get(event.id)
+                : runningScoreByEventId.get(event.id)
+              const scoreBadgeVariant = event.event_type === 'PENALTY_SHOOTOUT_SCORED'
+                ? 'green'
+                : event.event_type === 'PENALTY_SHOOTOUT_MISSED' || event.event_type === 'PENALTY_SHOOTOUT_SAVED'
+                  ? 'red'
+                  : undefined
+              const isShootoutEvent = SHOOTOUT_TYPES.has(event.event_type)
               const minuteClass = 'inline-flex shrink-0 items-center rounded-md border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-xs font-semibold leading-none text-neutral-200'
+              const minuteBadge = isShootoutEvent ? null : <span className={minuteClass}>{minuteLabel}</span>
               const content = (
                 <div className="inline-flex items-center gap-2 text-sm text-neutral-100">
-                  {event.event_type === 'GOAL' || event.event_type === 'OWN_GOAL' || event.event_type === 'PENALTY_GOAL' ? (
+                  {event.event_type === 'GOAL' || event.event_type === 'OWN_GOAL' || event.event_type === 'PENALTY_GOAL' || event.event_type === 'PENALTY_SHOOTOUT_SCORED' ? (
                     <span>{text}</span>
                   ) : event.event_type === 'PENALTY_SHOOTOUT_MISSED' || event.event_type === 'MATCH_PENALTY_MISSED' ? (
                     <><Icon name="missedPenalty" className="h-4 w-4 shrink-0" /><span>{text}</span></>
@@ -359,9 +387,9 @@ function MatchLineupsSummarySection({
 
               return (
                 <div key={event.id} className="bg-neutral-950 px-3 py-2">
-                  {side === 'home' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><div className="flex items-center gap-2"><span className={minuteClass}>{minuteLabel}</span><div className="min-w-0">{content}</div></div>{runningScore ? renderGlossyEventScore(runningScore) : <span />}<span /></div> : null}
-                  {side === 'away' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><span />{runningScore ? renderGlossyEventScore(runningScore) : <span />}<div className="flex items-center justify-end gap-2"><div className="min-w-0 text-right">{content}</div><span className={minuteClass}>{minuteLabel}</span></div></div> : null}
-                  {side === 'neutral' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><span /><div className="flex items-center gap-2"><span className={minuteClass}>{minuteLabel}</span>{content}{runningScore ? renderGlossyEventScore(runningScore) : null}</div><span /></div> : null}
+                  {side === 'home' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><div className="flex items-center gap-2">{minuteBadge}<div className="min-w-0">{content}</div></div>{runningScore ? renderGlossyEventScore(runningScore, scoreBadgeVariant) : <span />}<span /></div> : null}
+                  {side === 'away' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><span />{runningScore ? renderGlossyEventScore(runningScore, scoreBadgeVariant) : <span />}<div className="flex items-center justify-end gap-2"><div className="min-w-0 text-right">{content}</div>{minuteBadge}</div></div> : null}
+                  {side === 'neutral' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><span /><div className="flex items-center gap-2">{minuteBadge}{content}{runningScore ? renderGlossyEventScore(runningScore, scoreBadgeVariant) : null}</div><span /></div> : null}
                 </div>
               )
             })}
@@ -380,7 +408,7 @@ function MatchLineupsSummarySection({
       <div className="rounded-2xl border border-neutral-700 bg-neutral-900/60 px-5 py-3">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
           <div className="flex items-center gap-2"><CountryFlag fifaCode={match.home_team_fifa_code} countryName={match.home_team_name} className="h-5 w-[30px]" /><p className="truncate text-left text-2xl font-bold text-neutral-100 sm:text-3xl">{match.home_team_name}</p></div>
-          <div className="text-center"><p className="text-2xl font-bold text-neutral-100 sm:text-3xl">{summaryScoreLabel}</p><p className="mt-0.5 text-[11px] font-medium text-neutral-400">Do przerwy: {halftimeScoreLabel}</p></div>
+          <div className="text-center"><p className="text-2xl font-bold text-neutral-100 sm:text-3xl">{summaryScoreLabel}</p><p className="mt-0.5 text-[11px] font-medium text-neutral-400">Do przerwy: {halftimeScoreLabel}</p>{hasExtraTime && <p className="mt-0.5 text-[11px] font-medium text-neutral-400">Po dogrywce: {summaryScoreLabel}</p>}{hasShootout && <p className="mt-0.5 text-[11px] font-medium text-neutral-400">Karne: {summaryScore.homeShootoutScore}:{summaryScore.awayShootoutScore}</p>}</div>
           <div className="flex items-center justify-end gap-2"><p className="truncate text-right text-2xl font-bold text-neutral-100 sm:text-3xl">{match.away_team_name}</p><CountryFlag fifaCode={match.away_team_fifa_code} countryName={match.away_team_name} className="h-5 w-[30px]" /></div>
         </div>
 

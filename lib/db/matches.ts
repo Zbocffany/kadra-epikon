@@ -113,6 +113,7 @@ export type AdminMatch = {
   home_team_fifa_code: string | null
   away_team_fifa_code: string | null
   final_score: string | null
+  shootout_score: string | null
 }
 
 export type AdminMatchDetails = AdminMatch & {
@@ -620,6 +621,19 @@ async function mapAdminMatches(
     return `${homeGoals}:${awayGoals}`
   }
 
+  function getShootoutScore(match: MatchListRow): string | null {
+    if (match.result_type !== 'PENALTIES' && match.result_type !== 'EXTRA_TIME_AND_PENALTIES') return null
+    const events = eventsByMatchId.get(match.id) ?? []
+    let homeGoals = 0
+    let awayGoals = 0
+    for (const event of events) {
+      if (event.event_type !== 'PENALTY_SHOOTOUT_SCORED') continue
+      if (event.team_id === match.home_team_id) homeGoals += 1
+      else if (event.team_id === match.away_team_id) awayGoals += 1
+    }
+    return `${homeGoals}:${awayGoals}`
+  }
+
   // 4. Assemble
   return matches.map((m) => ({
     id: m.id,
@@ -639,6 +653,7 @@ async function mapAdminMatches(
     home_team_fifa_code: teamFifaMap.get(m.home_team_id) ?? null,
     away_team_fifa_code: teamFifaMap.get(m.away_team_id) ?? null,
     final_score: getFinalScore(m),
+    shootout_score: getShootoutScore(m),
   }))
 }
 
@@ -721,6 +736,7 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
     away_team_fifa_code: teamFifaMap.get(match.away_team_id) ?? null,
     match_city_id: match.match_city_id ?? null,
     match_stadium_id: match.match_stadium_id ?? null,
+    shootout_score: null,
   }
 }
 
@@ -1251,11 +1267,25 @@ export async function getMatchesYearStats(
   // 2. Get all Poland participants for these matches
   const { data: participants, error: partError } = await supabase
     .from('tbl_Match_Participants')
-    .select('match_id, person_id, role')
+    .select('match_id, person_id, role, is_starting')
     .in('match_id', matchIds)
     .eq('team_id', polandTeamId)
 
   if (partError || !participants?.length) return empty
+
+  // 3. Get substitution events to find players who came on from the bench
+  const { data: subEvents } = await supabase
+    .from('tbl_Match_Events')
+    .select('match_id, secondary_person_id')
+    .in('match_id', matchIds)
+    .eq('event_type', 'SUBSTITUTION')
+    .not('secondary_person_id', 'is', null)
+
+  const substitutedInByMatch = new Map<string, Set<string>>()
+  for (const ev of (subEvents ?? []) as Array<{ match_id: string; secondary_person_id: string }>) {
+    if (!substitutedInByMatch.has(ev.match_id)) substitutedInByMatch.set(ev.match_id, new Set())
+    substitutedInByMatch.get(ev.match_id)!.add(ev.secondary_person_id)
+  }
 
   // 3. Get person names
   const personIds = [...new Set((participants as Array<{ person_id: string }>).map((p) => p.person_id))]
@@ -1277,7 +1307,7 @@ export async function getMatchesYearStats(
   const appearanceYearMap = new Map<string, Map<string, number>>()
   const polandPlayersByMatch = new Map<string, Set<string>>()
 
-  for (const p of participants as Array<{ match_id: string; person_id: string; role: string }>) {
+  for (const p of participants as Array<{ match_id: string; person_id: string; role: string; is_starting: boolean | null }>) {
     const year = yearByMatchId.get(p.match_id)
     if (!year) continue
 
@@ -1286,9 +1316,12 @@ export async function getMatchesYearStats(
       const m = coachYearMap.get(year)!
       m.set(p.person_id, (m.get(p.person_id) ?? 0) + 1)
     } else if (p.role === 'PLAYER') {
-      if (!appearanceYearMap.has(year)) appearanceYearMap.set(year, new Map())
-      const m = appearanceYearMap.get(year)!
-      m.set(p.person_id, (m.get(p.person_id) ?? 0) + 1)
+      const playedInMatch = p.is_starting === true || substitutedInByMatch.get(p.match_id)?.has(p.person_id) === true
+      if (playedInMatch) {
+        if (!appearanceYearMap.has(year)) appearanceYearMap.set(year, new Map())
+        const m = appearanceYearMap.get(year)!
+        m.set(p.person_id, (m.get(p.person_id) ?? 0) + 1)
+      }
 
       if (!polandPlayersByMatch.has(p.match_id)) polandPlayersByMatch.set(p.match_id, new Set())
       polandPlayersByMatch.get(p.match_id)!.add(p.person_id)

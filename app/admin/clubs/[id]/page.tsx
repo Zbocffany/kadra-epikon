@@ -15,6 +15,7 @@ import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
 import AdminCancelLink from '@/components/admin/AdminCancelLink'
 import ClubCityCountryFields from '@/components/admin/ClubCityCountryFields'
 import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
+import CountryFlag from '@/components/CountryFlag'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { createStadiumInline } from '@/app/admin/stadiums/actions'
 import {
@@ -179,7 +180,15 @@ export default async function AdminClubDetailsPage({
 
       <DetailsPageContent
         title={club.name}
-        breadcrumb="Admin / Kluby"
+        breadcrumb=""
+        subtitle={club.city_name ? (
+          <span className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-400">
+            {club.city_name}
+          </span>
+        ) : undefined}
+        headerRight={club.country_fifa_code ? (
+          <CountryFlag fifaCode={club.country_fifa_code} countryName={club.country_name ?? undefined} className="h-10 w-[60px]" />
+        ) : undefined}
         saved={saved}
         error={error}
         isEdit={isEdit}
@@ -206,8 +215,6 @@ export default async function AdminClubDetailsPage({
         }
         viewContent={
           <>
-            {fields}
-
             <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-6">
               <details open={historyEvents.length > 0} className="overflow-hidden rounded-lg border border-neutral-800 group/det">
                 <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-neutral-500 marker:content-none">

@@ -39,6 +39,11 @@ export type AdminPersonListItem = {
   represented_country_fifa_codes: (string | null)[]
   roles: AdminPersonRole[]
   role_labels: string[]
+  appearance_count: number
+  goal_count: number
+  assist_count: number
+  yellow_card_count: number
+  red_card_count: number
 }
 
 export type AdminPersonDetails = AdminPersonListItem & {
@@ -328,6 +333,108 @@ export async function getAdminPersonBirthCityOptions(): Promise<AdminPersonBirth
   })
 }
 
+type PersonStatRow = { appearance_count: number; goal_count: number; assist_count: number; yellow_card_count: number; red_card_count: number }
+
+async function getPersonStats(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  personIds: string[]
+): Promise<Map<string, PersonStatRow>> {
+  if (!personIds.length) return new Map()
+
+  const CHUNK_SIZE = 80
+
+  type ParticipantRow = { person_id: string; match_id: string; is_starting: boolean | null }
+  const allParticipants: ParticipantRow[] = []
+  for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Match_Participants')
+      .select('person_id, match_id, is_starting')
+      .eq('role', 'PLAYER')
+      .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
+    allParticipants.push(...((data ?? []) as ParticipantRow[]))
+  }
+
+  if (!allParticipants.length) return new Map()
+
+  const allMatchIds = [...new Set(allParticipants.map((p) => p.match_id))]
+
+  type SubEvent = { match_id: string; secondary_person_id: string }
+  const allSubEvents: SubEvent[] = []
+  for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Match_Events')
+      .select('match_id, secondary_person_id')
+      .eq('event_type', 'SUBSTITUTION')
+      .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
+      .not('secondary_person_id', 'is', null)
+    if (error) throw new Error(`tbl_Match_Events (substitutions): ${error.message}`)
+    allSubEvents.push(...((data ?? []) as SubEvent[]))
+  }
+
+  const subEnteredSet = new Set(allSubEvents.map((e) => `${e.match_id}:${e.secondary_person_id}`))
+  const playedParticipants = allParticipants.filter(
+    (p) => p.is_starting || subEnteredSet.has(`${p.match_id}:${p.person_id}`)
+  )
+
+  const playedMatchIds = [...new Set(playedParticipants.map((p) => p.match_id))]
+  const playedPersonIds = new Set(playedParticipants.map((p) => p.person_id))
+
+  const appearanceMap = new Map<string, number>()
+  for (const p of playedParticipants) {
+    appearanceMap.set(p.person_id, (appearanceMap.get(p.person_id) ?? 0) + 1)
+  }
+
+  type PrimaryEvent = { primary_person_id: string }
+  type SecondaryEvent = { secondary_person_id: string }
+
+  const allGoals: PrimaryEvent[] = []
+  const allAssists: SecondaryEvent[] = []
+  const allYellows: PrimaryEvent[] = []
+  const allReds: PrimaryEvent[] = []
+
+  for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
+    const batch = playedMatchIds.slice(i, i + CHUNK_SIZE)
+    const [goalsRes, assistsRes, yellowsRes, redsRes] = await Promise.all([
+      supabase.from('tbl_Match_Events').select('primary_person_id').in('event_type', ['GOAL', 'PENALTY_GOAL']).in('match_id', batch).not('primary_person_id', 'is', null),
+      supabase.from('tbl_Match_Events').select('secondary_person_id').in('event_type', ['GOAL', 'OWN_GOAL']).in('match_id', batch).not('secondary_person_id', 'is', null),
+      supabase.from('tbl_Match_Events').select('primary_person_id').eq('event_type', 'YELLOW_CARD').in('match_id', batch).not('primary_person_id', 'is', null),
+      supabase.from('tbl_Match_Events').select('primary_person_id').in('event_type', ['RED_CARD', 'SECOND_YELLOW_CARD']).in('match_id', batch).not('primary_person_id', 'is', null),
+    ])
+    if (goalsRes.error) throw new Error(`tbl_Match_Events (goals): ${goalsRes.error.message}`)
+    if (assistsRes.error) throw new Error(`tbl_Match_Events (assists): ${assistsRes.error.message}`)
+    if (yellowsRes.error) throw new Error(`tbl_Match_Events (yellow cards): ${yellowsRes.error.message}`)
+    if (redsRes.error) throw new Error(`tbl_Match_Events (red cards): ${redsRes.error.message}`)
+    allGoals.push(...((goalsRes.data ?? []) as PrimaryEvent[]))
+    allAssists.push(...((assistsRes.data ?? []) as SecondaryEvent[]))
+    allYellows.push(...((yellowsRes.data ?? []) as PrimaryEvent[]))
+    allReds.push(...((redsRes.data ?? []) as PrimaryEvent[]))
+  }
+
+  const statsMap = new Map<string, PersonStatRow>()
+  for (const personId of playedPersonIds) {
+    statsMap.set(personId, { appearance_count: appearanceMap.get(personId) ?? 0, goal_count: 0, assist_count: 0, yellow_card_count: 0, red_card_count: 0 })
+  }
+  for (const e of allGoals) {
+    const s = e.primary_person_id ? statsMap.get(e.primary_person_id) : null
+    if (s) s.goal_count++
+  }
+  for (const e of allAssists) {
+    const s = e.secondary_person_id ? statsMap.get(e.secondary_person_id) : null
+    if (s) s.assist_count++
+  }
+  for (const e of allYellows) {
+    const s = e.primary_person_id ? statsMap.get(e.primary_person_id) : null
+    if (s) s.yellow_card_count++
+  }
+  for (const e of allReds) {
+    const s = e.primary_person_id ? statsMap.get(e.primary_person_id) : null
+    if (s) s.red_card_count++
+  }
+
+  return statsMap
+}
+
 export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
   const supabase = createServiceRoleClient()
 
@@ -365,6 +472,10 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
     supabase,
     people.map((person) => person.id)
   )
+  const playerIds = people
+    .filter((p) => (rolesByPersonId.get(p.id) ?? []).includes('PLAYER'))
+    .map((p) => p.id)
+  const statsByPersonId = await getPersonStats(supabase, playerIds)
 
   return people
     .map((person) => {
@@ -373,6 +484,7 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
       const fallbackFifaCode = person.birth_country_id ? (countryFifaCodeMap.get(person.birth_country_id) ?? null) : null
       const representedNames = representedData.length ? representedData.map((d) => d.name) : (fallbackName ? [fallbackName] : [])
       const representedFifaCodes = representedData.length ? representedData.map((d) => d.fifaCode) : (fallbackFifaCode ? [fallbackFifaCode] : [])
+      const stats = statsByPersonId.get(person.id)
 
       return {
         id: person.id,
@@ -395,6 +507,11 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
         represented_country_fifa_codes: representedFifaCodes,
         roles: rolesByPersonId.get(person.id) ?? [],
         role_labels: mapRolesToLabels(rolesByPersonId.get(person.id) ?? []),
+        appearance_count: stats?.appearance_count ?? 0,
+        goal_count: stats?.goal_count ?? 0,
+        assist_count: stats?.assist_count ?? 0,
+        yellow_card_count: stats?.yellow_card_count ?? 0,
+        red_card_count: stats?.red_card_count ?? 0,
       }
     })
     .sort((a, b) => buildDisplayName(a).localeCompare(buildDisplayName(b), 'pl'))
@@ -477,6 +594,11 @@ export async function getAdminPeoplePage(
         represented_country_fifa_codes: representedFifaCodes,
         roles: rolesByPersonId.get(person.id) ?? [],
         role_labels: mapRolesToLabels(rolesByPersonId.get(person.id) ?? []),
+        appearance_count: 0,
+        goal_count: 0,
+        assist_count: 0,
+        yellow_card_count: 0,
+        red_card_count: 0,
       }
     }),
     total: count ?? 0,
@@ -530,6 +652,10 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     ? explicitRepresentedData.map((d) => d.fifaCode)
     : (fallbackFifaCode ? [fallbackFifaCode] : [])
 
+  const isPlayer = roles.includes('PLAYER')
+  const statsMap = isPlayer ? await getPersonStats(supabase, [person.id]) : new Map()
+  const stats = statsMap.get(person.id)
+
   return {
     id: person.id,
     first_name: person.first_name,
@@ -548,5 +674,10 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     represented_country_fifa_codes: representedFifaCodes,
     roles,
     role_labels: mapRolesToLabels(roles),
+    appearance_count: stats?.appearance_count ?? 0,
+    goal_count: stats?.goal_count ?? 0,
+    assist_count: stats?.assist_count ?? 0,
+    yellow_card_count: stats?.yellow_card_count ?? 0,
+    red_card_count: stats?.red_card_count ?? 0,
   }
 }

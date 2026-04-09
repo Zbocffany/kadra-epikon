@@ -6,6 +6,131 @@ export type AdminClub = {
   name: string
   city_name: string | null
   country_name: string | null
+  country_fifa_code: string | null
+  player_count: number
+  appearance_count: number
+  goal_count: number
+}
+
+type ClubParticipantRow = {
+  person_id: string
+  match_id: string
+  is_starting: boolean | null
+  club_team_id: string
+}
+
+async function getClubStats(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  clubIds: string[]
+): Promise<Map<string, { player_count: number; appearance_count: number; goal_count: number }>> {
+  if (!clubIds.length) return new Map()
+
+  // Find Poland's team ID
+  const { data: polandCountry } = await supabase
+    .from('tbl_Countries')
+    .select('id')
+    .ilike('name', 'Polska')
+    .maybeSingle()
+  if (!polandCountry) return new Map()
+
+  const { data: polandTeam } = await supabase
+    .from('tbl_Teams')
+    .select('id')
+    .eq('country_id', polandCountry.id)
+    .maybeSingle()
+  if (!polandTeam) return new Map()
+
+  const polandTeamId = polandTeam.id
+
+  const { data: teams, error: teamsError } = await supabase
+    .from('tbl_Teams')
+    .select('id, club_id')
+    .in('club_id', clubIds)
+  if (teamsError) throw new Error(`tbl_Teams: ${teamsError.message}`)
+
+  const teamRows = (teams ?? []) as Array<{ id: string; club_id: string }>
+  if (!teamRows.length) return new Map()
+
+  const clubIdByTeamId = new Map(teamRows.map((t) => [t.id, t.club_id]))
+  const teamIds = [...clubIdByTeamId.keys()]
+
+  const CHUNK_SIZE = 80
+  const allParticipants: ClubParticipantRow[] = []
+  for (let i = 0; i < teamIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Match_Participants')
+      .select('person_id, match_id, is_starting, club_team_id')
+      .eq('role', 'PLAYER')
+      .eq('team_id', polandTeamId)
+      .in('club_team_id', teamIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
+    allParticipants.push(...((data ?? []) as ClubParticipantRow[]))
+  }
+
+  if (!allParticipants.length) return new Map()
+
+  const allMatchIds = [...new Set(allParticipants.map((p) => p.match_id))]
+
+  const allSubEvents: Array<{ match_id: string; secondary_person_id: string }> = []
+  for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Match_Events')
+      .select('match_id, secondary_person_id')
+      .eq('event_type', 'SUBSTITUTION')
+      .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
+      .not('secondary_person_id', 'is', null)
+    if (error) throw new Error(`tbl_Match_Events (substitutions): ${error.message}`)
+    allSubEvents.push(...((data ?? []) as Array<{ match_id: string; secondary_person_id: string }>))
+  }
+
+  const subEnteredSet = new Set(allSubEvents.map((e) => `${e.match_id}:${e.secondary_person_id}`))
+  const playedParticipants = allParticipants.filter(
+    (p) => p.is_starting || subEnteredSet.has(`${p.match_id}:${p.person_id}`)
+  )
+
+  const matchPersonToTeamId = new Map<string, string>()
+  for (const p of playedParticipants) {
+    matchPersonToTeamId.set(`${p.match_id}:${p.person_id}`, p.club_team_id)
+  }
+
+  const allGoalEvents: Array<{ match_id: string; primary_person_id: string }> = []
+  for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Match_Events')
+      .select('match_id, primary_person_id')
+      .in('event_type', ['GOAL', 'PENALTY_GOAL'])
+      .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
+      .not('primary_person_id', 'is', null)
+    if (error) throw new Error(`tbl_Match_Events (goals): ${error.message}`)
+    allGoalEvents.push(...((data ?? []) as Array<{ match_id: string; primary_person_id: string }>))
+  }
+
+  const statsMap = new Map<string, { players: Set<string>; appearances: number; goals: number }>()
+
+  for (const p of playedParticipants) {
+    const clubId = clubIdByTeamId.get(p.club_team_id)
+    if (!clubId) continue
+    const s = statsMap.get(clubId) ?? { players: new Set(), appearances: 0, goals: 0 }
+    s.players.add(p.person_id)
+    s.appearances++
+    statsMap.set(clubId, s)
+  }
+
+  for (const e of allGoalEvents) {
+    const teamId = matchPersonToTeamId.get(`${e.match_id}:${e.primary_person_id}`)
+    if (!teamId) continue
+    const clubId = clubIdByTeamId.get(teamId)
+    if (!clubId) continue
+    const s = statsMap.get(clubId)
+    if (s) s.goals++
+  }
+
+  return new Map(
+    [...statsMap.entries()].map(([clubId, s]) => [
+      clubId,
+      { player_count: s.players.size, appearance_count: s.appearances, goal_count: s.goals },
+    ])
+  )
 }
 
 type CityCountryPeriod = {
@@ -66,6 +191,7 @@ export type AdminClubDetails = {
   club_city_id: string | null
   city_name: string | null
   country_name: string | null
+  country_fifa_code: string | null
   stadium_id: string | null
   stadium_name: string | null
 }
@@ -112,7 +238,11 @@ export async function getAdminClubs(): Promise<AdminClub[]> {
   const cityIds = [...new Set(clubs.map((c) => c.club_city_id).filter(Boolean))]
 
   if (!cityIds.length) {
-    return clubs.map((c) => ({ id: c.id, name: c.name, city_name: null, country_name: null }))
+    const stats = await getClubStats(supabase, clubs.map((c) => c.id))
+    return clubs.map((c) => {
+      const s = stats.get(c.id)
+      return { id: c.id, name: c.name, city_name: null, country_name: null, country_fifa_code: null, player_count: s?.player_count ?? 0, appearance_count: s?.appearance_count ?? 0, goal_count: s?.goal_count ?? 0 }
+    })
   }
 
   const [
@@ -147,27 +277,35 @@ export async function getAdminClubs(): Promise<AdminClub[]> {
 
   const countryIds = [...new Set([...currentCountryIdByCity.values()])]
   let countryMap = new Map<string, string>()
+  let countryFifaCodeMap = new Map<string, string | null>()
 
   if (countryIds.length) {
     const { data: countries, error: countriesError } = await supabase
       .from('tbl_Countries')
-      .select('id, name')
+      .select('id, name, fifa_code')
       .in('id', countryIds)
 
     if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
     countryMap = new Map((countries ?? []).map((country) => [country.id, country.name]))
+    countryFifaCodeMap = new Map((countries ?? []).map((country) => [country.id, country.fifa_code ?? null]))
   }
 
-  return clubs.map((c) => ({
-    id: c.id,
-    name: c.name,
-    city_name: c.club_city_id ? (cityMap.get(c.club_city_id) ?? null) : null,
-    country_name: c.club_city_id
-      ? ((currentCountryIdByCity.get(c.club_city_id)
-        ? countryMap.get(currentCountryIdByCity.get(c.club_city_id) as string)
-        : null) ?? null)
-      : null,
-  }))
+  const stats = await getClubStats(supabase, clubs.map((c) => c.id))
+
+  return clubs.map((c) => {
+    const countryId = c.club_city_id ? currentCountryIdByCity.get(c.club_city_id) : undefined
+    const s = stats.get(c.id)
+    return {
+      id: c.id,
+      name: c.name,
+      city_name: c.club_city_id ? (cityMap.get(c.club_city_id) ?? null) : null,
+      country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
+      country_fifa_code: countryId ? (countryFifaCodeMap.get(countryId) ?? null) : null,
+      player_count: s?.player_count ?? 0,
+      appearance_count: s?.appearance_count ?? 0,
+      goal_count: s?.goal_count ?? 0,
+    }
+  })
 }
 
 export async function getAdminClubsPage(
@@ -190,7 +328,7 @@ export async function getAdminClubsPage(
 
   if (!cityIds.length) {
     return {
-      items: clubs.map((c) => ({ id: c.id, name: c.name, city_name: null, country_name: null })),
+      items: clubs.map((c) => ({ id: c.id, name: c.name, city_name: null, country_name: null, country_fifa_code: null, player_count: 0, appearance_count: 0, goal_count: 0 })),
       total: count ?? 0,
     }
   }
@@ -227,28 +365,33 @@ export async function getAdminClubsPage(
 
   const countryIds = [...new Set([...currentCountryIdByCity.values()])]
   let countryMap = new Map<string, string>()
+  let countryFifaCodeMap = new Map<string, string | null>()
 
   if (countryIds.length) {
     const { data: countries, error: countriesError } = await supabase
       .from('tbl_Countries')
-      .select('id, name')
+      .select('id, name, fifa_code')
       .in('id', countryIds)
 
     if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
     countryMap = new Map((countries ?? []).map((country) => [country.id, country.name]))
+    countryFifaCodeMap = new Map((countries ?? []).map((country) => [country.id, country.fifa_code ?? null]))
   }
 
   return {
-    items: clubs.map((c) => ({
-      id: c.id,
-      name: c.name,
-      city_name: c.club_city_id ? (cityMap.get(c.club_city_id) ?? null) : null,
-      country_name: c.club_city_id
-        ? ((currentCountryIdByCity.get(c.club_city_id)
-          ? countryMap.get(currentCountryIdByCity.get(c.club_city_id) as string)
-          : null) ?? null)
-        : null,
-    })),
+    items: clubs.map((c) => {
+      const countryId = c.club_city_id ? currentCountryIdByCity.get(c.club_city_id) : undefined
+      return {
+        id: c.id,
+        name: c.name,
+        city_name: c.club_city_id ? (cityMap.get(c.club_city_id) ?? null) : null,
+        country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
+        country_fifa_code: countryId ? (countryFifaCodeMap.get(countryId) ?? null) : null,
+        player_count: 0,
+        appearance_count: 0,
+        goal_count: 0,
+      }
+    }),
     total: count ?? 0,
   }
 }
@@ -328,6 +471,7 @@ export async function getAdminClubDetails(
       club_city_id: null,
       city_name: null,
       country_name: null,
+      country_fifa_code: null,
       stadium_id: club.stadium_id ?? null,
       stadium_name: null,
     }
@@ -384,16 +528,18 @@ export async function getAdminClubDetails(
 
   const countryId = sortedPeriods[0]?.country_id ?? null
   let countryName: string | null = null
+  let countryFifaCode: string | null = null
 
   if (countryId) {
     const { data: country, error: countryError } = await supabase
       .from('tbl_Countries')
-      .select('name')
+      .select('name, fifa_code')
       .eq('id', countryId)
       .maybeSingle()
 
     if (countryError) throw new Error(`tbl_Countries: ${countryError.message}`)
     countryName = country?.name ?? null
+    countryFifaCode = country?.fifa_code ?? null
   }
 
   return {
@@ -402,6 +548,7 @@ export async function getAdminClubDetails(
     club_city_id: club.club_city_id,
     city_name: city?.city_name ?? null,
     country_name: countryName,
+    country_fifa_code: countryFifaCode,
     stadium_id: club.stadium_id ?? null,
     stadium_name: stadium?.name ?? null,
   }
