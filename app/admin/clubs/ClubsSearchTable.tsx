@@ -1,24 +1,37 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import AdminSearchableTable from '@/components/admin/AdminSearchableTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import type { AdminClub } from '@/lib/db/clubs'
 import CountryFlag from '@/components/CountryFlag'
+import PlayerSilhouetteIcon from '@/components/icons/PlayerSilhouetteIcon'
+import PitchIcon from '@/components/icons/PitchIcon'
+import { GoalIcon } from '@/components/icons'
+import SortableStatHeader from '@/components/admin/SortableStatHeader'
 
 export default function ClubsSearchTable({ clubs }: { clubs: AdminClub[] }) {
-  const sorted = [...clubs].sort((a, b) => b.appearance_count - a.appearance_count || a.name.localeCompare(b.name, 'pl'))
+  type SortKey = 'player_count' | 'appearance_count' | 'goal_count'
+  const [sortKey, setSortKey] = useState<SortKey>('appearance_count')
+
+  const sorted = [...clubs].sort((a, b) => (b[sortKey] as number) - (a[sortKey] as number))
+
+  function statHeader(key: SortKey, icon: React.ReactNode, label: string) {
+    return <SortableStatHeader active={sortKey === key} onClick={() => setSortKey(key)} icon={icon} label={label} />
+  }
 
   const columns: AdminTableColumn<AdminClub>[] = [
     {
       key: 'index',
-      label: '#',
+      label: '',
       render: (_, index) => index + 1,
       className: 'text-neutral-500 w-8 pr-2',
     },
     {
       key: 'name',
-      label: 'Nazwa',
+      label: '',
+      headerRender: () => null,
       render: (club) => (
         <div className="flex items-center gap-2.5">
           <CountryFlag fifaCode={club.country_fifa_code} countryName={club.country_name ?? '—'} className="h-3.5 w-[21px] shrink-0" />
@@ -30,7 +43,7 @@ export default function ClubsSearchTable({ clubs }: { clubs: AdminClub[] }) {
               {club.name}
             </Link>
             {club.city_name && (
-              <span className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded border border-neutral-600 bg-neutral-800 px-2 py-1 text-xs text-neutral-300 opacity-0 transition-opacity group-hover/tooltip:opacity-100">
+              <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-neutral-500 bg-black px-2 py-1 text-[11px] font-bold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/tooltip:opacity-100">
                 {club.city_name}
               </span>
             )}
@@ -40,16 +53,25 @@ export default function ClubsSearchTable({ clubs }: { clubs: AdminClub[] }) {
       className: 'font-medium pl-2',
     },
     {
-      key: 'stats',
-      label: '',
-      render: (club) => (club.player_count > 0 || club.appearance_count > 0 || club.goal_count > 0) ? (
-        <div className="flex items-center gap-5 text-sm font-semibold text-neutral-500">
-          <span>Zawodnicy: <span className="text-neutral-400">{club.player_count}</span></span>
-          <span>Występy: <span className="text-neutral-400">{club.appearance_count}</span></span>
-          <span>Bramki: <span className="text-neutral-400">{club.goal_count}</span></span>
-        </div>
-      ) : null,
-      className: 'whitespace-nowrap',
+      key: 'player_count',
+      label: 'Zawodnicy',
+      headerRender: () => statHeader('player_count', <PlayerSilhouetteIcon className="h-5 w-5" />, 'Zawodnicy'),
+      render: (club) => <span className="text-sm font-semibold text-neutral-300">{club.player_count || '–'}</span>,
+      className: 'text-center !px-2 w-14',
+    },
+    {
+      key: 'appearances',
+      label: 'Występy',
+      headerRender: () => statHeader('appearance_count', <PitchIcon className="h-5 w-5" />, 'Występy'),
+      render: (club) => <span className="text-sm font-semibold text-neutral-300">{club.appearance_count || '–'}</span>,
+      className: 'text-center !px-2 w-14',
+    },
+    {
+      key: 'goals',
+      label: 'Gole',
+      headerRender: () => statHeader('goal_count', <GoalIcon className="h-5 w-5" />, 'Gole'),
+      render: (club) => <span className="text-sm font-semibold text-neutral-300">{club.goal_count || '–'}</span>,
+      className: 'text-center !px-2 w-14',
     },
   ]
 
@@ -58,7 +80,7 @@ export default function ClubsSearchTable({ clubs }: { clubs: AdminClub[] }) {
       data={sorted}
       columns={columns}
       searchPlaceholder="Wpisz nazwę klubu albo miasto..."
-      showHeader={false}
+      showHeader={true}
       defaultLimit={50}
       emptyMessage="Brak klubów w bazie danych."
       emptySearchMessage="Brak klubów pasujących do wyszukiwanej frazy."

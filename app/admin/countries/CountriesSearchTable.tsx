@@ -10,16 +10,16 @@ export default function CountriesSearchTable({ countries }: { countries: AdminCo
   const columns: AdminTableColumn<AdminCountry>[] = [
     {
       key: 'index',
-      label: '#',
+      label: '',
       render: (_, index) => index + 1,
-      className: 'text-neutral-500',
+      className: 'text-neutral-500 w-8 pr-2',
     },
     {
       key: 'name',
       label: 'Nazwa',
       render: (country) => (
-        <div className="flex items-center gap-2">
-          <CountryFlag fifaCode={country.fifa_code} countryName={country.name} />
+        <div className="flex items-center gap-2.5">
+          <CountryFlag fifaCode={country.fifa_code} countryName={country.name} className="h-3.5 w-[21px] shrink-0" />
           <Link
             href={`/admin/countries/${country.id}`}
             className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
@@ -28,7 +28,7 @@ export default function CountriesSearchTable({ countries }: { countries: AdminCo
           </Link>
         </div>
       ),
-      className: 'font-medium',
+      className: 'font-medium pl-2',
     },
     {
       key: 'fifa_code',

@@ -9,6 +9,7 @@ import type { AdminPersonListItem, AdminPersonRole } from '@/lib/db/people'
 import { getPersonDisplayName } from '@/lib/db/people'
 import PitchIcon from '@/components/icons/PitchIcon'
 import { GoalIcon, AssistIcon, YellowCardIcon, RedCardIcon } from '@/components/icons'
+import SortableStatHeader from '@/components/admin/SortableStatHeader'
 
 const ROLE_META: Record<AdminPersonRole, { initial: string; label: string; className: string }> = {
   PLAYER: {
@@ -45,39 +46,11 @@ function getActivityLabel(person: AdminPersonListItem): string {
 export default function PeopleSearchTable({ people }: { people: AdminPersonListItem[] }) {
   type SortKey = 'appearance_count' | 'goal_count' | 'assist_count' | 'yellow_card_count' | 'red_card_count'
   const [sortKey, setSortKey] = useState<SortKey>('appearance_count')
-  const [sortDir, setSortDir] = useState<'desc' | 'asc'>('desc')
 
-  function handleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir((d) => d === 'desc' ? 'asc' : 'desc')
-    } else {
-      setSortKey(key)
-      setSortDir('desc')
-    }
-  }
-
-  const sorted = [...people].sort((a, b) => {
-    const diff = (a[sortKey] as number) - (b[sortKey] as number)
-    return sortDir === 'desc' ? -diff : diff
-  })
+  const sorted = [...people].sort((a, b) => (b[sortKey] as number) - (a[sortKey] as number))
 
   function statHeader(key: SortKey, icon: React.ReactNode, label: string) {
-    const active = sortKey === key
-    return (
-      <button
-        type="button"
-        onClick={() => handleSort(key)}
-        className={`flex items-center justify-center gap-0.5 mx-auto transition-opacity ${
-          active ? 'opacity-100' : 'opacity-50 hover:opacity-80'
-        }`}
-        title={label}
-      >
-        {icon}
-        <span className={`text-[10px] leading-none ${
-          active ? 'text-neutral-300' : 'text-neutral-500'
-        }`}>{sortDir === 'desc' && active ? '▼' : sortDir === 'asc' && active ? '▲' : ''}</span>
-      </button>
-    )
+    return <SortableStatHeader active={sortKey === key} onClick={() => setSortKey(key)} icon={icon} label={label} />
   }
 
   const columns: AdminTableColumn<AdminPersonListItem>[] = [
@@ -129,7 +102,7 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
       render: (person) => person.roles.includes('PLAYER')
         ? <span className="text-sm font-semibold text-neutral-300">{person.appearance_count || '–'}</span>
         : null,
-      className: 'text-center',
+      className: 'text-center !px-2',
     },
     {
       key: 'goals',
@@ -138,7 +111,7 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
       render: (person) => person.roles.includes('PLAYER')
         ? <span className="text-sm font-semibold text-neutral-300">{person.goal_count || '–'}</span>
         : null,
-      className: 'text-center',
+      className: 'text-center !px-2',
     },
     {
       key: 'assists',
@@ -147,7 +120,7 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
       render: (person) => person.roles.includes('PLAYER')
         ? <span className="text-sm font-semibold text-neutral-300">{person.assist_count || '–'}</span>
         : null,
-      className: 'text-center',
+      className: 'text-center !px-2',
     },
     {
       key: 'yellow_cards',
@@ -156,7 +129,7 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
       render: (person) => person.roles.includes('PLAYER')
         ? <span className="text-sm font-semibold text-neutral-300">{person.yellow_card_count || '–'}</span>
         : null,
-      className: 'text-center',
+      className: 'text-center !px-2',
     },
     {
       key: 'red_cards',
@@ -165,7 +138,7 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
       render: (person) => person.roles.includes('PLAYER')
         ? <span className="text-sm font-semibold text-neutral-300">{person.red_card_count || '–'}</span>
         : null,
-      className: 'text-center',
+      className: 'text-center !px-2',
     },
   ]
 

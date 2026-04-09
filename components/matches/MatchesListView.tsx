@@ -152,7 +152,7 @@ function renderScoreWithFlags(match: AdminMatch) {
           <span className="relative z-10">{label}</span>
         </span>
         {shootout && (
-          <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 -translate-x-1/2 whitespace-nowrap rounded border border-neutral-600 bg-neutral-900 px-2 py-0.5 text-[11px] font-semibold text-neutral-200 opacity-0 shadow-lg transition-opacity group-hover/score:opacity-100">
+          <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-neutral-500 bg-black px-2 py-1 text-[11px] font-bold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/score:opacity-100">
             Karne {shootout}
           </span>
         )}
