@@ -49,6 +49,7 @@ export type AdminPersonListItem = {
 
 export type AdminPersonDetails = AdminPersonListItem & {
   represented_country_ids: string[]
+  minute_count: number
 }
 
 export type AdminPersonBirthCityOption = {
@@ -445,6 +446,96 @@ async function getPersonStats(
   return statsMap
 }
 
+/**
+ * Computes total regular-time minutes on pitch for a single player.
+ * Injury/stoppage time is ignored: a player entering during added time of any
+ * half/period is credited with 1 minute for that period.
+ */
+async function getPlayerMinutes(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  personId: string
+): Promise<number> {
+  const { data: participations, error: partError } = await supabase
+    .from('tbl_Match_Participants')
+    .select('match_id, is_starting')
+    .eq('role', 'PLAYER')
+    .eq('person_id', personId)
+  if (partError) throw new Error(`tbl_Match_Participants (minutes): ${partError.message}`)
+  if (!participations?.length) return 0
+
+  const [subOnRes, subOffRes] = await Promise.all([
+    supabase
+      .from('tbl_Match_Events')
+      .select('match_id, minute, minute_extra')
+      .eq('event_type', 'SUBSTITUTION')
+      .eq('secondary_person_id', personId),
+    supabase
+      .from('tbl_Match_Events')
+      .select('match_id, minute, minute_extra')
+      .eq('event_type', 'SUBSTITUTION')
+      .eq('primary_person_id', personId),
+  ])
+  if (subOnRes.error) throw new Error(`tbl_Match_Events (sub-on): ${subOnRes.error.message}`)
+  if (subOffRes.error) throw new Error(`tbl_Match_Events (sub-off): ${subOffRes.error.message}`)
+
+  type SubEntry = { minute: number; extra: number }
+  const subOnByMatch = new Map<string, SubEntry>(
+    (subOnRes.data ?? []).map((e) => [e.match_id as string, { minute: e.minute as number, extra: (e.minute_extra as number | null) ?? 0 }])
+  )
+  const subOffByMatch = new Map<string, SubEntry>(
+    (subOffRes.data ?? []).map((e) => [e.match_id as string, { minute: e.minute as number, extra: (e.minute_extra as number | null) ?? 0 }])
+  )
+
+  const subOnMatchIds = new Set((subOnRes.data ?? []).map((e) => e.match_id as string))
+  const playedParticipations = participations.filter(
+    (p) => p.is_starting || subOnMatchIds.has(p.match_id)
+  )
+  if (!playedParticipations.length) return 0
+
+  const playedMatchIds = [...new Set(playedParticipations.map((p) => p.match_id))]
+  const CHUNK = 80
+  const matchResultTypeMap = new Map<string, string | null>()
+  for (let i = 0; i < playedMatchIds.length; i += CHUNK) {
+    const { data, error } = await supabase
+      .from('tbl_Matches')
+      .select('id, result_type')
+      .in('id', playedMatchIds.slice(i, i + CHUNK))
+    if (error) throw new Error(`tbl_Matches (result_type): ${error.message}`)
+    for (const m of data ?? []) matchResultTypeMap.set(m.id as string, m.result_type as string | null)
+  }
+
+  let totalMinutes = 0
+  for (const p of playedParticipations) {
+    const resultType = matchResultTypeMap.get(p.match_id) ?? null
+    const hasExtraTime =
+      resultType === 'EXTRA_TIME' ||
+      resultType === 'EXTRA_TIME_AND_PENALTIES' ||
+      resultType === 'GOLDEN_GOAL'
+    const matchRegularEnd = hasExtraTime ? 120 : 90
+
+    const isStarter = p.is_starting === true
+    const subOn = isStarter ? null : (subOnByMatch.get(p.match_id) ?? null)
+    if (!isStarter && !subOn) continue
+
+    const subOff = subOffByMatch.get(p.match_id) ?? null
+
+    const entryMin = isStarter ? 0 : subOn!.minute
+    const entryExtra = isStarter ? 0 : subOn!.extra
+    const exitMin = subOff ? subOff.minute : matchRegularEnd
+    const exitExtra = subOff ? subOff.extra : 0
+
+    // If entering during injury time of a period (minute == period end, extra > 0),
+    // shift effectiveEntry back by 1 to give exactly 1 minute for that period remainder.
+    const effectiveEntry = entryExtra > 0 ? entryMin - 1 : entryMin
+    // If exiting during injury time, cap to the period's regular end.
+    const effectiveExit = Math.min(exitExtra > 0 ? exitMin : exitMin, matchRegularEnd)
+
+    totalMinutes += Math.max(0, effectiveExit - effectiveEntry)
+  }
+
+  return totalMinutes
+}
+
 export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
   const supabase = createServiceRoleClient()
 
@@ -665,7 +756,10 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     : (fallbackFifaCode ? [fallbackFifaCode] : [])
 
   const isPlayer = roles.includes('PLAYER')
-  const statsMap = isPlayer ? await getPersonStats(supabase, [person.id]) : new Map()
+  const [statsMap, minuteCount] = await Promise.all([
+    isPlayer ? getPersonStats(supabase, [person.id]) : Promise.resolve(new Map()),
+    isPlayer ? getPlayerMinutes(supabase, person.id) : Promise.resolve(0),
+  ])
   const stats = statsMap.get(person.id)
 
   return {
@@ -692,5 +786,6 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     yellow_card_count: stats?.yellow_card_count ?? 0,
     red_card_count: stats?.red_card_count ?? 0,
     bench_count: stats?.bench_count ?? 0,
+    minute_count: minuteCount,
   }
 }

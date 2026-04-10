@@ -5,6 +5,7 @@ import {
   CLUB_HISTORY_EVENT_TYPES,
   getAdminCities,
   getAdminClubDetails,
+  getAdminClubDetailStats,
   getClubHistory,
 } from '@/lib/db/clubs'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
@@ -18,6 +19,10 @@ import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
 import CountryFlag from '@/components/CountryFlag'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { createStadiumInline } from '@/app/admin/stadiums/actions'
+import PlayerSilhouetteIcon from '@/components/icons/PlayerSilhouetteIcon'
+import PitchIcon from '@/components/icons/PitchIcon'
+import ClockIcon from '@/components/icons/ClockIcon'
+import { GoalIcon, AssistIcon } from '@/components/icons'
 import {
   DetailsPageContainer,
   DetailsPageHeader,
@@ -85,12 +90,13 @@ export default async function AdminClubDetailsPage({
   const { mode, saved, error, history } =
     (await searchParams) as Awaited<SearchParams> & { history?: string }
 
-  const [club, cities, countries, stadiums, historyEvents] = await Promise.all([
+  const [club, cities, countries, stadiums, historyEvents, clubStats] = await Promise.all([
     getAdminClubDetails(id),
     getAdminCities(),
     getAdminCountriesOptions(),
     getAdminStadiumOptions(),
     getClubHistory(id),
+    getAdminClubDetailStats(id),
   ])
 
   if (!club) {
@@ -182,7 +188,7 @@ export default async function AdminClubDetailsPage({
         title={club.name}
         breadcrumb=""
         subtitle={club.city_name ? (
-          <span className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-400">
+          <span className="stat-badge inline-flex items-center gap-1.5 rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">
             {club.city_name}
           </span>
         ) : undefined}
@@ -215,6 +221,21 @@ export default async function AdminClubDetailsPage({
         }
         viewContent={
           <>
+            <div className="mt-4 grid grid-cols-5">
+              {([
+                { icon: <PlayerSilhouetteIcon className="h-5 w-5 text-neutral-400" />, label: 'Zawodnicy', value: clubStats.player_count },
+                { icon: <PitchIcon className="h-5 w-5 text-neutral-400" />, label: 'Występy', value: clubStats.appearance_count },
+                { icon: <GoalIcon className="h-5 w-5 text-neutral-400" />, label: 'Gole', value: clubStats.goal_count },
+                { icon: <AssistIcon className="h-5 w-5 text-neutral-400" />, label: 'Asysty', value: clubStats.assist_count },
+                { icon: <ClockIcon className="h-5 w-5 text-neutral-400" />, label: 'Minuty', value: clubStats.minute_count },
+              ] as const).map(({ icon, label, value }) => (
+                <div key={label} className="flex flex-col items-center gap-1.5 py-3">
+                  <span title={label}>{icon}</span>
+                  <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{value}</span>
+                </div>
+              ))}
+            </div>
+
             <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-6">
               <details open={historyEvents.length > 0} className="overflow-hidden rounded-lg border border-neutral-800 group/det">
                 <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-neutral-500 marker:content-none">

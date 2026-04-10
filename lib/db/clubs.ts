@@ -554,6 +554,159 @@ export async function getAdminClubDetails(
   }
 }
 
+/**
+ * Detailed stats for a single club: unique players, appearances, goals, assists and minutes
+ * played for Poland's national team by players representing this club.
+ *
+ * Minute calculation rule (mirrors getPlayerMinutes in lib/db/people.ts):
+ * - Stoppage/added time is NOT counted.
+ * - A player entering during added time of a period (minute == period boundary, minute_extra > 0)
+ *   earns exactly 1 minute for that period remainder (effectiveEntry = entryMin - 1).
+ * - Exit during added time is clamped to the regular period boundary.
+ * - Regular match max: 90 min. Extra-time match (EXTRA_TIME, EXTRA_TIME_AND_PENALTIES, GOLDEN_GOAL): 120 min.
+ */
+export async function getAdminClubDetailStats(clubId: string): Promise<{
+  player_count: number
+  appearance_count: number
+  goal_count: number
+  assist_count: number
+  minute_count: number
+}> {
+  const supabase = createServiceRoleClient()
+  const CHUNK_SIZE = 80
+  const zero = { player_count: 0, appearance_count: 0, goal_count: 0, assist_count: 0, minute_count: 0 }
+
+  const { data: polandCountry } = await supabase.from('tbl_Countries').select('id').ilike('name', 'Polska').maybeSingle()
+  if (!polandCountry) return zero
+  const { data: polandTeam } = await supabase.from('tbl_Teams').select('id').eq('country_id', polandCountry.id).maybeSingle()
+  if (!polandTeam) return zero
+  const polandTeamId = polandTeam.id
+
+  const { data: clubTeams, error: teamsError } = await supabase.from('tbl_Teams').select('id').eq('club_id', clubId)
+  if (teamsError) throw new Error(`tbl_Teams: ${teamsError.message}`)
+  const clubTeamIds = (clubTeams ?? []).map((t) => t.id)
+  if (!clubTeamIds.length) return zero
+
+  type ParticipantRow = { person_id: string; match_id: string; is_starting: boolean | null }
+  const allParticipants: ParticipantRow[] = []
+  for (let i = 0; i < clubTeamIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Match_Participants')
+      .select('person_id, match_id, is_starting')
+      .eq('role', 'PLAYER')
+      .eq('team_id', polandTeamId)
+      .in('club_team_id', clubTeamIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
+    allParticipants.push(...((data ?? []) as ParticipantRow[]))
+  }
+  if (!allParticipants.length) return zero
+
+  const allMatchIds = [...new Set(allParticipants.map((p) => p.match_id))]
+
+  // Determine who actually played (started or entered as sub)
+  type SubEvent = { match_id: string; secondary_person_id: string }
+  const allSubEvents: SubEvent[] = []
+  for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Match_Events')
+      .select('match_id, secondary_person_id')
+      .eq('event_type', 'SUBSTITUTION')
+      .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
+      .not('secondary_person_id', 'is', null)
+    if (error) throw new Error(`tbl_Match_Events (substitutions): ${error.message}`)
+    allSubEvents.push(...((data ?? []) as SubEvent[]))
+  }
+
+  const subEnteredSet = new Set(allSubEvents.map((e) => `${e.match_id}:${e.secondary_person_id}`))
+  const playedParticipants = allParticipants.filter(
+    (p) => p.is_starting || subEnteredSet.has(`${p.match_id}:${p.person_id}`)
+  )
+  if (!playedParticipants.length) return zero
+
+  const playedMatchIds = [...new Set(playedParticipants.map((p) => p.match_id))]
+  const playedMatchPersonSet = new Set(playedParticipants.map((p) => `${p.match_id}:${p.person_id}`))
+
+  // Goals and assists
+  type PrimaryEvent = { match_id: string; primary_person_id: string }
+  type SecondaryEvent = { match_id: string; secondary_person_id: string }
+  const allGoalEvents: PrimaryEvent[] = []
+  const allAssistEvents: SecondaryEvent[] = []
+  for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
+    const batch = playedMatchIds.slice(i, i + CHUNK_SIZE)
+    const [goalsRes, assistsRes] = await Promise.all([
+      supabase.from('tbl_Match_Events').select('match_id, primary_person_id').in('event_type', ['GOAL', 'PENALTY_GOAL']).in('match_id', batch).not('primary_person_id', 'is', null),
+      supabase.from('tbl_Match_Events').select('match_id, secondary_person_id').in('event_type', ['GOAL', 'OWN_GOAL']).in('match_id', batch).not('secondary_person_id', 'is', null),
+    ])
+    if (goalsRes.error) throw new Error(`tbl_Match_Events (goals): ${goalsRes.error.message}`)
+    if (assistsRes.error) throw new Error(`tbl_Match_Events (assists): ${assistsRes.error.message}`)
+    allGoalEvents.push(...((goalsRes.data ?? []) as PrimaryEvent[]))
+    allAssistEvents.push(...((assistsRes.data ?? []) as SecondaryEvent[]))
+  }
+
+  // Sub-on / sub-off events for minute calculation
+  type SubInRow = { match_id: string; secondary_person_id: string; minute: number; minute_extra: number | null }
+  type SubOffRow = { match_id: string; primary_person_id: string; minute: number; minute_extra: number | null }
+  const allSubInEvents: SubInRow[] = []
+  const allSubOffEvents: SubOffRow[] = []
+  for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
+    const batch = playedMatchIds.slice(i, i + CHUNK_SIZE)
+    const [subInRes, subOffRes] = await Promise.all([
+      supabase.from('tbl_Match_Events').select('match_id, secondary_person_id, minute, minute_extra').eq('event_type', 'SUBSTITUTION').in('match_id', batch).not('secondary_person_id', 'is', null),
+      supabase.from('tbl_Match_Events').select('match_id, primary_person_id, minute, minute_extra').eq('event_type', 'SUBSTITUTION').in('match_id', batch).not('primary_person_id', 'is', null),
+    ])
+    if (subInRes.error) throw new Error(`tbl_Match_Events (sub-in): ${subInRes.error.message}`)
+    if (subOffRes.error) throw new Error(`tbl_Match_Events (sub-off): ${subOffRes.error.message}`)
+    allSubInEvents.push(...((subInRes.data ?? []) as SubInRow[]))
+    allSubOffEvents.push(...((subOffRes.data ?? []) as SubOffRow[]))
+  }
+
+  // Match result types to determine max duration
+  const matchResultTypeMap = new Map<string, string | null>()
+  for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase.from('tbl_Matches').select('id, result_type').in('id', playedMatchIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Matches: ${error.message}`)
+    for (const m of data ?? []) matchResultTypeMap.set(m.id as string, m.result_type as string | null)
+  }
+
+  type SubEntry = { minute: number; extra: number }
+  const subInMap = new Map<string, SubEntry>()
+  for (const e of allSubInEvents) subInMap.set(`${e.match_id}:${e.secondary_person_id}`, { minute: e.minute, extra: e.minute_extra ?? 0 })
+  const subOffMap = new Map<string, SubEntry>()
+  for (const e of allSubOffEvents) subOffMap.set(`${e.match_id}:${e.primary_person_id}`, { minute: e.minute, extra: e.minute_extra ?? 0 })
+
+  const player_count = new Set(playedParticipants.map((p) => p.person_id)).size
+  const appearance_count = playedParticipants.length
+
+  let goal_count = 0
+  for (const e of allGoalEvents) {
+    if (playedMatchPersonSet.has(`${e.match_id}:${e.primary_person_id}`)) goal_count++
+  }
+  let assist_count = 0
+  for (const e of allAssistEvents) {
+    if (playedMatchPersonSet.has(`${e.match_id}:${e.secondary_person_id}`)) assist_count++
+  }
+
+  let minute_count = 0
+  for (const p of playedParticipants) {
+    const resultType = matchResultTypeMap.get(p.match_id) ?? null
+    const hasExtraTime = resultType === 'EXTRA_TIME' || resultType === 'EXTRA_TIME_AND_PENALTIES' || resultType === 'GOLDEN_GOAL'
+    const matchRegularEnd = hasExtraTime ? 120 : 90
+    const isStarter = p.is_starting === true
+    const subOn = isStarter ? null : (subInMap.get(`${p.match_id}:${p.person_id}`) ?? null)
+    if (!isStarter && !subOn) continue
+    const subOff = subOffMap.get(`${p.match_id}:${p.person_id}`) ?? null
+    const entryMin = isStarter ? 0 : subOn!.minute
+    const entryExtra = isStarter ? 0 : subOn!.extra
+    const exitMin = subOff ? subOff.minute : matchRegularEnd
+    const exitExtra = subOff ? subOff.extra : 0
+    const effectiveEntry = entryExtra > 0 ? entryMin - 1 : entryMin
+    const effectiveExit = Math.min(exitExtra > 0 ? exitMin : exitMin, matchRegularEnd)
+    minute_count += Math.max(0, effectiveExit - effectiveEntry)
+  }
+
+  return { player_count, appearance_count, goal_count, assist_count, minute_count }
+}
+
 export async function getClubHistory(
   clubId: string
 ): Promise<AdminClubHistoryEvent[]> {

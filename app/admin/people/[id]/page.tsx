@@ -18,6 +18,9 @@ import CountryFlag from '@/components/CountryFlag'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 import PersonBirthplaceFields from '@/components/admin/PersonBirthplaceFields'
 import PersonRepresentedCountriesFields from '@/components/admin/PersonRepresentedCountriesFields'
+import PitchIcon from '@/components/icons/PitchIcon'
+import ClockIcon from '@/components/icons/ClockIcon'
+import { GoalIcon, AssistIcon, YellowCardIcon, RedCardIcon } from '@/components/icons'
 
 type Params = DetailPageParams
 type SearchParams = DetailPageSearchParams
@@ -94,21 +97,19 @@ export default async function AdminPersonDetailsPage({
     <div className="mt-6 rounded-lg border border-neutral-800 bg-neutral-900/60 p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xl font-semibold text-neutral-100">{displayName}</p>
+          <p className="font-barlow text-2xl font-semibold text-neutral-100">{displayName}</p>
           {!isEdit && (
             <div className="mt-2 flex flex-col items-start gap-2">
               {person.birth_date && (
-                <span className="inline-flex h-7 items-center rounded-md border border-neutral-600 bg-neutral-900 px-2.5 text-xs font-medium text-neutral-200">
+                <span className="stat-badge inline-flex items-center gap-1.5 rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">
                   {birthDateFormatted}
-                  {getAge(person.birth_date) !== null && (
-                    <span className="ml-1 font-semibold">
-                      {person.death_date ? null : `(${getAge(person.birth_date)} l.)`}
-                    </span>
+                  {getAge(person.birth_date) !== null && !person.death_date && (
+                    <span className="font-normal text-neutral-500 light:text-neutral-400">({getAge(person.birth_date)} l.)</span>
                   )}
                 </span>
               )}
               {person.birth_city_name && (
-                <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-neutral-600 bg-neutral-900 px-2.5 text-xs font-medium text-neutral-200">
+                <span className="stat-badge inline-flex items-center gap-1.5 rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">
                   {person.birth_city_name}
                   {person.birth_country_fifa_code && (
                     <CountryFlag
@@ -148,16 +149,14 @@ export default async function AdminPersonDetailsPage({
                 key={flag.key}
                 fifaCode={flag.fifaCode}
                 countryName={flag.countryName}
-                className="h-[30px] w-[45px]"
+                className="h-[33px] w-[50px]"
               />
             ))}
           </div>
           {!isEdit && person.roles.includes('PLAYER') && (
             <div className="group/stats relative">
-              <span className="inline-flex h-7 items-center gap-1 rounded-md border border-neutral-600 bg-neutral-900 px-2.5 text-xs font-medium text-neutral-200">
-                <span className="font-bold">{person.appearance_count}</span>
-                <span className="text-neutral-500">/</span>
-                <span className="font-bold">{person.goal_count}</span>
+              <span className="stat-badge inline-flex min-w-[2.4rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-2 py-1 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[1.08rem] font-semibold text-neutral-200 light:text-neutral-900">
+                {person.appearance_count}<span className="mx-0.5 font-normal text-neutral-500 light:text-neutral-400">/</span>{person.goal_count}
               </span>
               <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-neutral-500 bg-black px-2 py-1 text-[11px] font-bold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/stats:opacity-100">
                 <span className="font-normal text-neutral-400">Występy</span> {person.appearance_count} <span className="mx-1 text-neutral-600">/</span> <span className="font-normal text-neutral-400">Gole</span> {person.goal_count}
@@ -166,6 +165,24 @@ export default async function AdminPersonDetailsPage({
           )}
         </div>
       </div>
+
+      {!isEdit && person.roles.includes('PLAYER') && (
+        <div className="mt-4 grid grid-cols-6">
+          {([
+            { icon: <PitchIcon className="h-5 w-5 text-neutral-400" />, label: 'Występy', value: person.appearance_count },
+            { icon: <GoalIcon className="h-5 w-5 text-neutral-400" />, label: 'Gole', value: person.goal_count },
+            { icon: <AssistIcon className="h-5 w-5 text-neutral-400" />, label: 'Asysty', value: person.assist_count },
+            { icon: <YellowCardIcon className="h-5 w-5" />, label: 'Żółte', value: person.yellow_card_count },
+            { icon: <RedCardIcon className="h-5 w-5" />, label: 'Czerwone', value: person.red_card_count },
+            { icon: <ClockIcon className="h-5 w-5 text-neutral-400" />, label: 'Minuty', value: person.minute_count },
+          ] as const).map(({ icon, label, value }) => (
+            <div key={label} className="flex flex-col items-center gap-1.5 py-3">
+              <span title={label}>{icon}</span>
+              <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{value}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {isEdit ? (
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
