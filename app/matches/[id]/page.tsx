@@ -4,6 +4,8 @@ import { getAdminMatchDetails, getAdminMatchEvents, getAdminMatchParticipants } 
 import { getAdminCityDetails } from '@/lib/db/cities'
 import { getAdminStadiumDetails } from '@/lib/db/stadiums'
 
+export const revalidate = 86400
+
 type Params = Promise<{ id: string }>
 
 function formatDate(dateStr: string) {

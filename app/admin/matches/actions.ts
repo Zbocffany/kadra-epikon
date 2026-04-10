@@ -1,5 +1,6 @@
 'use server'
 
+import { revalidatePath } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import {
@@ -1471,6 +1472,10 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
     await saveMatchEvents(supabase, formData, id, homeTeamId, awayTeamId, redirectPath)
   }
 
+  revalidatePath('/')
+  revalidatePath('/matches')
+  revalidatePath(`/matches/${id}`)
+
   redirectWithSaved(`/admin/matches/${id}`)
 }
 
@@ -1564,6 +1569,10 @@ export async function updateMatch(formData: FormData): Promise<void> {
   if (error) {
     redirectWithError(redirectPath, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
+
+  revalidatePath('/')
+  revalidatePath('/matches')
+  revalidatePath(`/matches/${id}`)
 
   redirectWithSaved(redirectPath)
 }
