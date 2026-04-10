@@ -222,6 +222,12 @@ export async function getAdminCountriesPage(
       name: c.name,
       fifa_code: c.fifa_code,
       federation_short_name: c.federation_id ? (federationMap.get(c.federation_id) ?? null) : null,
+      matches: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      goals_for: 0,
+      goals_against: 0,
     })),
     total: count ?? 0,
   }
