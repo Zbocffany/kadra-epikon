@@ -44,6 +44,7 @@ export type AdminPersonListItem = {
   assist_count: number
   yellow_card_count: number
   red_card_count: number
+  bench_count: number
 }
 
 export type AdminPersonDetails = AdminPersonListItem & {
@@ -333,7 +334,7 @@ export async function getAdminPersonBirthCityOptions(): Promise<AdminPersonBirth
   })
 }
 
-type PersonStatRow = { appearance_count: number; goal_count: number; assist_count: number; yellow_card_count: number; red_card_count: number }
+type PersonStatRow = { appearance_count: number; goal_count: number; assist_count: number; yellow_card_count: number; red_card_count: number; bench_count: number }
 
 async function getPersonStats(
   supabase: ReturnType<typeof createServiceRoleClient>,
@@ -377,6 +378,14 @@ async function getPersonStats(
     (p) => p.is_starting || subEnteredSet.has(`${p.match_id}:${p.person_id}`)
   )
 
+  const benchParticipants = allParticipants.filter(
+    (p) => !p.is_starting && !subEnteredSet.has(`${p.match_id}:${p.person_id}`)
+  )
+  const benchMap = new Map<string, number>()
+  for (const p of benchParticipants) {
+    benchMap.set(p.person_id, (benchMap.get(p.person_id) ?? 0) + 1)
+  }
+
   const playedMatchIds = [...new Set(playedParticipants.map((p) => p.match_id))]
   const playedPersonIds = new Set(playedParticipants.map((p) => p.person_id))
 
@@ -412,8 +421,9 @@ async function getPersonStats(
   }
 
   const statsMap = new Map<string, PersonStatRow>()
-  for (const personId of playedPersonIds) {
-    statsMap.set(personId, { appearance_count: appearanceMap.get(personId) ?? 0, goal_count: 0, assist_count: 0, yellow_card_count: 0, red_card_count: 0 })
+  const allPersonIds = new Set([...playedPersonIds, ...benchParticipants.map((p) => p.person_id)])
+  for (const personId of allPersonIds) {
+    statsMap.set(personId, { appearance_count: appearanceMap.get(personId) ?? 0, goal_count: 0, assist_count: 0, yellow_card_count: 0, red_card_count: 0, bench_count: benchMap.get(personId) ?? 0 })
   }
   for (const e of allGoals) {
     const s = e.primary_person_id ? statsMap.get(e.primary_person_id) : null
@@ -512,6 +522,7 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
         assist_count: stats?.assist_count ?? 0,
         yellow_card_count: stats?.yellow_card_count ?? 0,
         red_card_count: stats?.red_card_count ?? 0,
+        bench_count: stats?.bench_count ?? 0,
       }
     })
     .sort((a, b) => buildDisplayName(a).localeCompare(buildDisplayName(b), 'pl'))
@@ -599,6 +610,7 @@ export async function getAdminPeoplePage(
         assist_count: 0,
         yellow_card_count: 0,
         red_card_count: 0,
+        bench_count: 0,
       }
     }),
     total: count ?? 0,
@@ -679,5 +691,6 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     assist_count: stats?.assist_count ?? 0,
     yellow_card_count: stats?.yellow_card_count ?? 0,
     red_card_count: stats?.red_card_count ?? 0,
+    bench_count: stats?.bench_count ?? 0,
   }
 }

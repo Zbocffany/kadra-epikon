@@ -6,6 +6,12 @@ export type AdminCountry = {
   name: string
   fifa_code: string | null
   federation_short_name: string | null
+  matches: number
+  wins: number
+  draws: number
+  losses: number
+  goals_for: number
+  goals_against: number
 }
 
 export type AdminCountryDetails = {
@@ -19,6 +25,115 @@ export type AdminCountryDetails = {
 export type AdminFederation = {
   id: string
   short_name: string
+}
+
+type CountryVsPolandStat = {
+  matches: number
+  wins: number
+  draws: number
+  losses: number
+  goals_for: number
+  goals_against: number
+}
+
+async function getCountryVsPolandStats(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  countryIds: string[]
+): Promise<Map<string, CountryVsPolandStat>> {
+  const empty = new Map<string, CountryVsPolandStat>()
+  if (!countryIds.length) return empty
+
+  const { data: polandCountry } = await supabase
+    .from('tbl_Countries')
+    .select('id')
+    .ilike('name', 'Polska')
+    .maybeSingle()
+  if (!polandCountry) return empty
+
+  const { data: polandTeam } = await supabase
+    .from('tbl_Teams')
+    .select('id')
+    .eq('country_id', polandCountry.id)
+    .is('club_id', null)
+    .maybeSingle()
+  if (!polandTeam) return empty
+
+  const polandTeamId = (polandTeam as { id: string }).id
+
+  const { data: opponentTeams } = await supabase
+    .from('tbl_Teams')
+    .select('id, country_id')
+    .in('country_id', countryIds)
+    .is('club_id', null)
+  if (!opponentTeams?.length) return empty
+
+  const teamToCountry = new Map(opponentTeams.map((t) => [t.id as string, t.country_id as string]))
+  const opponentTeamIds = opponentTeams.map((t) => t.id as string)
+
+  const [{ data: homeMatches }, { data: awayMatches }] = await Promise.all([
+    supabase
+      .from('tbl_Matches')
+      .select('id, home_team_id, away_team_id')
+      .eq('match_status', 'FINISHED')
+      .in('editorial_status', ['COMPLETE', 'VERIFIED'])
+      .eq('home_team_id', polandTeamId)
+      .in('away_team_id', opponentTeamIds),
+    supabase
+      .from('tbl_Matches')
+      .select('id, home_team_id, away_team_id')
+      .eq('match_status', 'FINISHED')
+      .in('editorial_status', ['COMPLETE', 'VERIFIED'])
+      .eq('away_team_id', polandTeamId)
+      .in('home_team_id', opponentTeamIds),
+  ])
+
+  const allMatches = [...(homeMatches ?? []), ...(awayMatches ?? [])]
+  if (!allMatches.length) return empty
+
+  const matchIds = allMatches.map((m) => m.id as string)
+
+  const { data: events } = await supabase
+    .from('tbl_Match_Events')
+    .select('match_id, team_id, event_type')
+    .in('match_id', matchIds)
+    .in('event_type', ['GOAL', 'OWN_GOAL', 'PENALTY_GOAL'])
+
+  const eventsByMatch = new Map<string, Array<{ team_id: string | null; event_type: string }>>()
+  for (const e of events ?? []) {
+    const arr = eventsByMatch.get(e.match_id as string) ?? []
+    arr.push({ team_id: e.team_id as string | null, event_type: e.event_type as string })
+    eventsByMatch.set(e.match_id as string, arr)
+  }
+
+  const result = new Map<string, CountryVsPolandStat>()
+
+  for (const match of allMatches) {
+    const isPolandHome = (match.home_team_id as string) === polandTeamId
+    const opponentTeamId = isPolandHome ? (match.away_team_id as string) : (match.home_team_id as string)
+    const countryId = teamToCountry.get(opponentTeamId)
+    if (!countryId) continue
+
+    let homeGoals = 0
+    let awayGoals = 0
+    for (const e of eventsByMatch.get(match.id as string) ?? []) {
+      if (e.team_id === match.home_team_id) homeGoals++
+      else if (e.team_id === match.away_team_id) awayGoals++
+    }
+
+    const polandGoals = isPolandHome ? homeGoals : awayGoals
+    const opponentGoals = isPolandHome ? awayGoals : homeGoals
+
+    const stat = result.get(countryId) ?? { matches: 0, wins: 0, draws: 0, losses: 0, goals_for: 0, goals_against: 0 }
+    stat.matches++
+    stat.goals_for += polandGoals
+    stat.goals_against += opponentGoals
+    if (polandGoals > opponentGoals) stat.wins++
+    else if (polandGoals === opponentGoals) stat.draws++
+    else stat.losses++
+    result.set(countryId, stat)
+  }
+
+  return result
 }
 
 export async function getAdminCountries(): Promise<AdminCountry[]> {
@@ -51,14 +166,24 @@ export async function getAdminCountries(): Promise<AdminCountry[]> {
     federationMap = new Map((federations ?? []).map((f) => [f.id, f.short_name]))
   }
 
-  return countries.map((c) => ({
-    id: c.id,
-    name: c.name,
-    fifa_code: c.fifa_code,
-    federation_short_name: c.federation_id
-      ? (federationMap.get(c.federation_id) ?? null)
-      : null,
-  }))
+  const countryIds = countries.map((c) => c.id)
+  const statsMap = await getCountryVsPolandStats(supabase, countryIds)
+
+  return countries.map((c) => {
+    const s = statsMap.get(c.id)
+    return {
+      id: c.id,
+      name: c.name,
+      fifa_code: c.fifa_code,
+      federation_short_name: c.federation_id ? (federationMap.get(c.federation_id) ?? null) : null,
+      matches: s?.matches ?? 0,
+      wins: s?.wins ?? 0,
+      draws: s?.draws ?? 0,
+      losses: s?.losses ?? 0,
+      goals_for: s?.goals_for ?? 0,
+      goals_against: s?.goals_against ?? 0,
+    }
+  })
 }
 
 export async function getAdminCountriesPage(

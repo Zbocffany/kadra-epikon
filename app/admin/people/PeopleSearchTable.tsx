@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -9,6 +9,7 @@ import type { AdminPersonListItem, AdminPersonRole } from '@/lib/db/people'
 import { getPersonDisplayName } from '@/lib/db/people'
 import PitchIcon from '@/components/icons/PitchIcon'
 import { GoalIcon, AssistIcon, YellowCardIcon, RedCardIcon } from '@/components/icons'
+import BenchIcon from '@/components/icons/BenchIcon'
 import SortableStatHeader from '@/components/admin/SortableStatHeader'
 
 const ROLE_META: Record<AdminPersonRole, { initial: string; label: string; className: string }> = {
@@ -44,7 +45,7 @@ function getActivityLabel(person: AdminPersonListItem): string {
 }
 
 export default function PeopleSearchTable({ people }: { people: AdminPersonListItem[] }) {
-  type SortKey = 'appearance_count' | 'goal_count' | 'assist_count' | 'yellow_card_count' | 'red_card_count'
+  type SortKey = 'appearance_count' | 'goal_count' | 'assist_count' | 'yellow_card_count' | 'red_card_count' | 'bench_count'
   const [sortKey, setSortKey] = useState<SortKey>('appearance_count')
 
   const sorted = [...people].sort((a, b) => (b[sortKey] as number) - (a[sortKey] as number))
@@ -93,52 +94,63 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
           </Link>
         </div>
       ),
-      className: 'font-medium pl-2',
+      // min-w zapewnia stały układ kolumn stat niezależnie od długości nazwy (punkt odniesienia: widok wszystkich krajów w filtrze)
+      // spójne z analogicznym ustawieniem w CountriesSearchTable i ClubsSearchTable
+      className: 'font-medium pl-2 min-w-[440px]',
     },
     {
       key: 'appearances',
       label: 'Występy',
       headerRender: () => statHeader('appearance_count', <PitchIcon className="h-5 w-5" />, 'Występy'),
       render: (person) => person.roles.includes('PLAYER')
-        ? <span className="text-sm font-semibold text-neutral-300">{person.appearance_count || '–'}</span>
+        ? (person.appearance_count > 0 ? <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{person.appearance_count}</span> : <span className="text-sm text-neutral-600">–</span>)
         : null,
-      className: 'text-center !px-2',
+      className: 'text-center px-1!',
     },
     {
       key: 'goals',
       label: 'Bramki',
       headerRender: () => statHeader('goal_count', <GoalIcon className="h-5 w-5" />, 'Bramki'),
       render: (person) => person.roles.includes('PLAYER')
-        ? <span className="text-sm font-semibold text-neutral-300">{person.goal_count || '–'}</span>
+        ? (person.goal_count > 0 ? <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{person.goal_count}</span> : <span className="text-sm text-neutral-600">–</span>)
         : null,
-      className: 'text-center !px-2',
+      className: 'text-center px-1!',
     },
     {
       key: 'assists',
       label: 'Asysty',
       headerRender: () => statHeader('assist_count', <AssistIcon className="h-5 w-5" />, 'Asysty'),
       render: (person) => person.roles.includes('PLAYER')
-        ? <span className="text-sm font-semibold text-neutral-300">{person.assist_count || '–'}</span>
+        ? (person.assist_count > 0 ? <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{person.assist_count}</span> : <span className="text-sm text-neutral-600">–</span>)
         : null,
-      className: 'text-center !px-2',
+      className: 'text-center px-1!',
     },
     {
       key: 'yellow_cards',
       label: 'Żółte kartki',
       headerRender: () => statHeader('yellow_card_count', <YellowCardIcon className="h-5 w-5" />, 'Żółte kartki'),
       render: (person) => person.roles.includes('PLAYER')
-        ? <span className="text-sm font-semibold text-neutral-300">{person.yellow_card_count || '–'}</span>
+        ? (person.yellow_card_count > 0 ? <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{person.yellow_card_count}</span> : <span className="text-sm text-neutral-600">–</span>)
         : null,
-      className: 'text-center !px-2',
+      className: 'text-center px-1!',
     },
     {
       key: 'red_cards',
       label: 'Czerwone kartki',
       headerRender: () => statHeader('red_card_count', <RedCardIcon className="h-5 w-5" />, 'Czerwone kartki'),
       render: (person) => person.roles.includes('PLAYER')
-        ? <span className="text-sm font-semibold text-neutral-300">{person.red_card_count || '–'}</span>
+        ? (person.red_card_count > 0 ? <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{person.red_card_count}</span> : <span className="text-sm text-neutral-600">–</span>)
         : null,
-      className: 'text-center !px-2',
+      className: 'text-center px-1!',
+    },
+    {
+      key: 'bench',
+      label: 'Ławka',
+      headerRender: () => statHeader('bench_count', <BenchIcon className="h-5 w-5" />, 'Ławka rezerwowych'),
+      render: (person) => person.roles.includes('PLAYER')
+        ? (person.bench_count > 0 ? <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{person.bench_count}</span> : <span className="text-sm text-neutral-600">–</span>)
+        : null,
+      className: 'text-center px-1!',
     },
   ]
 
@@ -180,9 +192,6 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
       defaultFilter="Polska"
       defaultTertiaryFilter="Piłkarz"
       searchIgnoresFilters
-      summaryText={(visible, total) =>
-        `Wyświetlono ${visible} z ${total} osób. Kliknij osobę, aby przejść do strony szczegółów.`
-      }
     />
   )
 }

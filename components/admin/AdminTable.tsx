@@ -14,6 +14,7 @@ interface AdminTableProps<T extends Record<string, unknown> = Record<string, unk
   emptyMessage: string
   idField?: string
   showHeader?: boolean
+  tableClassName?: string
 }
 
 /**
@@ -42,6 +43,7 @@ export default function AdminTable<T extends Record<string, unknown>>({
   emptyMessage,
   idField = 'id',
   showHeader = true,
+  tableClassName,
 }: AdminTableProps<T>) {
   if (!data.length) {
     return (
@@ -53,12 +55,12 @@ export default function AdminTable<T extends Record<string, unknown>>({
 
   return (
     <div className="overflow-visible rounded-xl border border-neutral-800">
-      <table className="w-full border-collapse text-sm overflow-visible">
+      <table className={`w-full border-collapse text-sm overflow-visible ${tableClassName ?? ''}`}>
         <thead>
           {showHeader && (
           <tr className="border-b border-neutral-800 bg-neutral-900 text-left">
             {columns.map((col) => (
-              <th key={col.key} className={`px-4 py-3 font-medium text-neutral-400`}>
+              <th key={col.key} className={`px-4 py-3 font-medium text-neutral-400 ${col.className ?? ''}`}>
                 {col.headerRender ? col.headerRender() : col.label}
               </th>
             ))}

@@ -13,6 +13,10 @@ export type AdminCityListItem = {
   id: string
   city_name: string | null
   country_name: string | null
+  country_fifa_code: string | null
+  player_count: number
+  appearance_count: number
+  goal_count: number
 }
 
 export type AdminCountryOption = {
@@ -87,6 +91,112 @@ async function getCityCountryPeriodsByCityIds(
   return periods
 }
 
+async function getCityStats(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  personByCityId: Map<string, string[]>
+): Promise<Map<string, { player_count: number; appearance_count: number; goal_count: number }>> {
+  const allPersonIds = [...new Set([...personByCityId.values()].flat())]
+  if (!allPersonIds.length) return new Map()
+
+  const { data: polandCountry } = await supabase
+    .from('tbl_Countries')
+    .select('id')
+    .ilike('name', 'Polska')
+    .maybeSingle()
+  if (!polandCountry) return new Map()
+
+  const { data: polandTeam } = await supabase
+    .from('tbl_Teams')
+    .select('id')
+    .eq('country_id', (polandCountry as { id: string }).id)
+    .is('club_id', null)
+    .maybeSingle()
+  if (!polandTeam) return new Map()
+
+  const polandTeamId = (polandTeam as { id: string }).id
+
+  const CHUNK_SIZE = 80
+  type ParticipantRow = { person_id: string; match_id: string; is_starting: boolean | null }
+  const allParticipants: ParticipantRow[] = []
+  for (let i = 0; i < allPersonIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Match_Participants')
+      .select('person_id, match_id, is_starting')
+      .eq('role', 'PLAYER')
+      .eq('team_id', polandTeamId)
+      .in('person_id', allPersonIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
+    allParticipants.push(...((data ?? []) as ParticipantRow[]))
+  }
+
+  if (!allParticipants.length) return new Map()
+
+  const allMatchIds = [...new Set(allParticipants.map((p) => p.match_id))]
+
+  const allSubEvents: Array<{ match_id: string; secondary_person_id: string }> = []
+  for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Match_Events')
+      .select('match_id, secondary_person_id')
+      .eq('event_type', 'SUBSTITUTION')
+      .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
+      .not('secondary_person_id', 'is', null)
+    if (error) throw new Error(`tbl_Match_Events (substitutions): ${error.message}`)
+    allSubEvents.push(...((data ?? []) as Array<{ match_id: string; secondary_person_id: string }>))
+  }
+
+  const subEnteredSet = new Set(allSubEvents.map((e) => `${e.match_id}:${e.secondary_person_id}`))
+  const playedParticipants = allParticipants.filter(
+    (p) => p.is_starting || subEnteredSet.has(`${p.match_id}:${p.person_id}`)
+  )
+
+  const playedMatchIds = [...new Set(playedParticipants.map((p) => p.match_id))]
+
+  const allGoalEvents: Array<{ match_id: string; primary_person_id: string }> = []
+  for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Match_Events')
+      .select('match_id, primary_person_id')
+      .in('event_type', ['GOAL', 'PENALTY_GOAL'])
+      .in('match_id', playedMatchIds.slice(i, i + CHUNK_SIZE))
+      .not('primary_person_id', 'is', null)
+    if (error) throw new Error(`tbl_Match_Events (goals): ${error.message}`)
+    allGoalEvents.push(...((data ?? []) as Array<{ match_id: string; primary_person_id: string }>))
+  }
+
+  const cityByPersonId = new Map<string, string>()
+  for (const [cityId, personIds] of personByCityId) {
+    for (const personId of personIds) cityByPersonId.set(personId, cityId)
+  }
+
+  const statsMap = new Map<string, { players: Set<string>; appearances: number; goals: number }>()
+
+  for (const p of playedParticipants) {
+    const cityId = cityByPersonId.get(p.person_id)
+    if (!cityId) continue
+    const s = statsMap.get(cityId) ?? { players: new Set(), appearances: 0, goals: 0 }
+    s.players.add(p.person_id)
+    s.appearances++
+    statsMap.set(cityId, s)
+  }
+
+  const playedPersonSet = new Set(playedParticipants.map((p) => p.person_id))
+  for (const e of allGoalEvents) {
+    if (!e.primary_person_id || !playedPersonSet.has(e.primary_person_id)) continue
+    const cityId = cityByPersonId.get(e.primary_person_id)
+    if (!cityId) continue
+    const s = statsMap.get(cityId)
+    if (s) s.goals++
+  }
+
+  return new Map(
+    [...statsMap.entries()].map(([cityId, s]) => [
+      cityId,
+      { player_count: s.players.size, appearance_count: s.appearances, goal_count: s.goals },
+    ])
+  )
+}
+
 export async function getAdminCitiesList(): Promise<AdminCityListItem[]> {
   const supabase = createServiceRoleClient()
 
@@ -117,25 +227,52 @@ export async function getAdminCitiesList(): Promise<AdminCityListItem[]> {
 
   const countryIds = [...new Set([...currentCountryIdByCity.values()])]
   let countryMap = new Map<string, string>()
+  let countryFifaCodeMap = new Map<string, string | null>()
 
   if (countryIds.length) {
     const { data: countries, error: countriesError } = await supabase
       .from('tbl_Countries')
-      .select('id, name')
+      .select('id, name, fifa_code')
       .in('id', countryIds)
 
     if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
 
     countryMap = new Map((countries ?? []).map((c) => [c.id, c.name]))
+    countryFifaCodeMap = new Map((countries ?? []).map((c) => [c.id, c.fifa_code ?? null]))
   }
+
+  // Pobieramy WSZYSTKICH ludzi z ustawionym birth_city_id i filtrujemy w JS.
+  // Nie używamy .in('birth_city_id', cityIds) bo cityIds może mieć setki UUID-ów i przekraczać limit URL PostgREST.
+  const { data: people, error: peopleError } = await supabase
+    .from('tbl_People')
+    .select('id, birth_city_id')
+    .not('birth_city_id', 'is', null)
+
+  if (peopleError) throw new Error(`tbl_People: ${peopleError.message}`)
+
+  const cityIdSet = new Set(cityIds)
+  const personByCityId = new Map<string, string[]>()
+  for (const p of people ?? []) {
+    if (!p.birth_city_id || !cityIdSet.has(p.birth_city_id)) continue
+    const arr = personByCityId.get(p.birth_city_id) ?? []
+    arr.push(p.id)
+    personByCityId.set(p.birth_city_id, arr)
+  }
+
+  const stats = await getCityStats(supabase, personByCityId)
 
   return cities.map((city) => {
     const countryId = currentCountryIdByCity.get(city.id)
+    const s = stats.get(city.id)
 
     return {
       id: city.id,
       city_name: city.city_name,
       country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
+      country_fifa_code: countryId ? (countryFifaCodeMap.get(countryId) ?? null) : null,
+      player_count: s?.player_count ?? 0,
+      appearance_count: s?.appearance_count ?? 0,
+      goal_count: s?.goal_count ?? 0,
     }
   })
 }
@@ -193,6 +330,10 @@ export async function getAdminCitiesListPage(
         id: city.id,
         city_name: city.city_name,
         country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
+        country_fifa_code: null,
+        player_count: 0,
+        appearance_count: 0,
+        goal_count: 0,
       }
     }),
     total: count ?? 0,

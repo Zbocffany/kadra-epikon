@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import AdminTable from '@/components/admin/AdminTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
 
@@ -32,6 +32,7 @@ type AdminSearchableTableProps<T extends Record<string, unknown>> = {
   defaultFilter?: string
   defaultTertiaryFilter?: string
   searchIgnoresFilters?: boolean
+  tableClassName?: string
 }
 
 function normalizeFilterValue(value: string | string[] | null | undefined): string[] {
@@ -96,6 +97,7 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
   defaultFilter,
   defaultTertiaryFilter,
   searchIgnoresFilters,
+  tableClassName,
 }: AdminSearchableTableProps<T>) {
   const [query, setQuery] = useState('')
   const [selectedFilter, setSelectedFilter] = useState(defaultFilter ?? '')
@@ -182,8 +184,13 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
     searchIgnoresFilters,
   ])
 
-  const isFiltered = query.trim() || selectedFilter || selectedSecondaryFilter || selectedTertiaryFilter
-  const displayedData = defaultLimit && !isFiltered ? filteredData.slice(0, defaultLimit) : filteredData
+  const [visibleCount, setVisibleCount] = useState(50)
+
+  useEffect(() => {
+    setVisibleCount(50)
+  }, [query, selectedFilter, selectedSecondaryFilter, selectedTertiaryFilter])
+
+  const displayedData = filteredData.slice(0, visibleCount)
 
   return (
     <div className="space-y-4">
@@ -289,7 +296,20 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
         columns={columns}
         emptyMessage={query.trim() ? emptySearchMessage : emptyMessage}
         showHeader={showHeader}
+        tableClassName={tableClassName}
       />
+
+      {filteredData.length > visibleCount && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((v) => v + 50)}
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-5 py-2 text-sm text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-neutral-100"
+          >
+            Pokaż kolejne {Math.min(50, filteredData.length - visibleCount)}
+          </button>
+        </div>
+      )}
 
       {summaryText && filteredData.length > 0 && (
         <p className="text-xs text-neutral-500">{summaryText(displayedData.length, data.length)}</p>

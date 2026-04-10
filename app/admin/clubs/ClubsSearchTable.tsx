@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import Link from 'next/link'
@@ -50,28 +50,30 @@ export default function ClubsSearchTable({ clubs }: { clubs: AdminClub[] }) {
           </div>
         </div>
       ),
-      className: 'font-medium pl-2',
+      // min-w zapewnia stały układ kolumn stat niezależnie od długości nazwy (punkt odniesienia: widok wszystkich krajów w filtrze)
+      // spójne z analogicznym ustawieniem w CountriesSearchTable i PeopleSearchTable
+      className: 'font-medium pl-2 min-w-[360px]',
     },
     {
       key: 'player_count',
       label: 'Zawodnicy',
       headerRender: () => statHeader('player_count', <PlayerSilhouetteIcon className="h-5 w-5" />, 'Zawodnicy'),
-      render: (club) => <span className="text-sm font-semibold text-neutral-300">{club.player_count || '–'}</span>,
-      className: 'text-center !px-2 w-14',
+      render: (club) => club.player_count > 0 ? <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{club.player_count}</span> : <span className="text-sm text-neutral-600">–</span>,
+      className: 'text-center px-1!',
     },
     {
       key: 'appearances',
       label: 'Występy',
       headerRender: () => statHeader('appearance_count', <PitchIcon className="h-5 w-5" />, 'Występy'),
-      render: (club) => <span className="text-sm font-semibold text-neutral-300">{club.appearance_count || '–'}</span>,
-      className: 'text-center !px-2 w-14',
+      render: (club) => club.appearance_count > 0 ? <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{club.appearance_count}</span> : <span className="text-sm text-neutral-600">–</span>,
+      className: 'text-center px-1!',
     },
     {
       key: 'goals',
       label: 'Gole',
       headerRender: () => statHeader('goal_count', <GoalIcon className="h-5 w-5" />, 'Gole'),
-      render: (club) => <span className="text-sm font-semibold text-neutral-300">{club.goal_count || '–'}</span>,
-      className: 'text-center !px-2 w-14',
+      render: (club) => club.goal_count > 0 ? <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{club.goal_count}</span> : <span className="text-sm text-neutral-600">–</span>,
+      className: 'text-center px-1!',
     },
   ]
 
@@ -81,7 +83,6 @@ export default function ClubsSearchTable({ clubs }: { clubs: AdminClub[] }) {
       columns={columns}
       searchPlaceholder="Wpisz nazwę klubu albo miasto..."
       showHeader={true}
-      defaultLimit={50}
       emptyMessage="Brak klubów w bazie danych."
       emptySearchMessage="Brak klubów pasujących do wyszukiwanej frazy."
       getPrimaryText={(club) => club.name}
@@ -98,9 +99,6 @@ export default function ClubsSearchTable({ clubs }: { clubs: AdminClub[] }) {
       }}
       filterWidthClass="md:w-56"
       secondaryFilterWidthClass="md:w-56"
-      summaryText={(visible, total) =>
-        `Wyświetlono ${visible} z ${total} klubów. Kliknij nazwę klubu, aby przejść do strony szczegółów.`
-      }
     />
   )
 }

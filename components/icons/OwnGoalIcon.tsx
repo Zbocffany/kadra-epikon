@@ -3,7 +3,7 @@ import type { SVGProps } from 'react'
 export default function OwnGoalIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg
-      viewBox="0 0 24 24"
+      viewBox="-2 -2 28 28"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"

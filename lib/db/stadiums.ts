@@ -14,6 +14,13 @@ export type AdminStadiumListItem = {
   stadium_city_id: string | null
   city_name: string | null
   country_name: string | null
+  country_fifa_code: string | null
+  matches: number
+  wins: number
+  draws: number
+  losses: number
+  goals_for: number
+  goals_against: number
 }
 
 export type AdminStadiumDetails = {
@@ -122,6 +129,108 @@ async function getCountryDetailsMap(
   )
 }
 
+type StadiumVsPolandStat = {
+  matches: number
+  wins: number
+  draws: number
+  losses: number
+  goals_for: number
+  goals_against: number
+}
+
+async function getStadiumVsPolandStats(
+  supabase: ReturnType<typeof createServiceRoleClient>
+): Promise<Map<string, StadiumVsPolandStat>> {
+  const empty = new Map<string, StadiumVsPolandStat>()
+
+  const { data: polandCountry } = await supabase
+    .from('tbl_Countries')
+    .select('id')
+    .ilike('name', 'Polska')
+    .maybeSingle()
+  if (!polandCountry) return empty
+
+  const { data: polandTeam } = await supabase
+    .from('tbl_Teams')
+    .select('id')
+    .eq('country_id', polandCountry.id)
+    .is('club_id', null)
+    .maybeSingle()
+  if (!polandTeam) return empty
+
+  const polandTeamId = (polandTeam as { id: string }).id
+
+  // Fetch all Poland matches with a stadium assigned (no .in() on stadiumIds to avoid URL length limit)
+  const [{ data: homeMatches }, { data: awayMatches }] = await Promise.all([
+    supabase
+      .from('tbl_Matches')
+      .select('id, match_stadium_id, home_team_id, away_team_id')
+      .eq('match_status', 'FINISHED')
+      .in('editorial_status', ['COMPLETE', 'VERIFIED'])
+      .eq('home_team_id', polandTeamId)
+      .not('match_stadium_id', 'is', null),
+    supabase
+      .from('tbl_Matches')
+      .select('id, match_stadium_id, home_team_id, away_team_id')
+      .eq('match_status', 'FINISHED')
+      .in('editorial_status', ['COMPLETE', 'VERIFIED'])
+      .eq('away_team_id', polandTeamId)
+      .not('match_stadium_id', 'is', null),
+  ])
+
+  const allMatches = [...(homeMatches ?? []), ...(awayMatches ?? [])]
+  if (!allMatches.length) return empty
+
+  const matchIds = allMatches.map((m) => m.id as string)
+
+  const CHUNK_SIZE = 80
+  const allEvents: Array<{ match_id: string; team_id: string | null; event_type: string }> = []
+  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Match_Events')
+      .select('match_id, team_id, event_type')
+      .in('match_id', matchIds.slice(i, i + CHUNK_SIZE))
+      .in('event_type', ['GOAL', 'OWN_GOAL', 'PENALTY_GOAL'])
+    if (error) throw new Error(`tbl_Match_Events: ${error.message}`)
+    allEvents.push(...((data ?? []) as typeof allEvents))
+  }
+
+  const eventsByMatch = new Map<string, Array<{ team_id: string | null; event_type: string }>>()
+  for (const e of allEvents) {
+    const arr = eventsByMatch.get(e.match_id) ?? []
+    arr.push({ team_id: e.team_id, event_type: e.event_type })
+    eventsByMatch.set(e.match_id, arr)
+  }
+
+  const result = new Map<string, StadiumVsPolandStat>()
+
+  for (const match of allMatches) {
+    const stadiumId = match.match_stadium_id as string
+    const isPolandHome = (match.home_team_id as string) === polandTeamId
+
+    let homeGoals = 0
+    let awayGoals = 0
+    for (const e of eventsByMatch.get(match.id as string) ?? []) {
+      if (e.team_id === match.home_team_id) homeGoals++
+      else if (e.team_id === match.away_team_id) awayGoals++
+    }
+
+    const polandGoals = isPolandHome ? homeGoals : awayGoals
+    const opponentGoals = isPolandHome ? awayGoals : homeGoals
+
+    const stat = result.get(stadiumId) ?? { matches: 0, wins: 0, draws: 0, losses: 0, goals_for: 0, goals_against: 0 }
+    stat.matches++
+    stat.goals_for += polandGoals
+    stat.goals_against += opponentGoals
+    if (polandGoals > opponentGoals) stat.wins++
+    else if (polandGoals === opponentGoals) stat.draws++
+    else stat.losses++
+    result.set(stadiumId, stat)
+  }
+
+  return result
+}
+
 export async function getAdminStadiums(): Promise<AdminStadiumListItem[]> {
   const supabase = createServiceRoleClient()
 
@@ -142,6 +251,13 @@ export async function getAdminStadiums(): Promise<AdminStadiumListItem[]> {
       stadium_city_id: stadium.stadium_city_id,
       city_name: null,
       country_name: null,
+      country_fifa_code: null,
+      matches: 0,
+      wins: 0,
+      draws: 0,
+      losses: 0,
+      goals_for: 0,
+      goals_against: 0,
     }))
   }
 
@@ -155,18 +271,29 @@ export async function getAdminStadiums(): Promise<AdminStadiumListItem[]> {
   const cityMap = new Map((cities ?? []).map((city) => [city.id, city.city_name]))
   const currentCountryByCity = await getCurrentCountryIdByCity(cityIds)
   const countryIds = [...new Set([...currentCountryByCity.values()])]
-  const countryMap = await getCountryNameMap(countryIds)
+  const countryMap = await getCountryDetailsMap(countryIds)
+
+  const statsMap = await getStadiumVsPolandStats(supabase)
 
   return stadiums.map((stadium) => {
     const cityId = stadium.stadium_city_id
     const countryId = cityId ? currentCountryByCity.get(cityId) : null
+    const countryDetails = countryId ? countryMap.get(countryId) : null
+    const s = statsMap.get(stadium.id)
 
     return {
       id: stadium.id,
       name: stadium.name,
       stadium_city_id: cityId,
       city_name: cityId ? (cityMap.get(cityId) ?? null) : null,
-      country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
+      country_name: countryDetails?.name ?? null,
+      country_fifa_code: countryDetails?.fifa_code ?? null,
+      matches: s?.matches ?? 0,
+      wins: s?.wins ?? 0,
+      draws: s?.draws ?? 0,
+      losses: s?.losses ?? 0,
+      goals_for: s?.goals_for ?? 0,
+      goals_against: s?.goals_against ?? 0,
     }
   })
 }
@@ -197,6 +324,13 @@ export async function getAdminStadiumsPage(
         stadium_city_id: stadium.stadium_city_id,
         city_name: null,
         country_name: null,
+        country_fifa_code: null,
+        matches: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        goals_for: 0,
+        goals_against: 0,
       })),
       total: count ?? 0,
     }
@@ -225,6 +359,13 @@ export async function getAdminStadiumsPage(
         stadium_city_id: cityId,
         city_name: cityId ? (cityMap.get(cityId) ?? null) : null,
         country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
+        country_fifa_code: null,
+        matches: 0,
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        goals_for: 0,
+        goals_against: 0,
       }
     }),
     total: count ?? 0,
