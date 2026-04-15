@@ -8,6 +8,7 @@ import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import type { AdminPersonListItem, AdminPersonRole } from '@/lib/db/people'
 import { getPersonDisplayName } from '@/lib/db/people'
 import PitchIcon from '@/components/icons/PitchIcon'
+import ClockIcon from '@/components/icons/ClockIcon'
 import { GoalIcon, AssistIcon, YellowCardIcon, RedCardIcon } from '@/components/icons'
 import BenchIcon from '@/components/icons/BenchIcon'
 import SortableStatHeader from '@/components/admin/SortableStatHeader'
@@ -45,7 +46,7 @@ function getActivityLabel(person: AdminPersonListItem): string {
 }
 
 export default function PeopleSearchTable({ people }: { people: AdminPersonListItem[] }) {
-  type SortKey = 'appearance_count' | 'goal_count' | 'assist_count' | 'yellow_card_count' | 'red_card_count' | 'bench_count'
+  type SortKey = 'appearance_count' | 'goal_count' | 'assist_count' | 'yellow_card_count' | 'red_card_count' | 'minute_count' | 'bench_count'
   const [sortKey, setSortKey] = useState<SortKey>('appearance_count')
 
   const sorted = [...people].sort((a, b) => (b[sortKey] as number) - (a[sortKey] as number))
@@ -149,6 +150,15 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
       headerRender: () => statHeader('bench_count', <BenchIcon className="h-5 w-5" />, 'Ławka rezerwowych'),
       render: (person) => person.roles.includes('PLAYER')
         ? (person.bench_count > 0 ? <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{person.bench_count}</span> : <span className="text-sm text-neutral-600">–</span>)
+        : null,
+      className: 'text-center px-1!',
+    },
+    {
+      key: 'minutes',
+      label: 'Minuty',
+      headerRender: () => statHeader('minute_count', <ClockIcon className="h-5 w-5" />, 'Minuty'),
+      render: (person) => person.roles.includes('PLAYER')
+        ? (person.minute_count > 0 ? <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{person.minute_count}</span> : <span className="text-sm text-neutral-600">–</span>)
         : null,
       className: 'text-center px-1!',
     },

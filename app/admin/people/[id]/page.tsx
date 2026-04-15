@@ -8,6 +8,11 @@ import {
   getAdminPersonDetails,
   getPersonDisplayName,
 } from '@/lib/db/people'
+import {
+  getAdminMatchesForPlayer,
+  getAdminPlayerYearStats,
+  getAdminPlayerMatchEventsByMatch,
+} from '@/lib/db/matches'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import {
   DetailsPageContainer,
@@ -18,9 +23,7 @@ import CountryFlag from '@/components/CountryFlag'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 import PersonBirthplaceFields from '@/components/admin/PersonBirthplaceFields'
 import PersonRepresentedCountriesFields from '@/components/admin/PersonRepresentedCountriesFields'
-import PitchIcon from '@/components/icons/PitchIcon'
-import ClockIcon from '@/components/icons/ClockIcon'
-import { GoalIcon, AssistIcon, YellowCardIcon, RedCardIcon } from '@/components/icons'
+import PlayerMatchesByYearSection from '@/components/matches/PlayerMatchesByYearSection'
 
 type Params = DetailPageParams
 type SearchParams = DetailPageSearchParams
@@ -74,6 +77,21 @@ export default async function AdminPersonDetailsPage({
 
   if (!person) {
     notFound()
+  }
+
+  let playerMatches: Awaited<ReturnType<typeof getAdminMatchesForPlayer>> = []
+  let playerYearStats: Awaited<ReturnType<typeof getAdminPlayerYearStats>> = {}
+  let playerEventsByMatch: Awaited<ReturnType<typeof getAdminPlayerMatchEventsByMatch>> = {}
+
+  if (person.roles.includes('PLAYER')) {
+    ;[playerMatches, playerYearStats] = await Promise.all([
+      getAdminMatchesForPlayer(person.id),
+      getAdminPlayerYearStats(person.id),
+    ])
+    playerEventsByMatch = await getAdminPlayerMatchEventsByMatch(
+      person.id,
+      playerMatches.map((match) => match.id)
+    )
   }
 
   const displayName = getPersonDisplayName(person)
@@ -165,24 +183,6 @@ export default async function AdminPersonDetailsPage({
           )}
         </div>
       </div>
-
-      {!isEdit && person.roles.includes('PLAYER') && (
-        <div className="mt-4 grid grid-cols-6">
-          {([
-            { icon: <PitchIcon className="h-5 w-5 text-neutral-400" />, label: 'Występy', value: person.appearance_count },
-            { icon: <GoalIcon className="h-5 w-5 text-neutral-400" />, label: 'Gole', value: person.goal_count },
-            { icon: <AssistIcon className="h-5 w-5 text-neutral-400" />, label: 'Asysty', value: person.assist_count },
-            { icon: <YellowCardIcon className="h-5 w-5" />, label: 'Żółte', value: person.yellow_card_count },
-            { icon: <RedCardIcon className="h-5 w-5" />, label: 'Czerwone', value: person.red_card_count },
-            { icon: <ClockIcon className="h-5 w-5 text-neutral-400" />, label: 'Minuty', value: person.minute_count },
-          ] as const).map(({ icon, label, value }) => (
-            <div key={label} className="flex flex-col items-center gap-1.5 py-3">
-              <span title={label}>{icon}</span>
-              <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{value}</span>
-            </div>
-          ))}
-        </div>
-      )}
 
       {isEdit ? (
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -320,7 +320,19 @@ export default async function AdminPersonDetailsPage({
             </div>
           </form>
         }
-        viewContent={fields}
+        viewContent={
+          <>
+            {fields}
+            {!isEdit && person.roles.includes('PLAYER') && (
+              <PlayerMatchesByYearSection
+                matches={playerMatches}
+                yearStats={playerYearStats}
+                eventsByMatch={playerEventsByMatch}
+                detailBasePath="/admin/matches"
+              />
+            )}
+          </>
+        }
       />
     </DetailsPageContainer>
   )

@@ -40,16 +40,19 @@ export type AdminPersonListItem = {
   roles: AdminPersonRole[]
   role_labels: string[]
   appearance_count: number
+  starting_appearance_count: number
+  sub_on_count: number
+  sub_off_count: number
   goal_count: number
   assist_count: number
   yellow_card_count: number
   red_card_count: number
+  minute_count: number
   bench_count: number
 }
 
 export type AdminPersonDetails = AdminPersonListItem & {
   represented_country_ids: string[]
-  minute_count: number
 }
 
 export type AdminPersonBirthCityOption = {
@@ -335,7 +338,18 @@ export async function getAdminPersonBirthCityOptions(): Promise<AdminPersonBirth
   })
 }
 
-type PersonStatRow = { appearance_count: number; goal_count: number; assist_count: number; yellow_card_count: number; red_card_count: number; bench_count: number }
+type PersonStatRow = {
+  appearance_count: number
+  starting_appearance_count: number
+  sub_on_count: number
+  sub_off_count: number
+  goal_count: number
+  assist_count: number
+  yellow_card_count: number
+  red_card_count: number
+  minute_count: number
+  bench_count: number
+}
 
 async function getPersonStats(
   supabase: ReturnType<typeof createServiceRoleClient>,
@@ -361,12 +375,18 @@ async function getPersonStats(
 
   const allMatchIds = [...new Set(allParticipants.map((p) => p.match_id))]
 
-  type SubEvent = { match_id: string; secondary_person_id: string }
+  type SubEvent = {
+    match_id: string
+    primary_person_id: string | null
+    secondary_person_id: string | null
+    minute: number
+    minute_extra: number | null
+  }
   const allSubEvents: SubEvent[] = []
   for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
     const { data, error } = await supabase
       .from('tbl_Match_Events')
-      .select('match_id, secondary_person_id')
+      .select('match_id, primary_person_id, secondary_person_id, minute, minute_extra')
       .eq('event_type', 'SUBSTITUTION')
       .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
       .not('secondary_person_id', 'is', null)
@@ -374,7 +394,28 @@ async function getPersonStats(
     allSubEvents.push(...((data ?? []) as SubEvent[]))
   }
 
-  const subEnteredSet = new Set(allSubEvents.map((e) => `${e.match_id}:${e.secondary_person_id}`))
+  const subEnteredSet = new Set(
+    allSubEvents
+      .filter((e) => e.secondary_person_id)
+      .map((e) => `${e.match_id}:${e.secondary_person_id as string}`)
+  )
+  type SubEntry = { minute: number; extra: number }
+  const subOnByMatchPerson = new Map<string, SubEntry>()
+  const subOffByMatchPerson = new Map<string, SubEntry>()
+  for (const e of allSubEvents) {
+    if (e.secondary_person_id) {
+      subOnByMatchPerson.set(`${e.match_id}:${e.secondary_person_id}`, {
+        minute: e.minute,
+        extra: e.minute_extra ?? 0,
+      })
+    }
+    if (e.primary_person_id) {
+      subOffByMatchPerson.set(`${e.match_id}:${e.primary_person_id}`, {
+        minute: e.minute,
+        extra: e.minute_extra ?? 0,
+      })
+    }
+  }
   const playedParticipants = allParticipants.filter(
     (p) => p.is_starting || subEnteredSet.has(`${p.match_id}:${p.person_id}`)
   )
@@ -390,9 +431,39 @@ async function getPersonStats(
   const playedMatchIds = [...new Set(playedParticipants.map((p) => p.match_id))]
   const playedPersonIds = new Set(playedParticipants.map((p) => p.person_id))
 
+  const matchResultTypeMap = new Map<string, string | null>()
+  for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Matches')
+      .select('id, result_type')
+      .in('id', playedMatchIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Matches (result_type): ${error.message}`)
+    for (const m of data ?? []) {
+      matchResultTypeMap.set(m.id as string, m.result_type as string | null)
+    }
+  }
+
   const appearanceMap = new Map<string, number>()
   for (const p of playedParticipants) {
     appearanceMap.set(p.person_id, (appearanceMap.get(p.person_id) ?? 0) + 1)
+  }
+
+  const startingMap = new Map<string, number>()
+  for (const p of allParticipants) {
+    if (!p.is_starting) continue
+    startingMap.set(p.person_id, (startingMap.get(p.person_id) ?? 0) + 1)
+  }
+
+  const subOnMap = new Map<string, number>()
+  for (const p of playedParticipants) {
+    if (p.is_starting) continue
+    subOnMap.set(p.person_id, (subOnMap.get(p.person_id) ?? 0) + 1)
+  }
+
+  const subOffMap = new Map<string, number>()
+  for (const e of allSubEvents) {
+    if (!e.primary_person_id) continue
+    subOffMap.set(e.primary_person_id, (subOffMap.get(e.primary_person_id) ?? 0) + 1)
   }
 
   type PrimaryEvent = { primary_person_id: string }
@@ -424,7 +495,48 @@ async function getPersonStats(
   const statsMap = new Map<string, PersonStatRow>()
   const allPersonIds = new Set([...playedPersonIds, ...benchParticipants.map((p) => p.person_id)])
   for (const personId of allPersonIds) {
-    statsMap.set(personId, { appearance_count: appearanceMap.get(personId) ?? 0, goal_count: 0, assist_count: 0, yellow_card_count: 0, red_card_count: 0, bench_count: benchMap.get(personId) ?? 0 })
+    statsMap.set(personId, {
+      appearance_count: appearanceMap.get(personId) ?? 0,
+      starting_appearance_count: startingMap.get(personId) ?? 0,
+      sub_on_count: subOnMap.get(personId) ?? 0,
+      sub_off_count: subOffMap.get(personId) ?? 0,
+      goal_count: 0,
+      assist_count: 0,
+      yellow_card_count: 0,
+      red_card_count: 0,
+      minute_count: 0,
+      bench_count: benchMap.get(personId) ?? 0,
+    })
+  }
+  for (const p of playedParticipants) {
+    const stats = statsMap.get(p.person_id)
+    if (!stats) continue
+
+    const resultType = matchResultTypeMap.get(p.match_id) ?? null
+    const hasExtraTime =
+      resultType === 'EXTRA_TIME' ||
+      resultType === 'EXTRA_TIME_AND_PENALTIES' ||
+      resultType === 'GOLDEN_GOAL'
+    const matchRegularEnd = hasExtraTime ? 120 : 90
+
+    const isStarter = p.is_starting === true
+    const subOn = isStarter ? null : (subOnByMatchPerson.get(`${p.match_id}:${p.person_id}`) ?? null)
+    if (!isStarter && !subOn) continue
+
+    const subOff = subOffByMatchPerson.get(`${p.match_id}:${p.person_id}`) ?? null
+
+    const entryMin = isStarter ? 0 : subOn!.minute
+    const entryExtra = isStarter ? 0 : subOn!.extra
+    const exitMin = subOff ? subOff.minute : matchRegularEnd
+    const exitExtra = subOff ? subOff.extra : 0
+
+    // If entering during injury time of a period (minute == period end, extra > 0),
+    // shift effectiveEntry back by 1 to give exactly 1 minute for that period remainder.
+    const effectiveEntry = entryExtra > 0 ? entryMin - 1 : entryMin
+    // If exiting during injury time, cap to the period's regular end.
+    const effectiveExit = Math.min(exitExtra > 0 ? exitMin : exitMin, matchRegularEnd)
+
+    stats.minute_count += Math.max(0, effectiveExit - effectiveEntry)
   }
   for (const e of allGoals) {
     const s = e.primary_person_id ? statsMap.get(e.primary_person_id) : null
@@ -549,20 +661,23 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
   const cityIds = [...new Set(people.map((p) => p.birth_city_id).filter(Boolean))]
   const countryIds = [...new Set(people.map((p) => p.birth_country_id).filter(Boolean))]
 
-  const [{ data: cities, error: citiesError }, { data: countries, error: countriesError }] =
-    await Promise.all([
-      cityIds.length
-        ? supabase.from('tbl_Cities').select('id, city_name').in('id', cityIds)
-        : Promise.resolve({ data: [] as { id: string; city_name: string | null }[], error: null }),
-      countryIds.length
-        ? supabase.from('tbl_Countries').select('id, name, fifa_code').in('id', countryIds)
-        : Promise.resolve({ data: [] as { id: string; name: string | null; fifa_code: string | null }[], error: null }),
-    ])
+  // Batch cities to avoid oversized .in() queries that can fail at the fetch layer
+  const CITY_CHUNK = 80
+  const cityMap = new Map<string, string | null>()
+  for (let i = 0; i < cityIds.length; i += CITY_CHUNK) {
+    const { data: cityBatch, error: citiesError } = await supabase
+      .from('tbl_Cities')
+      .select('id, city_name')
+      .in('id', cityIds.slice(i, i + CITY_CHUNK))
+    if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
+    for (const c of cityBatch ?? []) cityMap.set(c.id, c.city_name)
+  }
 
-  if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
+  const { data: countries, error: countriesError } = countryIds.length
+    ? await supabase.from('tbl_Countries').select('id, name, fifa_code').in('id', countryIds)
+    : { data: [] as { id: string; name: string | null; fifa_code: string | null }[], error: null }
   if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
 
-  const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
   const countryMap = new Map((countries ?? []).map((c) => [c.id, c.name]))
   const countryFifaCodeMap = new Map((countries ?? []).map((c) => [c.id, c.fifa_code]))
   const representedCountryDataByPersonId = await getExplicitRepresentedCountryDataByPersonId(
@@ -609,10 +724,14 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
         roles: rolesByPersonId.get(person.id) ?? [],
         role_labels: mapRolesToLabels(rolesByPersonId.get(person.id) ?? []),
         appearance_count: stats?.appearance_count ?? 0,
+        starting_appearance_count: stats?.starting_appearance_count ?? 0,
+        sub_on_count: stats?.sub_on_count ?? 0,
+        sub_off_count: stats?.sub_off_count ?? 0,
         goal_count: stats?.goal_count ?? 0,
         assist_count: stats?.assist_count ?? 0,
         yellow_card_count: stats?.yellow_card_count ?? 0,
         red_card_count: stats?.red_card_count ?? 0,
+        minute_count: stats?.minute_count ?? 0,
         bench_count: stats?.bench_count ?? 0,
       }
     })
@@ -642,20 +761,23 @@ export async function getAdminPeoplePage(
   const cityIds = [...new Set(people.map((p) => p.birth_city_id).filter(Boolean))]
   const countryIds = [...new Set(people.map((p) => p.birth_country_id).filter(Boolean))]
 
-  const [{ data: cities, error: citiesError }, { data: countries, error: countriesError }] =
-    await Promise.all([
-      cityIds.length
-        ? supabase.from('tbl_Cities').select('id, city_name').in('id', cityIds)
-        : Promise.resolve({ data: [] as { id: string; city_name: string | null }[], error: null }),
-      countryIds.length
-        ? supabase.from('tbl_Countries').select('id, name, fifa_code').in('id', countryIds)
-        : Promise.resolve({ data: [] as { id: string; name: string | null; fifa_code: string | null }[], error: null }),
-    ])
+  // Batch cities to avoid oversized .in() queries that can fail at the fetch layer
+  const CITY_CHUNK = 80
+  const cityMap = new Map<string, string | null>()
+  for (let i = 0; i < cityIds.length; i += CITY_CHUNK) {
+    const { data: cityBatch, error: citiesError } = await supabase
+      .from('tbl_Cities')
+      .select('id, city_name')
+      .in('id', cityIds.slice(i, i + CITY_CHUNK))
+    if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
+    for (const c of cityBatch ?? []) cityMap.set(c.id, c.city_name)
+  }
 
-  if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
+  const { data: countries, error: countriesError } = countryIds.length
+    ? await supabase.from('tbl_Countries').select('id, name, fifa_code').in('id', countryIds)
+    : { data: [] as { id: string; name: string | null; fifa_code: string | null }[], error: null }
   if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
 
-  const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
   const countryMap = new Map((countries ?? []).map((c) => [c.id, c.name]))
   const countryFifaCodeMap = new Map((countries ?? []).map((c) => [c.id, c.fifa_code]))
   const representedCountryDataByPersonId = await getExplicitRepresentedCountryDataByPersonId(
@@ -697,10 +819,14 @@ export async function getAdminPeoplePage(
         roles: rolesByPersonId.get(person.id) ?? [],
         role_labels: mapRolesToLabels(rolesByPersonId.get(person.id) ?? []),
         appearance_count: 0,
+        starting_appearance_count: 0,
+        sub_on_count: 0,
+        sub_off_count: 0,
         goal_count: 0,
         assist_count: 0,
         yellow_card_count: 0,
         red_card_count: 0,
+        minute_count: 0,
         bench_count: 0,
       }
     }),
@@ -781,11 +907,14 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     roles,
     role_labels: mapRolesToLabels(roles),
     appearance_count: stats?.appearance_count ?? 0,
+    starting_appearance_count: stats?.starting_appearance_count ?? 0,
+    sub_on_count: stats?.sub_on_count ?? 0,
+    sub_off_count: stats?.sub_off_count ?? 0,
     goal_count: stats?.goal_count ?? 0,
     assist_count: stats?.assist_count ?? 0,
     yellow_card_count: stats?.yellow_card_count ?? 0,
     red_card_count: stats?.red_card_count ?? 0,
-    bench_count: stats?.bench_count ?? 0,
     minute_count: minuteCount,
+    bench_count: stats?.bench_count ?? 0,
   }
 }

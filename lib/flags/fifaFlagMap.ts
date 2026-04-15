@@ -198,6 +198,7 @@ const FIFA_FLAG_CODE_MAP: Record<string, string> = {
   TAH: 'pf',
   TAN: 'tz',
   TCA: 'tc',
+  TCH: 'cz',
   TGA: 'to',
   THA: 'th',
   TJK: 'tj',

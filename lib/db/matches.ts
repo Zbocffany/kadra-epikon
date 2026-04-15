@@ -207,6 +207,34 @@ export type MatchYearStatsData = {
   topScorers: Record<string, YearGoalEntry[]>
 }
 
+export type AdminPlayerMatchEventIconName =
+  | 'goal'
+  | 'ownGoal'
+  | 'penaltyGoal'
+  | 'missedPenalty'
+  | 'savedPenalty'
+  | 'yellowCard'
+  | 'secondYellowCard'
+  | 'redCard'
+  | 'substitution'
+  | 'assist'
+
+export type AdminPlayerMatchEventIcon = {
+  icon_name: AdminPlayerMatchEventIconName
+  minute: string | null
+  minute_left: boolean
+}
+
+export type AdminPlayerYearStats = {
+  appearance_count: number
+  starting_appearance_count: number
+  sub_on_count: number
+  sub_off_count: number
+  bench_count: number
+  goal_count: number
+  assist_count: number
+}
+
 type MatchParticipantRow = {
   id: string
   team_id: string | null
@@ -465,6 +493,345 @@ export async function getAdminMatches(options?: AdminMatchFilterOptions): Promis
   if (!matches?.length) return []
 
   return mapAdminMatches(supabase, matches)
+}
+
+export async function getAdminMatchesForPlayer(personId: string): Promise<AdminMatch[]> {
+  const supabase = createServiceRoleClient()
+
+  const { data: participations, error: participationsError } = await supabase
+    .from('tbl_Match_Participants')
+    .select('match_id, is_starting')
+    .eq('role', 'PLAYER')
+    .eq('person_id', personId)
+
+  if (participationsError) {
+    throw new Error(`tbl_Match_Participants: ${participationsError.message}`)
+  }
+  if (!participations?.length) {
+    return []
+  }
+
+  const allMatchIds = [...new Set(participations.map((p) => p.match_id as string))]
+
+  const { data: subOnEvents, error: subOnEventsError } = await supabase
+    .from('tbl_Match_Events')
+    .select('match_id')
+    .eq('event_type', 'SUBSTITUTION')
+    .eq('secondary_person_id', personId)
+    .in('match_id', allMatchIds)
+
+  if (subOnEventsError) {
+    throw new Error(`tbl_Match_Events (substitutions): ${subOnEventsError.message}`)
+  }
+
+  const subOnMatchIds = new Set((subOnEvents ?? []).map((e) => e.match_id as string))
+  const playedMatchIds = [
+    ...new Set(
+      participations
+        .filter((p) => p.is_starting === true || subOnMatchIds.has(p.match_id as string))
+        .map((p) => p.match_id as string)
+    ),
+  ]
+
+  if (!playedMatchIds.length) {
+    return []
+  }
+
+  const { data: matches, error: matchesError } = await supabase
+    .from('tbl_Matches')
+    .select('id, match_date, match_time, match_status, result_type, editorial_status, competition_id, home_team_id, away_team_id')
+    .in('id', playedMatchIds)
+    .order('match_date', { ascending: false })
+    .order('match_time', { ascending: false })
+    .order('id', { ascending: false })
+
+  if (matchesError) {
+    throw new Error(`tbl_Matches: ${matchesError.message}`)
+  }
+  if (!matches?.length) {
+    return []
+  }
+
+  return mapAdminMatches(supabase, matches as MatchListRow[])
+}
+
+export async function getAdminPlayerGoalsByYear(personId: string): Promise<Record<string, number>> {
+  const supabase = createServiceRoleClient()
+
+  const { data: goalEvents, error: goalEventsError } = await supabase
+    .from('tbl_Match_Events')
+    .select('match_id')
+    .in('event_type', ['GOAL', 'PENALTY_GOAL'])
+    .eq('primary_person_id', personId)
+
+  if (goalEventsError) {
+    throw new Error(`tbl_Match_Events (player goals): ${goalEventsError.message}`)
+  }
+  if (!goalEvents?.length) {
+    return {}
+  }
+
+  const goalsPerMatchId = new Map<string, number>()
+  for (const event of goalEvents) {
+    const matchId = event.match_id as string
+    goalsPerMatchId.set(matchId, (goalsPerMatchId.get(matchId) ?? 0) + 1)
+  }
+
+  const matchIds = [...goalsPerMatchId.keys()]
+  const CHUNK_SIZE = 80
+  const yearGoals: Record<string, number> = {}
+
+  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
+    const batch = matchIds.slice(i, i + CHUNK_SIZE)
+    const { data: matches, error: matchesError } = await supabase
+      .from('tbl_Matches')
+      .select('id, match_date')
+      .in('id', batch)
+
+    if (matchesError) {
+      throw new Error(`tbl_Matches (player goals by year): ${matchesError.message}`)
+    }
+
+    for (const match of matches ?? []) {
+      const matchId = match.id as string
+      const year = (match.match_date as string).slice(0, 4)
+      const goalsInMatch = goalsPerMatchId.get(matchId) ?? 0
+      yearGoals[year] = (yearGoals[year] ?? 0) + goalsInMatch
+    }
+  }
+
+  return yearGoals
+}
+
+function compareEventsChronologicallyForPlayer(a: MatchEventRow, b: MatchEventRow) {
+  if (a.minute !== b.minute) return a.minute - b.minute
+  const aExtra = a.minute_extra ?? 0
+  const bExtra = b.minute_extra ?? 0
+  if (aExtra !== bExtra) return aExtra - bExtra
+  return (a.event_order ?? Number.MAX_SAFE_INTEGER) - (b.event_order ?? Number.MAX_SAFE_INTEGER)
+}
+
+function getPlayerEventIconName(eventType: MatchEventType): AdminPlayerMatchEventIconName | null {
+  if (eventType === 'GOAL') return 'goal'
+  if (eventType === 'OWN_GOAL') return 'ownGoal'
+  if (eventType === 'PENALTY_GOAL' || eventType === 'PENALTY_SHOOTOUT_SCORED') return 'penaltyGoal'
+  if (eventType === 'PENALTY_SHOOTOUT_MISSED' || eventType === 'MATCH_PENALTY_MISSED') return 'missedPenalty'
+  if (eventType === 'PENALTY_SHOOTOUT_SAVED' || eventType === 'MATCH_PENALTY_SAVED') return 'savedPenalty'
+  if (eventType === 'YELLOW_CARD') return 'yellowCard'
+  if (eventType === 'SECOND_YELLOW_CARD') return 'secondYellowCard'
+  if (eventType === 'RED_CARD') return 'redCard'
+  if (eventType === 'SUBSTITUTION') return 'substitution'
+  return null
+}
+
+function formatEventMinuteForPlayerEvent(event: Pick<MatchEventRow, 'minute' | 'minute_extra'>): string {
+  return event.minute_extra && event.minute_extra > 0
+    ? `${event.minute}+${event.minute_extra}'`
+    : `${event.minute}'`
+}
+
+export async function getAdminPlayerMatchEventsByMatch(
+  personId: string,
+  matchIds: string[]
+): Promise<Record<string, AdminPlayerMatchEventIcon[]>> {
+  const supabase = createServiceRoleClient()
+
+  if (!matchIds.length) {
+    return {}
+  }
+
+  const uniqueMatchIds = [...new Set(matchIds)]
+  const CHUNK_SIZE = 80
+
+  const allPrimaryEvents: MatchEventRow[] = []
+  const allSecondaryEvents: MatchEventRow[] = []
+
+  for (let i = 0; i < uniqueMatchIds.length; i += CHUNK_SIZE) {
+    const batch = uniqueMatchIds.slice(i, i + CHUNK_SIZE)
+
+    const [primaryRes, secondaryRes] = await Promise.all([
+      supabase
+        .from('tbl_Match_Events')
+        .select('id, match_id, event_type, minute, minute_extra, event_order, primary_person_id, secondary_person_id, team_id, notes')
+        .eq('primary_person_id', personId)
+        .in('match_id', batch),
+      supabase
+        .from('tbl_Match_Events')
+        .select('id, match_id, event_type, minute, minute_extra, event_order, primary_person_id, secondary_person_id, team_id, notes')
+        .eq('secondary_person_id', personId)
+        .in('match_id', batch),
+    ])
+
+    if (primaryRes.error) {
+      throw new Error(`tbl_Match_Events (primary person events): ${primaryRes.error.message}`)
+    }
+    if (secondaryRes.error) {
+      throw new Error(`tbl_Match_Events (secondary person events): ${secondaryRes.error.message}`)
+    }
+
+    allPrimaryEvents.push(...((primaryRes.data ?? []) as MatchEventRow[]))
+    allSecondaryEvents.push(...((secondaryRes.data ?? []) as MatchEventRow[]))
+  }
+
+  const result: Record<string, AdminPlayerMatchEventIcon[]> = {}
+  const append = (matchId: string, icon: AdminPlayerMatchEventIcon) => {
+    if (!result[matchId]) result[matchId] = []
+    result[matchId].push(icon)
+  }
+
+  for (const event of allPrimaryEvents.sort(compareEventsChronologicallyForPlayer)) {
+    if (!event.match_id) continue
+    const iconName = getPlayerEventIconName(event.event_type)
+    if (!iconName) continue
+    append(event.match_id, {
+      icon_name: iconName,
+      minute: event.event_type === 'SUBSTITUTION' ? formatEventMinuteForPlayerEvent(event) : null,
+      minute_left: false,
+    })
+  }
+
+  for (const event of allSecondaryEvents.sort(compareEventsChronologicallyForPlayer)) {
+    if (!event.match_id) continue
+
+    if (event.event_type === 'GOAL' || event.event_type === 'OWN_GOAL') {
+      append(event.match_id, {
+        icon_name: 'assist',
+        minute: null,
+        minute_left: false,
+      })
+      continue
+    }
+
+    const iconName = getPlayerEventIconName(event.event_type)
+    if (!iconName) continue
+
+    append(event.match_id, {
+      icon_name: iconName,
+      minute: event.event_type === 'SUBSTITUTION' ? formatEventMinuteForPlayerEvent(event) : null,
+      minute_left: true,
+    })
+  }
+
+  return result
+}
+
+export async function getAdminPlayerYearStats(personId: string): Promise<Record<string, AdminPlayerYearStats>> {
+  const supabase = createServiceRoleClient()
+
+  const { data: participations, error: participationsError } = await supabase
+    .from('tbl_Match_Participants')
+    .select('match_id, is_starting')
+    .eq('role', 'PLAYER')
+    .eq('person_id', personId)
+
+  if (participationsError) throw new Error(`tbl_Match_Participants (year stats): ${participationsError.message}`)
+  if (!participations?.length) return {}
+
+  const matchIds = [...new Set(participations.map((p) => p.match_id as string))]
+  const CHUNK_SIZE = 80
+
+  const matchYearById = new Map<string, string>()
+  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
+    const batch = matchIds.slice(i, i + CHUNK_SIZE)
+    const { data: matches, error: matchesError } = await supabase
+      .from('tbl_Matches')
+      .select('id, match_date')
+      .in('id', batch)
+    if (matchesError) throw new Error(`tbl_Matches (year stats): ${matchesError.message}`)
+    for (const match of matches ?? []) {
+      matchYearById.set(match.id as string, (match.match_date as string).slice(0, 4))
+    }
+  }
+
+  const [subOnRes, subOffRes, goalsRes, assistsRes] = await Promise.all([
+    supabase
+      .from('tbl_Match_Events')
+      .select('match_id')
+      .eq('event_type', 'SUBSTITUTION')
+      .eq('secondary_person_id', personId)
+      .in('match_id', matchIds),
+    supabase
+      .from('tbl_Match_Events')
+      .select('match_id')
+      .eq('event_type', 'SUBSTITUTION')
+      .eq('primary_person_id', personId)
+      .in('match_id', matchIds),
+    supabase
+      .from('tbl_Match_Events')
+      .select('match_id')
+      .in('event_type', ['GOAL', 'PENALTY_GOAL'])
+      .eq('primary_person_id', personId)
+      .in('match_id', matchIds),
+    supabase
+      .from('tbl_Match_Events')
+      .select('match_id')
+      .in('event_type', ['GOAL', 'OWN_GOAL'])
+      .eq('secondary_person_id', personId)
+      .in('match_id', matchIds),
+  ])
+
+  if (subOnRes.error) throw new Error(`tbl_Match_Events (year stats sub on): ${subOnRes.error.message}`)
+  if (subOffRes.error) throw new Error(`tbl_Match_Events (year stats sub off): ${subOffRes.error.message}`)
+  if (goalsRes.error) throw new Error(`tbl_Match_Events (year stats goals): ${goalsRes.error.message}`)
+  if (assistsRes.error) throw new Error(`tbl_Match_Events (year stats assists): ${assistsRes.error.message}`)
+
+  const subOnMatchIds = new Set((subOnRes.data ?? []).map((e) => e.match_id as string))
+
+  const result: Record<string, AdminPlayerYearStats> = {}
+  const ensureYear = (year: string): AdminPlayerYearStats => {
+    if (!result[year]) {
+      result[year] = {
+        appearance_count: 0,
+        starting_appearance_count: 0,
+        sub_on_count: 0,
+        sub_off_count: 0,
+        bench_count: 0,
+        goal_count: 0,
+        assist_count: 0,
+      }
+    }
+    return result[year]
+  }
+
+  for (const participation of participations) {
+    const matchId = participation.match_id as string
+    const year = matchYearById.get(matchId)
+    if (!year) continue
+
+    const stats = ensureYear(year)
+    if (participation.is_starting) {
+      stats.appearance_count += 1
+      stats.starting_appearance_count += 1
+      continue
+    }
+
+    if (subOnMatchIds.has(matchId)) {
+      stats.appearance_count += 1
+      stats.sub_on_count += 1
+    } else {
+      stats.bench_count += 1
+    }
+  }
+
+  for (const event of subOffRes.data ?? []) {
+    const year = matchYearById.get(event.match_id as string)
+    if (!year) continue
+    ensureYear(year).sub_off_count += 1
+  }
+
+  for (const event of goalsRes.data ?? []) {
+    const year = matchYearById.get(event.match_id as string)
+    if (!year) continue
+    ensureYear(year).goal_count += 1
+  }
+
+  for (const event of assistsRes.data ?? []) {
+    const year = matchYearById.get(event.match_id as string)
+    if (!year) continue
+    ensureYear(year).assist_count += 1
+  }
+
+  return result
 }
 
 export async function getAdminMatchYearBounds(): Promise<AdminMatchYearBounds | null> {
