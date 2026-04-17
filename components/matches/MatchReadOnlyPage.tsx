@@ -1,6 +1,6 @@
-import Link from 'next/link'
 import type { ReactNode } from 'react'
 import CountryFlag from '@/components/CountryFlag'
+import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import { DetailsPageContainer, DetailsPageContent } from '@/components/admin/DetailsPageLayout'
 import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
 import { Icon, type AppIconName } from '@/components/icons'
@@ -450,7 +450,14 @@ export default function MatchReadOnlyPage({
     <DetailsPageContainer maxWidthClass="max-w-5xl">
       {topBar ?? (
         <div className="mb-6">
-          <Link href={backHref} className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800">{backLabel}</Link>
+          <SmartPrefetchLink
+            href={backHref}
+            prefetchOnMount
+            preferHistoryBack
+            className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+          >
+            {backLabel}
+          </SmartPrefetchLink>
         </div>
       )}
 

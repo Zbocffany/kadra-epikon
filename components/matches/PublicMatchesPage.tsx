@@ -1,6 +1,6 @@
 import MatchesListView from '@/components/matches/MatchesListView'
 import PublicMatchesClient from '@/components/matches/PublicMatchesClient'
-import { getAdminMatches, getMatchesYearStats, type AdminMatch, type MatchYearStatsData } from '@/lib/db/matches'
+import { getPublicMatches, getMatchesYearStats, type AdminMatch, type MatchYearStatsData } from '@/lib/db/matches'
 import type { RawSearchParams } from '@/lib/pagination'
 
 type PublicMatchesPageProps = {
@@ -68,7 +68,7 @@ export default async function PublicMatchesPage({
   let yearStats: MatchYearStatsData | undefined = undefined
 
   try {
-    allMatches = await getAdminMatches()
+    allMatches = await getPublicMatches()
 
     const historyMatches = allMatches.filter((match) => match.match_status !== 'SCHEDULED')
     if (historyMatches.length > 0) {

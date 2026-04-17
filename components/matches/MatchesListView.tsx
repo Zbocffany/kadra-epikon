@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
+import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import CountryFlag from '@/components/CountryFlag'
 import type { AdminMatch, EditorialStatus, MatchYearStatsData } from '@/lib/db/matches'
 
@@ -263,6 +264,7 @@ type MatchesListViewProps = {
     href?: string
     onClick?: () => void
   }>
+  buildMatchHref?: (match: AdminMatch) => string
   yearStats?: MatchYearStatsData
 }
 
@@ -276,6 +278,7 @@ export default function MatchesListView({
   headerActions,
   displayMode = 'all',
   leftFilters = [],
+  buildMatchHref,
   yearStats,
 }: MatchesListViewProps) {
   const upcomingMatches = [...matches]
@@ -382,29 +385,29 @@ export default function MatchesListView({
                           && match.competition_name !== 'Towarzyski'
                           && match.competition_name !== 'Nieoficjalny'
                         )
-                        const matchHref = `${detailBasePath}/${match.id}`
+                        const matchHref = buildMatchHref ? buildMatchHref(match) : `${detailBasePath}/${match.id}`
 
                         return (
                           <tr key={match.id} className="border-t border-neutral-800 bg-neutral-950 transition-colors hover:bg-neutral-900/60">
                             <td className="whitespace-nowrap">
-                              <Link href={matchHref} className="block px-3 py-3" aria-label={`Otwórz mecz ${match.home_team_name} - ${match.away_team_name}`}>
+                              <SmartPrefetchLink href={matchHref} className="block px-3 py-3" aria-label={`Otwórz mecz ${match.home_team_name} - ${match.away_team_name}`}>
                                 <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200">
                                   {formatDate(match.match_date)}
                                 </span>
-                              </Link>
+                              </SmartPrefetchLink>
                             </td>
                             <td className="whitespace-nowrap font-semibold text-neutral-100">
-                              <Link href={matchHref} className="block pl-1 pr-2 py-3">
+                              <SmartPrefetchLink href={matchHref} className="block pl-1 pr-2 py-3">
                                 {match.home_team_name} – {match.away_team_name}
-                              </Link>
+                              </SmartPrefetchLink>
                             </td>
                             <td className="whitespace-nowrap text-left">
-                              <Link href={matchHref} className="block pl-0 pr-2 py-3">
+                              <SmartPrefetchLink href={matchHref} className="block pl-0 pr-2 py-3">
                                 {renderScoreWithFlags(match)}
-                              </Link>
+                              </SmartPrefetchLink>
                             </td>
                             <td className="whitespace-nowrap">
-                              <Link href={matchHref} className="block px-8 py-3">
+                              <SmartPrefetchLink href={matchHref} className="block px-8 py-3">
                                 <span
                                   title={getCompetitionLevelTooltip(match.competition_name, match.match_level_name)}
                                   className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-neutral-200"
@@ -419,13 +422,13 @@ export default function MatchesListView({
                                     </>
                                   ) : null}
                                 </span>
-                              </Link>
+                              </SmartPrefetchLink>
                             </td>
                             {showEditorialStatus ? (
                               <td className="text-right whitespace-nowrap">
-                                <Link href={matchHref} className="flex justify-end px-2 py-3">
+                                <SmartPrefetchLink href={matchHref} className="flex justify-end px-2 py-3">
                                   <span className="inline-flex"><EditorialStatusBadge status={match.editorial_status} /></span>
-                                </Link>
+                                </SmartPrefetchLink>
                               </td>
                             ) : null}
                           </tr>
@@ -520,29 +523,29 @@ export default function MatchesListView({
                                 && match.competition_name !== 'Towarzyski'
                                 && match.competition_name !== 'Nieoficjalny'
                               )
-                              const matchHref = `${detailBasePath}/${match.id}`
+                              const matchHref = buildMatchHref ? buildMatchHref(match) : `${detailBasePath}/${match.id}`
 
                               return (
                                 <tr key={match.id} className="border-t border-neutral-800 bg-neutral-950 transition-colors hover:bg-neutral-900/60">
                                   <td className="whitespace-nowrap">
-                                    <Link href={matchHref} className="block px-3 py-3" aria-label={`Otwórz mecz ${match.home_team_name} - ${match.away_team_name}`}>
+                                    <SmartPrefetchLink href={matchHref} className="block px-3 py-3" aria-label={`Otwórz mecz ${match.home_team_name} - ${match.away_team_name}`}>
                                       <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200">
                                         {formatDate(match.match_date)}
                                       </span>
-                                    </Link>
+                                    </SmartPrefetchLink>
                                   </td>
                                   <td className="whitespace-nowrap font-semibold text-neutral-100">
-                                    <Link href={matchHref} className="block pl-1 pr-2 py-3">
+                                    <SmartPrefetchLink href={matchHref} className="block pl-1 pr-2 py-3">
                                       {match.home_team_name} – {match.away_team_name}
-                                    </Link>
+                                    </SmartPrefetchLink>
                                   </td>
                                   <td className="whitespace-nowrap text-left">
-                                    <Link href={matchHref} className="block pl-0 pr-2 py-3">
+                                    <SmartPrefetchLink href={matchHref} className="block pl-0 pr-2 py-3">
                                       {renderScoreWithFlags(match)}
-                                    </Link>
+                                    </SmartPrefetchLink>
                                   </td>
                                   <td className="whitespace-nowrap">
-                                    <Link href={matchHref} className="block px-8 py-3">
+                                    <SmartPrefetchLink href={matchHref} className="block px-8 py-3">
                                       <span
                                         title={getCompetitionLevelTooltip(match.competition_name, match.match_level_name)}
                                         className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-neutral-200"
@@ -557,13 +560,13 @@ export default function MatchesListView({
                                           </>
                                         ) : null}
                                       </span>
-                                    </Link>
+                                    </SmartPrefetchLink>
                                   </td>
                                   {showEditorialStatus ? (
                                     <td className="text-right whitespace-nowrap">
-                                      <Link href={matchHref} className="flex justify-end px-2 py-3">
+                                      <SmartPrefetchLink href={matchHref} className="flex justify-end px-2 py-3">
                                         <span className="inline-flex"><EditorialStatusBadge status={match.editorial_status} /></span>
-                                      </Link>
+                                      </SmartPrefetchLink>
                                     </td>
                                   ) : null}
                                 </tr>

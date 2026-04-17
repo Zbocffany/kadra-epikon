@@ -27,7 +27,9 @@ Nie kasować historii wykonanych etapów — ten plik ma być stałą kroniką r
 - przełączanie dekad w publicznej liście meczów zostało przeniesione na lokalne filtrowanie po stronie klienta,
 - zniknął problem kilkusekundowego przeładowania przy zmianie dekady,
 - część zbyt dużych zapytań do Supabase została już wcześniej porcjowana (chunking), żeby ograniczyć awarie i opóźnienia,
-- publiczna karta meczu została odpięta od najcięższej części adminowego pobierania uczestników i osób.
+- publiczna karta meczu została odpięta od najcięższej części adminowego pobierania uczestników i osób,
+- dodano reusable mechanizm szybszej nawigacji publicznej: inteligentny prefetch linków do meczów i zachowanie informacji, z którego widoku listy użytkownik wszedł w mecz,
+- dodano cache-friendly public read functions oraz tagowane odświeżanie ich po zmianach w adminie.
 
 ### ⚠️ Nadal do poprawy
 - karta konkretnego meczu nadal może wykonywać zbyt dużo pracy przy wejściu,
@@ -194,4 +196,11 @@ Jeśli nie — trzeba ją od razu projektować zgodnie z tym planem.
 - Co zrobiono: dodano lżejszy publiczny odczyt dla karty meczu i odłączono publiczny readonly view od najcięższej ścieżki adminowej pobierającej pełną listę osób oraz dodatkowe dane niepotrzebne w widoku publicznym.
 - Efekt: wejście w publiczny szczegół meczu powinno być wyraźnie szybsze i bardziej odporne na rozrost danych.
 - Co dalej: kolejny krok to dalsze porządkowanie public read layer i przygotowanie bardziej selektywnego cache dla kolejnych kart.
+
+### Aktualizacja po etapie nawigacji i cache
+- Data: 2026-04-17
+- Zakres: optymalizacja przejścia lista meczów ⇄ karta meczu
+- Co zrobiono: dodano wspólny mechanizm smart prefetch dla publicznych linków, zachowanie ścieżki powrotu do właściwej listy meczów, szybszy powrót z karty meczu do listy oraz cache’owane publiczne funkcje odczytu z tagowanym odświeżaniem po zmianach w adminie.
+- Efekt: przechodzenie do meczu i z powrotem ma być odczuwalnie szybsze, a mechanizm jest już gotowy do użycia także w kolejnych publicznych kartach.
+- Co dalej: można tym samym wzorcem obejmować następne sekcje publiczne i stopniowo rozbudowywać public read model.
 

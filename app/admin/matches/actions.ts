@@ -1,6 +1,6 @@
 'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import {
@@ -1475,6 +1475,8 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
   revalidatePath('/')
   revalidatePath('/matches')
   revalidatePath(`/matches/${id}`)
+  revalidateTag('public-matches', 'max')
+  revalidateTag(`public-match:${id}`, 'max')
 
   redirectWithSaved(`/admin/matches/${id}`)
 }
@@ -1517,6 +1519,12 @@ export async function createMatch(formData: FormData): Promise<void> {
   if (error) {
     redirectWithError('/admin/matches', 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
+
+  revalidatePath('/')
+  revalidatePath('/matches')
+  revalidatePath(`/matches/${payload.id as string}`)
+  revalidateTag('public-matches', 'max')
+  revalidateTag(`public-match:${payload.id as string}`, 'max')
 
   redirectWithAdded('/admin/matches', `Dodano mecz z datą ${input.matchDate}`)
 }
@@ -1573,6 +1581,8 @@ export async function updateMatch(formData: FormData): Promise<void> {
   revalidatePath('/')
   revalidatePath('/matches')
   revalidatePath(`/matches/${id}`)
+  revalidateTag('public-matches', 'max')
+  revalidateTag(`public-match:${id}`, 'max')
 
   redirectWithSaved(redirectPath)
 }
@@ -1621,6 +1631,12 @@ export async function deleteMatch(formData: FormData): Promise<void> {
         : 'Wystąpił błąd bazy danych. Spróbuj ponownie.'
     )
   }
+
+  revalidatePath('/')
+  revalidatePath('/matches')
+  revalidatePath(`/matches/${id}`)
+  revalidateTag('public-matches', 'max')
+  revalidateTag(`public-match:${id}`, 'max')
 
   const label = match?.match_date ?? id
   redirectWithAdded('/admin/matches', `Usunięto mecz: ${label}`)

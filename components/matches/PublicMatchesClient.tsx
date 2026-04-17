@@ -69,6 +69,11 @@ export default function PublicMatchesClient({
     }
   }, [basePath, selectedPeriod])
 
+  const currentListHref =
+    selectedPeriod === 'upcoming'
+      ? `${basePath}?period=upcoming`
+      : `${basePath}?period=${selectedPeriod}`
+
   return (
     <MatchesListView
       title={title}
@@ -78,6 +83,7 @@ export default function PublicMatchesClient({
       detailBasePath={detailBasePath}
       showEditorialStatus={false}
       displayMode={selectedPeriod === 'upcoming' ? 'upcoming' : 'history'}
+      buildMatchHref={(match) => `${detailBasePath}/${match.id}?from=${encodeURIComponent(currentListHref)}`}
       yearStats={yearStats}
       leftFilters={[
         {

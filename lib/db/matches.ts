@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
@@ -493,6 +494,17 @@ export async function getAdminMatches(options?: AdminMatchFilterOptions): Promis
   if (!matches?.length) return []
 
   return mapAdminMatches(supabase, matches)
+}
+
+export async function getPublicMatches(): Promise<AdminMatch[]> {
+  return unstable_cache(
+    async () => getAdminMatches(),
+    ['public-matches'],
+    {
+      revalidate: 3600,
+      tags: ['public-matches'],
+    }
+  )()
 }
 
 export async function getAdminMatchesForPlayer(personId: string): Promise<AdminMatch[]> {
@@ -1108,7 +1120,14 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
 }
 
 export async function getPublicMatchDetails(id: string): Promise<AdminMatchDetails | null> {
-  return getAdminMatchDetails(id)
+  return unstable_cache(
+    async () => getAdminMatchDetails(id),
+    ['public-match-details', id],
+    {
+      revalidate: 86400,
+      tags: ['public-matches', `public-match:${id}`],
+    }
+  )()
 }
 
 export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 'id' | 'home_team_id' | 'away_team_id'>): Promise<{
@@ -1117,7 +1136,9 @@ export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 
   referees: AdminMatchParticipant[]
   people: AdminMatchParticipantPersonOption[]
 }> {
-  const supabase = createServiceRoleClient()
+  return unstable_cache(
+    async () => {
+      const supabase = createServiceRoleClient()
 
   const { data: participants, error: participantsError } = await supabase
     .from('tbl_Match_Participants')
@@ -1220,26 +1241,44 @@ export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 
       : undefined,
   } satisfies AdminMatchParticipant))
 
-  return {
-    homeParticipants: sortTeamParticipants(
-      mappedParticipants.filter((participant) => participant.team_id === match.home_team_id)
-    ),
-    awayParticipants: sortTeamParticipants(
-      mappedParticipants.filter((participant) => participant.team_id === match.away_team_id)
-    ),
-    referees: [...mappedParticipants]
-      .filter((participant) => participant.role === 'REFEREE')
-      .sort((a, b) => a.person_name.localeCompare(b.person_name, 'pl')),
-    people: peopleRows
-      .map((person) => ({
-        id: person.id,
-        label: buildPersonDisplayName(person),
-        firstName: person.first_name ?? '',
-        lastName: person.last_name ?? '',
-        nickname: person.nickname ?? '',
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label, 'pl')),
-  }
+      return {
+        homeParticipants: sortTeamParticipants(
+          mappedParticipants.filter((participant) => participant.team_id === match.home_team_id)
+        ),
+        awayParticipants: sortTeamParticipants(
+          mappedParticipants.filter((participant) => participant.team_id === match.away_team_id)
+        ),
+        referees: [...mappedParticipants]
+          .filter((participant) => participant.role === 'REFEREE')
+          .sort((a, b) => a.person_name.localeCompare(b.person_name, 'pl')),
+        people: peopleRows
+          .map((person) => ({
+            id: person.id,
+            label: buildPersonDisplayName(person),
+            firstName: person.first_name ?? '',
+            lastName: person.last_name ?? '',
+            nickname: person.nickname ?? '',
+          }))
+          .sort((a, b) => a.label.localeCompare(b.label, 'pl')),
+      }
+    },
+    ['public-match-participants', match.id],
+    {
+      revalidate: 86400,
+      tags: [`public-match:${match.id}`],
+    }
+  )()
+}
+
+export async function getPublicMatchEvents(matchId: string): Promise<AdminMatchEvent[]> {
+  return unstable_cache(
+    async () => getAdminMatchEvents(matchId),
+    ['public-match-events', matchId],
+    {
+      revalidate: 86400,
+      tags: [`public-match:${matchId}`],
+    }
+  )()
 }
 
 export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, 'id' | 'match_date' | 'home_team_id' | 'away_team_id'>): Promise<{
