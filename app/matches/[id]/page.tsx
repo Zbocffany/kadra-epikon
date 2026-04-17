@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import MatchReadOnlyPage from '@/components/matches/MatchReadOnlyPage'
-import { getAdminMatchDetails, getAdminMatchEvents, getAdminMatchParticipants } from '@/lib/db/matches'
+import { getAdminMatchEvents, getPublicMatchDetails, getPublicMatchParticipants } from '@/lib/db/matches'
 import { getAdminCityDetails } from '@/lib/db/cities'
 import { getAdminStadiumDetails } from '@/lib/db/stadiums'
 
@@ -25,14 +25,14 @@ function buildStadiumSummary(stadiumName: string | null, stadiumCityName: string
 
 export default async function PublicMatchDetailsPage({ params }: { params: Params }) {
   const { id } = await params
-  const match = await getAdminMatchDetails(id)
+  const match = await getPublicMatchDetails(id)
 
   if (!match) {
     notFound()
   }
 
   const [participants, events, cityDetails, stadiumDetails] = await Promise.all([
-    getAdminMatchParticipants(match),
+    getPublicMatchParticipants(match),
     getAdminMatchEvents(match.id),
     match.match_city_id ? getAdminCityDetails(match.match_city_id) : Promise.resolve(null),
     match.match_stadium_id ? getAdminStadiumDetails(match.match_stadium_id) : Promise.resolve(null),

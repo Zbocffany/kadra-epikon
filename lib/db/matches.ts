@@ -1107,6 +1107,141 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
   }
 }
 
+export async function getPublicMatchDetails(id: string): Promise<AdminMatchDetails | null> {
+  return getAdminMatchDetails(id)
+}
+
+export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 'id' | 'home_team_id' | 'away_team_id'>): Promise<{
+  homeParticipants: AdminMatchParticipant[]
+  awayParticipants: AdminMatchParticipant[]
+  referees: AdminMatchParticipant[]
+  people: AdminMatchParticipantPersonOption[]
+}> {
+  const supabase = createServiceRoleClient()
+
+  const { data: participants, error: participantsError } = await supabase
+    .from('tbl_Match_Participants')
+    .select('id, team_id, person_id, role, is_starting, player_position, club_team_id')
+    .eq('match_id', match.id)
+
+  if (participantsError) throw new Error(`tbl_Match_Participants: ${participantsError.message}`)
+
+  const participantRows = (participants ?? []) as MatchParticipantRow[]
+  const personIds = [...new Set(participantRows.map((participant) => participant.person_id))]
+
+  const { data: people, error: peopleError } = personIds.length
+    ? await supabase
+        .from('tbl_People')
+        .select('id, first_name, last_name, nickname')
+        .in('id', personIds)
+    : { data: [] as MatchParticipantPersonRow[], error: null }
+
+  if (peopleError) throw new Error(`tbl_People: ${peopleError.message}`)
+
+  const peopleRows = (people ?? []) as MatchParticipantPersonRow[]
+  const peopleById = new Map(peopleRows.map((person) => [person.id, person]))
+
+  const participantsWithCountryCodeIds = [...new Set(
+    participantRows
+      .filter((participant) => participant.role === 'REFEREE' || participant.role === 'COACH')
+      .map((participant) => participant.person_id)
+  )]
+
+  const [personCountriesRes, birthCountriesRes] = participantsWithCountryCodeIds.length
+    ? await Promise.all([
+        supabase
+          .from('tbl_Person_Countries')
+          .select('person_id, country_id')
+          .in('person_id', participantsWithCountryCodeIds)
+          .order('country_id', { ascending: true }),
+        supabase
+          .from('tbl_People')
+          .select('id, birth_country_id')
+          .in('id', participantsWithCountryCodeIds),
+      ])
+    : [
+        { data: [] as PersonCountryAssignmentRow[], error: null },
+        { data: [] as PersonBirthCountryRow[], error: null },
+      ]
+
+  if (personCountriesRes.error) throw new Error(`tbl_Person_Countries: ${personCountriesRes.error.message}`)
+  if (birthCountriesRes.error) throw new Error(`tbl_People (birth_country_id): ${birthCountriesRes.error.message}`)
+
+  const personCountryRows = (personCountriesRes.data ?? []) as PersonCountryAssignmentRow[]
+  const participantsBirthCountryRows = (birthCountriesRes.data ?? []) as PersonBirthCountryRow[]
+  const participantsCountryIds = [...new Set([
+    ...personCountryRows.map((row) => row.country_id),
+    ...participantsBirthCountryRows
+      .map((row) => row.birth_country_id)
+      .filter((countryId): countryId is string => Boolean(countryId)),
+  ])]
+
+  const { data: countries, error: countriesError } = participantsCountryIds.length
+    ? await supabase
+        .from('tbl_Countries')
+        .select('id, fifa_code')
+        .in('id', participantsCountryIds)
+    : { data: [] as CountryCodeRow[], error: null }
+
+  if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
+
+  const countryCodeMap = new Map(
+    ((countries ?? []) as CountryCodeRow[])
+      .filter((row): row is { id: string; fifa_code: string } => Boolean(row.fifa_code))
+      .map((row) => [row.id, row.fifa_code])
+  )
+
+  const personCountryMap = new Map<string, string>()
+  for (const row of personCountryRows) {
+    if (personCountryMap.has(row.person_id)) continue
+    const code = countryCodeMap.get(row.country_id)
+    if (code) personCountryMap.set(row.person_id, code)
+  }
+  for (const row of participantsBirthCountryRows) {
+    if (personCountryMap.has(row.id)) continue
+    if (!row.birth_country_id) continue
+    const code = countryCodeMap.get(row.birth_country_id)
+    if (code) personCountryMap.set(row.id, code)
+  }
+
+  const mappedParticipants = participantRows.map((participant) => ({
+    id: participant.id,
+    team_id: participant.team_id,
+    person_id: participant.person_id,
+    person_name: buildPersonDisplayName(peopleById.get(participant.person_id) ?? { id: participant.person_id, first_name: null, last_name: null, nickname: null }),
+    role: participant.role,
+    is_starting: participant.is_starting,
+    player_position: participant.player_position,
+    club_team_id: participant.club_team_id,
+    club_team_name: null,
+    derived_club_team_name: null,
+    country_code: participant.role === 'REFEREE' || participant.role === 'COACH'
+      ? personCountryMap.get(participant.person_id) ?? undefined
+      : undefined,
+  } satisfies AdminMatchParticipant))
+
+  return {
+    homeParticipants: sortTeamParticipants(
+      mappedParticipants.filter((participant) => participant.team_id === match.home_team_id)
+    ),
+    awayParticipants: sortTeamParticipants(
+      mappedParticipants.filter((participant) => participant.team_id === match.away_team_id)
+    ),
+    referees: [...mappedParticipants]
+      .filter((participant) => participant.role === 'REFEREE')
+      .sort((a, b) => a.person_name.localeCompare(b.person_name, 'pl')),
+    people: peopleRows
+      .map((person) => ({
+        id: person.id,
+        label: buildPersonDisplayName(person),
+        firstName: person.first_name ?? '',
+        lastName: person.last_name ?? '',
+        nickname: person.nickname ?? '',
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pl')),
+  }
+}
+
 export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, 'id' | 'match_date' | 'home_team_id' | 'away_team_id'>): Promise<{
   homeParticipants: AdminMatchParticipant[]
   awayParticipants: AdminMatchParticipant[]
