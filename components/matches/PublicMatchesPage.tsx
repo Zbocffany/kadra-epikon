@@ -1,5 +1,6 @@
 import MatchesListView from '@/components/matches/MatchesListView'
-import { getAdminMatchYearBounds, getAdminMatches, getMatchesYearStats, type AdminMatch, type MatchYearStatsData } from '@/lib/db/matches'
+import PublicMatchesClient from '@/components/matches/PublicMatchesClient'
+import { getAdminMatches, getMatchesYearStats, type AdminMatch, type MatchYearStatsData } from '@/lib/db/matches'
 import type { RawSearchParams } from '@/lib/pagination'
 
 type PublicMatchesPageProps = {
@@ -60,62 +61,51 @@ export default async function PublicMatchesPage({
   title = 'Mecze reprezentacji',
 }: PublicMatchesPageProps) {
   const period = parseSingleSearchParam(searchParams.period)
-  let matches: AdminMatch[] = []
+  let allMatches: AdminMatch[] = []
   let decadeFilters: DecadeFilter[] = []
-  let selectedPeriod = 'upcoming'
+  let initialPeriod = 'upcoming'
   let fetchError: string | null = null
   let yearStats: MatchYearStatsData | undefined = undefined
 
   try {
-    const yearBounds = await getAdminMatchYearBounds()
-    decadeFilters = yearBounds ? buildDecades(yearBounds.minYear, yearBounds.maxYear) : []
+    allMatches = await getAdminMatches()
+
+    const historyMatches = allMatches.filter((match) => match.match_status !== 'SCHEDULED')
+    if (historyMatches.length > 0) {
+      const years = historyMatches.map((match) => Number(match.match_date.slice(0, 4)))
+      decadeFilters = buildDecades(Math.min(...years), Math.max(...years))
+      yearStats = await getMatchesYearStats(historyMatches)
+    }
 
     const selectedDecade = parseRequestedDecade(period, decadeFilters)
-    selectedPeriod = period === 'upcoming' ? 'upcoming' : (selectedDecade ? String(selectedDecade.startYear) : 'upcoming')
-
-    if (selectedPeriod === 'upcoming') {
-      matches = await getAdminMatches({ status: 'SCHEDULED' })
-    } else if (selectedDecade) {
-      matches = await getAdminMatches({
-        fromDate: `${selectedDecade.startYear}-01-01`,
-        toDate: `${selectedDecade.endYear}-12-31`,
-      })
-    } else {
-      matches = []
-    }
-
-    if (selectedPeriod !== 'upcoming') {
-      yearStats = await getMatchesYearStats(matches)
-    }
+    initialPeriod = period === 'upcoming' ? 'upcoming' : (selectedDecade ? String(selectedDecade.startYear) : 'upcoming')
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
-    matches = []
+    allMatches = []
+  }
+
+  if (fetchError) {
+    return (
+      <MatchesListView
+        title={title}
+        totalMatches={0}
+        matches={[]}
+        fetchError={fetchError}
+        detailBasePath={detailBasePath}
+        showEditorialStatus={false}
+      />
+    )
   }
 
   return (
-    <MatchesListView
+    <PublicMatchesClient
       title={title}
-      totalMatches={matches.length}
-      matches={matches}
-      fetchError={fetchError}
+      basePath={basePath}
       detailBasePath={detailBasePath}
-      showEditorialStatus={false}
-      displayMode={selectedPeriod === 'upcoming' ? 'upcoming' : 'history'}
+      allMatches={allMatches}
+      decadeFilters={decadeFilters}
+      initialPeriod={initialPeriod}
       yearStats={yearStats}
-      leftFilters={[
-        {
-          key: 'upcoming',
-          label: 'Najbliższe',
-          href: `${basePath}?period=upcoming`,
-          isActive: selectedPeriod === 'upcoming',
-        },
-        ...decadeFilters.map((decade) => ({
-          key: String(decade.startYear),
-          label: `${decade.startYear}-${decade.endYear}`,
-          href: `${basePath}?period=${decade.startYear}`,
-          isActive: selectedPeriod === String(decade.startYear),
-        })),
-      ]}
     />
   )
 }

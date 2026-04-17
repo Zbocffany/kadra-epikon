@@ -256,7 +256,13 @@ type MatchesListViewProps = {
   showEditorialStatus?: boolean
   headerActions?: ReactNode
   displayMode?: 'all' | 'upcoming' | 'history'
-  leftFilters?: Array<{ key: string; label: string; href: string; isActive: boolean }>
+  leftFilters?: Array<{
+    key: string
+    label: string
+    isActive: boolean
+    href?: string
+    onClick?: () => void
+  }>
   yearStats?: MatchYearStatsData
 }
 
@@ -308,22 +314,38 @@ export default function MatchesListView({
           {leftFilters.length > 0 ? (
             <aside className="lg:w-52 lg:shrink-0">
               <div className="flex flex-wrap gap-[11px] lg:flex-col">
-                {leftFilters.map((filter) => (
-                  <Link
-                    key={filter.key}
-                    href={filter.href}
-                    className="inline-flex"
-                    aria-current={filter.isActive ? 'page' : undefined}
-                  >
+                {leftFilters.map((filter) => {
+                  const badge = (
                     <span className={`relative inline-flex items-center overflow-hidden rounded-md border px-[11px] py-[5px] text-[13px] font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${filter.isActive ? 'border-red-500 bg-red-950 text-red-100 shadow-[0_0_16px_rgba(239,68,68,0.4)]' : 'border-neutral-700 bg-neutral-900 text-neutral-300 hover:border-neutral-500 hover:text-white'}`}>
-                        <span
-                          aria-hidden="true"
-                          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
-                        />
-                        <span className="relative z-10">{filter.label}</span>
-                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
+                      />
+                      <span className="relative z-10">{filter.label}</span>
+                    </span>
+                  )
+
+                  return filter.href ? (
+                    <Link
+                      key={filter.key}
+                      href={filter.href}
+                      className="inline-flex"
+                      aria-current={filter.isActive ? 'page' : undefined}
+                    >
+                      {badge}
                     </Link>
-                  ))}
+                  ) : (
+                    <button
+                      key={filter.key}
+                      type="button"
+                      onClick={filter.onClick}
+                      className="inline-flex"
+                      aria-pressed={filter.isActive}
+                    >
+                      {badge}
+                    </button>
+                  )
+                })}
               </div>
             </aside>
           ) : null}
