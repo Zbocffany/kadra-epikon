@@ -204,3 +204,29 @@ Jeśli nie — trzeba ją od razu projektować zgodnie z tym planem.
 - Efekt: przechodzenie do meczu i z powrotem ma być odczuwalnie szybsze, a mechanizm jest już gotowy do użycia także w kolejnych publicznych kartach.
 - Co dalej: można tym samym wzorcem obejmować następne sekcje publiczne i stopniowo rozbudowywać public read model.
 
+## [2026-04-19] Plan: Publiczny widok piłkarzy (osób) i górne menu
+
+1. Dodanie górnego menu w widoku publicznym
+   - Stworzenie lekkiego, szybkiego komponentu menu (np. Home, Mecze, Osoby/Piłkarze, Kluby).
+   - Implementacja menu w layoucie publicznym (app/layout.tsx).
+   - Prefetch i cache/tag pattern dla szybkiego przełączania sekcji.
+
+2. Przeniesienie kart/sekcji z admina do publicznego menu
+   - Identyfikacja sekcji z admina, które mają sens w publicznym widoku (np. lista osób/piłkarzy, kluby).
+   - Wykorzystanie istniejących widoków, ale z lekkim public read modelem i cache/tag pattern.
+
+3. Publiczny widok osoby/piłkarza
+   - Udostępnienie istniejącej karty osoby w trybie publicznym (np. /people/[id]).
+   - Publiczny read model dla danych osoby (lekki, cache-friendly, tag-based invalidation).
+   - Szybkie ładowanie i prefetching.
+
+4. Klikalni piłkarze na podstronie meczu
+   - W widoku meczu (publicznym i admin) nazwiska piłkarzy są klikalne (link do publicznego widoku osoby).
+   - Bez zmiany czcionki ani stylu tekstu, tylko z ikoną klikalności.
+   - Prefetch i szybkie przejście do widoku osoby.
+
+5. Testy i optymalizacja
+   - Weryfikacja szybkości działania i poprawności nawigacji.
+   - Upewnienie się, że cache/tag invalidation działa dla osób/piłkarzy.
+   - Aktualizacja planu i repozytorium.
+

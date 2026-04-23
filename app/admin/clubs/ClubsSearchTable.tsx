@@ -1,7 +1,7 @@
 ﻿'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
+import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import AdminSearchableTable from '@/components/admin/AdminSearchableTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import type { AdminClub } from '@/lib/db/clubs'
@@ -11,7 +11,13 @@ import PitchIcon from '@/components/icons/PitchIcon'
 import { GoalIcon } from '@/components/icons'
 import SortableStatHeader from '@/components/admin/SortableStatHeader'
 
-export default function ClubsSearchTable({ clubs }: { clubs: AdminClub[] }) {
+export default function ClubsSearchTable({
+  clubs,
+  basePath = '/admin/clubs',
+}: {
+  clubs: AdminClub[]
+  basePath?: string
+}) {
   type SortKey = 'player_count' | 'appearance_count' | 'goal_count'
   const [sortKey, setSortKey] = useState<SortKey>('appearance_count')
 
@@ -36,12 +42,12 @@ export default function ClubsSearchTable({ clubs }: { clubs: AdminClub[] }) {
         <div className="flex items-center gap-2.5">
           <CountryFlag fifaCode={club.country_fifa_code} countryName={club.country_name ?? '—'} className="h-3.5 w-[21px] shrink-0" />
           <div className="relative inline-flex group/tooltip">
-            <Link
-              href={`/admin/clubs/${club.id}`}
+            <SmartPrefetchLink
+              href={`${basePath}/${club.id}`}
               className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
             >
               {club.name}
-            </Link>
+            </SmartPrefetchLink>
             {club.city_name && (
               <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-neutral-500 bg-black px-2 py-1 text-[11px] font-bold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/tooltip:opacity-100">
                 {club.city_name}

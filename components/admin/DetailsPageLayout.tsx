@@ -10,6 +10,7 @@ type DetailsPageHeaderProps = {
   deleteAction: (formData: FormData) => Promise<void>
   deleteId: string
   deleteConfirmMessage?: string
+  showActions?: boolean
 }
 
 type DetailsPageContentProps = {
@@ -32,6 +33,7 @@ export function DetailsPageHeader({
   deleteAction,
   deleteId,
   deleteConfirmMessage,
+  showActions = true,
 }: DetailsPageHeaderProps) {
   const deleteTargetLabel = title.trim() && title !== '—' ? `"${title}"` : 'ten element'
   const confirmMessage = deleteConfirmMessage ?? `Czy na pewno chcesz usunąć ${deleteTargetLabel}?`
@@ -45,24 +47,26 @@ export function DetailsPageHeader({
         {backLabel}
       </Link>
 
-      <div className="flex items-center gap-2">
-        <Link
-          href={editHref}
-          className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-        >
-          Edytuj
-        </Link>
-        <form action={deleteAction}>
-          <input type="hidden" name="id" value={deleteId} />
-          <ConfirmSubmitButton
-            type="submit"
-            confirmMessage={confirmMessage}
+      {showActions ? (
+        <div className="flex items-center gap-2">
+          <Link
+            href={editHref}
             className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
           >
-            Usuń
-          </ConfirmSubmitButton>
-        </form>
-      </div>
+            Edytuj
+          </Link>
+          <form action={deleteAction}>
+            <input type="hidden" name="id" value={deleteId} />
+            <ConfirmSubmitButton
+              type="submit"
+              confirmMessage={confirmMessage}
+              className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+            >
+              Usuń
+            </ConfirmSubmitButton>
+          </form>
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -6,12 +6,16 @@ import { deletePerson, updatePerson } from '../actions'
 import {
   getAdminPersonBirthCityOptions,
   getAdminPersonDetails,
+  getPublicPersonDetails,
   getPersonDisplayName,
 } from '@/lib/db/people'
 import {
   getAdminMatchesForPlayer,
   getAdminPlayerYearStats,
   getAdminPlayerMatchEventsByMatch,
+  getPublicMatchesForPlayer,
+  getPublicPlayerYearStats,
+  getPublicPlayerMatchEventsByMatch,
 } from '@/lib/db/matches'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import {
@@ -62,17 +66,20 @@ function getAge(date: string | null): number | null {
 export default async function AdminPersonDetailsPage({
   params,
   searchParams,
+  isPublic = false,
 }: {
   params: Params
   searchParams: SearchParams
+  isPublic?: boolean
 }) {
   const { id } = await params
   const { mode, saved, error } = await searchParams
+  const isEdit = !isPublic && mode === 'edit'
 
   const [person, cities, countries] = await Promise.all([
-    getAdminPersonDetails(id),
-    getAdminPersonBirthCityOptions(),
-    getAdminCountriesOptions(),
+    isPublic ? getPublicPersonDetails(id) : getAdminPersonDetails(id),
+    isEdit ? getAdminPersonBirthCityOptions() : Promise.resolve([]),
+    isEdit ? getAdminCountriesOptions() : Promise.resolve([]),
   ])
 
   if (!person) {
@@ -82,20 +89,28 @@ export default async function AdminPersonDetailsPage({
   let playerMatches: Awaited<ReturnType<typeof getAdminMatchesForPlayer>> = []
   let playerYearStats: Awaited<ReturnType<typeof getAdminPlayerYearStats>> = {}
   let playerEventsByMatch: Awaited<ReturnType<typeof getAdminPlayerMatchEventsByMatch>> = {}
+  let hasPolandNationalTeamAppearance = false
 
   if (person.roles.includes('PLAYER')) {
     ;[playerMatches, playerYearStats] = await Promise.all([
-      getAdminMatchesForPlayer(person.id),
-      getAdminPlayerYearStats(person.id),
+      isPublic ? getPublicMatchesForPlayer(person.id) : getAdminMatchesForPlayer(person.id),
+      isPublic ? getPublicPlayerYearStats(person.id) : getAdminPlayerYearStats(person.id),
     ])
-    playerEventsByMatch = await getAdminPlayerMatchEventsByMatch(
-      person.id,
-      playerMatches.map((match) => match.id)
+    playerEventsByMatch = await (
+      isPublic ? getPublicPlayerMatchEventsByMatch(
+        person.id,
+        playerMatches.map((match) => match.id)
+      ) : getAdminPlayerMatchEventsByMatch(
+        person.id,
+        playerMatches.map((match) => match.id)
+      )
+    )
+    hasPolandNationalTeamAppearance = playerMatches.some(
+      (match) => match.player_team_fifa_code === 'POL'
     )
   }
 
   const displayName = getPersonDisplayName(person)
-  const isEdit = mode === 'edit'
   const syncScope = `admin-people-edit-${person.id}`
   const birthDateFormatted = person.birth_date ? formatDate(person.birth_date) : '—'
 
@@ -171,7 +186,7 @@ export default async function AdminPersonDetailsPage({
               />
             ))}
           </div>
-          {!isEdit && person.roles.includes('PLAYER') && (
+          {!isEdit && person.roles.includes('PLAYER') && (!isPublic || (isPublic && hasPolandNationalTeamAppearance)) && (
             <div className="group/stats relative">
               <span className="stat-badge inline-flex min-w-[2.4rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-2 py-1 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[1.08rem] font-semibold text-neutral-200 light:text-neutral-900">
                 {person.appearance_count}<span className="mx-0.5 font-normal text-neutral-500 light:text-neutral-400">/</span>{person.goal_count}
@@ -286,10 +301,11 @@ export default async function AdminPersonDetailsPage({
       <DetailsPageHeader
         title={displayName}
         backLabel="Powrót do listy ludzi"
-        backHref="/admin/people"
+        backHref={isPublic ? '/people' : '/admin/people'}
         editHref={`/admin/people/${person.id}?mode=edit`}
         deleteAction={deletePerson}
         deleteId={person.id}
+        showActions={!isPublic}
       />
 
       <DetailsPageContent
@@ -323,12 +339,12 @@ export default async function AdminPersonDetailsPage({
         viewContent={
           <>
             {fields}
-            {!isEdit && person.roles.includes('PLAYER') && (
+            {!isEdit && person.roles.includes('PLAYER') && (!isPublic || (isPublic && hasPolandNationalTeamAppearance)) && (
               <PlayerMatchesByYearSection
                 matches={playerMatches}
                 yearStats={playerYearStats}
                 eventsByMatch={playerEventsByMatch}
-                detailBasePath="/admin/matches"
+                detailBasePath={isPublic ? '/matches' : '/admin/matches'}
               />
             )}
           </>

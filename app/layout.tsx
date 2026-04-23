@@ -1,11 +1,8 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono, Barlow_Condensed } from "next/font/google";
-import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
+import type { Metadata } from "next";
+import { Geist_Mono, Barlow_Condensed } from "next/font/google";
+import "./globals.css";
+import PublicTopMenu from '../components/navigation/PublicTopMenu';
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -46,8 +43,10 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${barlowCondensed.variable} antialiased`}
+        className={`${geistMono.variable} ${barlowCondensed.variable} antialiased`}
       >
+        {/* Górne menu publiczne */}
+        <PublicTopMenu />
         {children}
       </body>
     </html>

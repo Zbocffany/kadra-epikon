@@ -116,17 +116,26 @@ async function getCityStats(
   const polandTeamId = (polandTeam as { id: string }).id
 
   const CHUNK_SIZE = 80
+  const PAGE_SIZE = 1000
   type ParticipantRow = { person_id: string; match_id: string; is_starting: boolean | null }
   const allParticipants: ParticipantRow[] = []
   for (let i = 0; i < allPersonIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Match_Participants')
-      .select('person_id, match_id, is_starting')
-      .eq('role', 'PLAYER')
-      .eq('team_id', polandTeamId)
-      .in('person_id', allPersonIds.slice(i, i + CHUNK_SIZE))
-    if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
-    allParticipants.push(...((data ?? []) as ParticipantRow[]))
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Participants')
+        .select('person_id, match_id, is_starting')
+        .eq('role', 'PLAYER')
+        .eq('team_id', polandTeamId)
+        .in('person_id', allPersonIds.slice(i, i + CHUNK_SIZE))
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
+      const rows = (data ?? []) as ParticipantRow[]
+      allParticipants.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
   }
 
   if (!allParticipants.length) return new Map()
@@ -135,14 +144,22 @@ async function getCityStats(
 
   const allSubEvents: Array<{ match_id: string; secondary_person_id: string }> = []
   for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Match_Events')
-      .select('match_id, secondary_person_id')
-      .eq('event_type', 'SUBSTITUTION')
-      .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
-      .not('secondary_person_id', 'is', null)
-    if (error) throw new Error(`tbl_Match_Events (substitutions): ${error.message}`)
-    allSubEvents.push(...((data ?? []) as Array<{ match_id: string; secondary_person_id: string }>))
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, secondary_person_id')
+        .eq('event_type', 'SUBSTITUTION')
+        .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
+        .not('secondary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Events (substitutions): ${error.message}`)
+      const rows = (data ?? []) as Array<{ match_id: string; secondary_person_id: string }>
+      allSubEvents.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
   }
 
   const subEnteredSet = new Set(allSubEvents.map((e) => `${e.match_id}:${e.secondary_person_id}`))
@@ -154,14 +171,22 @@ async function getCityStats(
 
   const allGoalEvents: Array<{ match_id: string; primary_person_id: string }> = []
   for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Match_Events')
-      .select('match_id, primary_person_id')
-      .in('event_type', ['GOAL', 'PENALTY_GOAL'])
-      .in('match_id', playedMatchIds.slice(i, i + CHUNK_SIZE))
-      .not('primary_person_id', 'is', null)
-    if (error) throw new Error(`tbl_Match_Events (goals): ${error.message}`)
-    allGoalEvents.push(...((data ?? []) as Array<{ match_id: string; primary_person_id: string }>))
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, primary_person_id')
+        .in('event_type', ['GOAL', 'PENALTY_GOAL'])
+        .in('match_id', playedMatchIds.slice(i, i + CHUNK_SIZE))
+        .not('primary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Events (goals): ${error.message}`)
+      const rows = (data ?? []) as Array<{ match_id: string; primary_person_id: string }>
+      allGoalEvents.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
   }
 
   const cityByPersonId = new Map<string, string>()

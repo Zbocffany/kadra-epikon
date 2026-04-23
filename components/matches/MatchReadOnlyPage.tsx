@@ -134,10 +134,28 @@ function MatchTeamParticipantsView({ participants, events }: { participants: Adm
   }
 
   function renderPlayerNameWithIcons(player: AdminMatchParticipant, textClassName: string) {
-    const icons = personEventIcons.get(player.person_id) ?? []
+    const icons = personEventIcons.get(player.person_id) ?? [];
     return (
       <div className="flex items-center">
-        <span className={`min-w-0 truncate ${textClassName}`}>{player.person_name}</span>
+        {player.person_id ? (
+          <SmartPrefetchLink
+            href={`/people/${player.person_id}`}
+            prefetch
+            className={`group min-w-0 truncate ${textClassName} flex items-center`}
+            style={{ textDecoration: 'none' }}
+          >
+            <span>{player.person_name}</span>
+            <span
+              aria-hidden
+              className="ml-1 text-xs font-semibold text-blue-400 opacity-60 transition-opacity group-hover:opacity-100"
+              title="Zobacz profil osoby"
+            >
+              →
+            </span>
+          </SmartPrefetchLink>
+        ) : (
+          <span className={`min-w-0 truncate ${textClassName}`}>{player.person_name}</span>
+        )}
         {icons.length > 0 ? (
           <span className="inline-flex shrink-0 items-center">
             <span aria-hidden>{'\u00A0'.repeat(5)}</span>
@@ -153,7 +171,7 @@ function MatchTeamParticipantsView({ participants, events }: { participants: Adm
           </span>
         ) : null}
       </div>
-    )
+    );
   }
 
   return (

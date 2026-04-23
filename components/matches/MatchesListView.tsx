@@ -85,8 +85,10 @@ function getPolandMatchOutcome(match: AdminMatch): 'WIN' | 'LOSS' | 'DRAW' | nul
 
   const homeName = (match.home_team_name ?? '').trim().toLowerCase()
   const awayName = (match.away_team_name ?? '').trim().toLowerCase()
-  const isPolandHome = homeName.startsWith('polska')
-  const isPolandAway = awayName.startsWith('polska')
+  const homeFifa = (match.home_team_fifa_code ?? '').trim().toUpperCase()
+  const awayFifa = (match.away_team_fifa_code ?? '').trim().toUpperCase()
+  const isPolandHome = homeFifa === 'POL' || homeName.startsWith('polska')
+  const isPolandAway = awayFifa === 'POL' || awayName.startsWith('polska')
 
   if (!isPolandHome && !isPolandAway) return null
   if (homeGoals === awayGoals) return 'DRAW'
@@ -106,6 +108,26 @@ function getScoreBadgeClass(match: AdminMatch): string {
   if (outcome === 'DRAW') return 'border-neutral-500'
 
   return 'border-neutral-400'
+}
+
+function GlossySelectorBadge({
+  children,
+  active = false,
+}: {
+  children: ReactNode
+  active?: boolean
+}) {
+  return (
+    <span
+      className={`relative inline-flex items-center overflow-hidden rounded-md border px-[11px] py-[5px] text-[13px] font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${active ? 'border-red-500 bg-red-950 text-red-100 shadow-[0_0_16px_rgba(239,68,68,0.4)]' : 'border-neutral-700 bg-neutral-900 text-neutral-300 hover:border-neutral-500 hover:text-white'}`}
+    >
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
+      />
+      <span className="relative z-10">{children}</span>
+    </span>
+  )
 }
 
 function renderScoreWithFlags(match: AdminMatch) {
@@ -197,8 +219,10 @@ function getPolandGoals(match: AdminMatch): { scored: number; conceded: number }
   const awayGoals = Number(scoreMatch[2])
   const homeName = (match.home_team_name ?? '').trim().toLowerCase()
   const awayName = (match.away_team_name ?? '').trim().toLowerCase()
-  const isPolandHome = homeName.startsWith('polska')
-  const isPolandAway = awayName.startsWith('polska')
+  const homeFifa = (match.home_team_fifa_code ?? '').trim().toUpperCase()
+  const awayFifa = (match.away_team_fifa_code ?? '').trim().toUpperCase()
+  const isPolandHome = homeFifa === 'POL' || homeName.startsWith('polska')
+  const isPolandAway = awayFifa === 'POL' || awayName.startsWith('polska')
   if (!isPolandHome && !isPolandAway) return null
   return isPolandHome
     ? { scored: homeGoals, conceded: awayGoals }
@@ -319,13 +343,7 @@ export default function MatchesListView({
               <div className="flex flex-wrap gap-[11px] lg:flex-col">
                 {leftFilters.map((filter) => {
                   const badge = (
-                    <span className={`relative inline-flex items-center overflow-hidden rounded-md border px-[11px] py-[5px] text-[13px] font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${filter.isActive ? 'border-red-500 bg-red-950 text-red-100 shadow-[0_0_16px_rgba(239,68,68,0.4)]' : 'border-neutral-700 bg-neutral-900 text-neutral-300 hover:border-neutral-500 hover:text-white'}`}>
-                      <span
-                        aria-hidden="true"
-                        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
-                      />
-                      <span className="relative z-10">{filter.label}</span>
-                    </span>
+                    <GlossySelectorBadge active={filter.isActive}>{filter.label}</GlossySelectorBadge>
                   )
 
                   return filter.href ? (
@@ -470,13 +488,9 @@ export default function MatchesListView({
                         key={key}
                         type="button"
                         onClick={() => togglePanel(key)}
-                        className={`relative inline-flex items-center overflow-hidden rounded-md border px-[10px] py-[5px] text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${activePanel === key ? 'border-neutral-500 bg-neutral-700 text-white' : 'border-neutral-700 bg-neutral-900 text-neutral-400 hover:border-neutral-500 hover:text-neutral-200'}`}
+                        className="inline-flex"
                       >
-                        <span
-                          aria-hidden="true"
-                          className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
-                        />
-                        <span className="relative z-10">{label}</span>
+                        <GlossySelectorBadge active={activePanel === key}>{label}</GlossySelectorBadge>
                       </button>
                     ))}
                   </div>

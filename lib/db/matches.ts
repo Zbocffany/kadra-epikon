@@ -1,4 +1,4 @@
-import { unstable_cache } from 'next/cache'
+import { unstable_cache, unstable_noStore as noStore } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
@@ -115,6 +115,12 @@ export type AdminMatch = {
   away_team_fifa_code: string | null
   final_score: string | null
   shootout_score: string | null
+}
+
+export type AdminPlayerMatch = AdminMatch & {
+  player_team_id: string | null
+  player_team_fifa_code: string | null
+  player_is_starting: boolean | null
 }
 
 export type AdminMatchDetails = AdminMatch & {
@@ -468,7 +474,7 @@ async function getTeamCountryFifaCodeMap(teamIds: string[]): Promise<Map<string,
 export async function getAdminMatches(options?: AdminMatchFilterOptions): Promise<AdminMatch[]> {
   const supabase = createServiceRoleClient()
 
-  // 1. Matches
+  // 1. Fetch Matches
   let matchesQuery = supabase
     .from('tbl_Matches')
     .select(
@@ -507,12 +513,12 @@ export async function getPublicMatches(): Promise<AdminMatch[]> {
   )()
 }
 
-export async function getAdminMatchesForPlayer(personId: string): Promise<AdminMatch[]> {
+export async function getAdminMatchesForPlayer(personId: string): Promise<AdminPlayerMatch[]> {
   const supabase = createServiceRoleClient()
 
   const { data: participations, error: participationsError } = await supabase
     .from('tbl_Match_Participants')
-    .select('match_id, is_starting')
+    .select('match_id, team_id, is_starting')
     .eq('role', 'PLAYER')
     .eq('person_id', personId)
 
@@ -524,35 +530,14 @@ export async function getAdminMatchesForPlayer(personId: string): Promise<AdminM
   }
 
   const allMatchIds = [...new Set(participations.map((p) => p.match_id as string))]
-
-  const { data: subOnEvents, error: subOnEventsError } = await supabase
-    .from('tbl_Match_Events')
-    .select('match_id')
-    .eq('event_type', 'SUBSTITUTION')
-    .eq('secondary_person_id', personId)
-    .in('match_id', allMatchIds)
-
-  if (subOnEventsError) {
-    throw new Error(`tbl_Match_Events (substitutions): ${subOnEventsError.message}`)
-  }
-
-  const subOnMatchIds = new Set((subOnEvents ?? []).map((e) => e.match_id as string))
-  const playedMatchIds = [
-    ...new Set(
-      participations
-        .filter((p) => p.is_starting === true || subOnMatchIds.has(p.match_id as string))
-        .map((p) => p.match_id as string)
-    ),
-  ]
-
-  if (!playedMatchIds.length) {
+  if (!allMatchIds.length) {
     return []
   }
 
   const { data: matches, error: matchesError } = await supabase
     .from('tbl_Matches')
     .select('id, match_date, match_time, match_status, result_type, editorial_status, competition_id, home_team_id, away_team_id')
-    .in('id', playedMatchIds)
+    .in('id', allMatchIds)
     .order('match_date', { ascending: false })
     .order('match_time', { ascending: false })
     .order('id', { ascending: false })
@@ -564,7 +549,58 @@ export async function getAdminMatchesForPlayer(personId: string): Promise<AdminM
     return []
   }
 
-  return mapAdminMatches(supabase, matches as MatchListRow[])
+  const playerParticipationByMatchId = new Map(
+    participations.map((participation) => [
+      participation.match_id as string,
+      {
+        teamId: (participation.team_id as string | null | undefined) ?? null,
+        isStarting: (participation.is_starting as boolean | null | undefined) ?? null,
+      },
+    ])
+  )
+
+  const playerTeamIds = [...new Set(
+    participations
+      .map((participation) => (participation.team_id as string | null | undefined) ?? null)
+      .filter((teamId): teamId is string => Boolean(teamId))
+  )]
+  const playerTeamFifaCodeMap = await getTeamCountryFifaCodeMap(playerTeamIds)
+  const adminMatches = await mapAdminMatches(supabase, matches as MatchListRow[])
+
+  return adminMatches.map((match) => {
+    const playerParticipation = playerParticipationByMatchId.get(match.id)
+
+    return {
+      ...match,
+      player_team_id: playerParticipation?.teamId ?? null,
+      player_team_fifa_code: playerParticipation?.teamId
+        ? (playerTeamFifaCodeMap.get(playerParticipation.teamId) ?? null)
+        : null,
+      player_is_starting: playerParticipation?.isStarting ?? null,
+    }
+  })
+}
+
+export async function getPublicMatchesForPlayer(personId: string): Promise<AdminPlayerMatch[]> {
+  return unstable_cache(
+    async () => getAdminMatchesForPlayer(personId),
+    ['public-player-matches', personId],
+    {
+      revalidate: 3600,
+      tags: ['public-people', `public-person:${personId}`],
+    }
+  )()
+}
+
+export async function getPublicPlayerGoalsByYear(personId: string): Promise<Record<string, number>> {
+  return unstable_cache(
+    async () => getAdminPlayerGoalsByYear(personId),
+    ['public-player-goals-year', personId],
+    {
+      revalidate: 3600,
+      tags: ['public-people', `public-person:${personId}`],
+    }
+  )()
 }
 
 export async function getAdminPlayerGoalsByYear(personId: string): Promise<Record<string, number>> {
@@ -640,6 +676,22 @@ function formatEventMinuteForPlayerEvent(event: Pick<MatchEventRow, 'minute' | '
   return event.minute_extra && event.minute_extra > 0
     ? `${event.minute}+${event.minute_extra}'`
     : `${event.minute}'`
+}
+
+export async function getPublicPlayerMatchEventsByMatch(
+  personId: string,
+  matchIds: string[]
+): Promise<Record<string, AdminPlayerMatchEventIcon[]>> {
+  const normalizedMatchIds = [...new Set(matchIds)].sort()
+
+  return unstable_cache(
+    async () => getAdminPlayerMatchEventsByMatch(personId, normalizedMatchIds),
+    ['public-player-events', personId, ...normalizedMatchIds],
+    {
+      revalidate: 3600,
+      tags: ['public-people', `public-person:${personId}`],
+    }
+  )()
 }
 
 export async function getAdminPlayerMatchEventsByMatch(
@@ -725,6 +777,17 @@ export async function getAdminPlayerMatchEventsByMatch(
   }
 
   return result
+}
+
+export async function getPublicPlayerYearStats(personId: string): Promise<Record<string, AdminPlayerYearStats>> {
+  return unstable_cache(
+    async () => getAdminPlayerYearStats(personId),
+    ['public-player-year-stats', personId],
+    {
+      revalidate: 3600,
+      tags: ['public-people', `public-person:${personId}`],
+    }
+  )()
 }
 
 export async function getAdminPlayerYearStats(personId: string): Promise<Record<string, AdminPlayerYearStats>> {
@@ -1779,76 +1842,155 @@ export async function getLatestPlayerPositionByPersonIds(
 export async function getMatchesYearStats(
   matchesInput: { id: string; match_date: string }[]
 ): Promise<MatchYearStatsData> {
+  noStore()
   const empty: MatchYearStatsData = { coaches: {}, topAppearances: {}, topScorers: {} }
   if (!matchesInput.length) return empty
 
   const supabase = createServiceRoleClient()
+  const CHUNK_SIZE = 80
+  const PAGE_SIZE = 1000
   const matchIds = matchesInput.map((m) => m.id)
   const yearByMatchId = new Map(matchesInput.map((m) => [m.id, m.match_date.slice(0, 4)]))
 
-  // 1. Find Poland's team ID via country name
-  const { data: polandCountry } = await supabase
+  // 1. Find Poland country in a deterministic way
+  const { data: polandCountryByCode } = await supabase
+    .from('tbl_Countries')
+    .select('id')
+    .eq('fifa_code', 'POL')
+    .maybeSingle()
+
+  const { data: polandCountryByName } = polandCountryByCode
+    ? { data: null }
+    : await supabase
     .from('tbl_Countries')
     .select('id')
     .ilike('name', 'Polska')
     .maybeSingle()
 
+  const polandCountry = polandCountryByCode ?? polandCountryByName
   if (!polandCountry) return empty
 
-  const { data: polandTeamRow } = await supabase
-    .from('tbl_Teams')
-    .select('id')
-    .eq('country_id', polandCountry.id)
-    .maybeSingle()
+  // 2. Resolve Poland team IDs actually used by the analyzed matches
+  const polandCountryId = polandCountry.id as string
+  const teamIdsInMatches = new Set<string>()
 
-  if (!polandTeamRow) return empty
+  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
+    const batch = matchIds.slice(i, i + CHUNK_SIZE)
+    const { data, error } = await supabase
+      .from('tbl_Matches')
+      .select('home_team_id, away_team_id')
+      .in('id', batch)
 
-  const polandTeamId = (polandTeamRow as { id: string }).id
+    if (error) return empty
+    for (const match of (data ?? []) as Array<{ home_team_id: string; away_team_id: string }>) {
+      if (match.home_team_id) teamIdsInMatches.add(match.home_team_id)
+      if (match.away_team_id) teamIdsInMatches.add(match.away_team_id)
+    }
+  }
 
-  // 2. Get all Poland participants for these matches
-  const { data: participants, error: partError } = await supabase
-    .from('tbl_Match_Participants')
-    .select('match_id, person_id, role, is_starting')
-    .in('match_id', matchIds)
-    .eq('team_id', polandTeamId)
+  const teamIds = [...teamIdsInMatches]
+  if (!teamIds.length) return empty
 
-  if (partError || !participants?.length) return empty
+  const polandTeamIdsSet = new Set<string>()
+  for (let i = 0; i < teamIds.length; i += CHUNK_SIZE) {
+    const batch = teamIds.slice(i, i + CHUNK_SIZE)
+    const { data, error } = await supabase
+      .from('tbl_Teams')
+      .select('id, country_id')
+      .in('id', batch)
 
-  // 3. Get substitution events to find players who came on from the bench
-  const { data: subEvents } = await supabase
-    .from('tbl_Match_Events')
-    .select('match_id, secondary_person_id')
-    .in('match_id', matchIds)
-    .eq('event_type', 'SUBSTITUTION')
-    .not('secondary_person_id', 'is', null)
+    if (error) return empty
+    for (const team of (data ?? []) as Array<{ id: string; country_id: string | null }>) {
+      if (team.country_id === polandCountryId) {
+        polandTeamIdsSet.add(team.id)
+      }
+    }
+  }
+
+  const polandTeamIds = [...polandTeamIdsSet]
+  if (!polandTeamIds.length) return empty
+
+  // 3. Get all Poland participants for these matches in chunks
+  const participants: Array<{ match_id: string; person_id: string; role: string; is_starting: boolean | null }> = []
+  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
+    const batch = matchIds.slice(i, i + CHUNK_SIZE)
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Participants')
+        .select('id, match_id, person_id, role, is_starting')
+        .in('match_id', batch)
+        .in('team_id', polandTeamIds)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) return empty
+      const rows = (data ?? []) as Array<{ id: string; match_id: string; person_id: string; role: string; is_starting: boolean | null }>
+      participants.push(...rows.map(({ match_id, person_id, role, is_starting }) => ({ match_id, person_id, role, is_starting })))
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+
+  if (!participants.length) return empty
+
+  // 4. Get substitution events to find players who came on from the bench (chunks)
+  const subEvents: Array<{ match_id: string; secondary_person_id: string }> = []
+  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
+    const batch = matchIds.slice(i, i + CHUNK_SIZE)
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Events')
+        .select('id, match_id, secondary_person_id')
+        .in('match_id', batch)
+        .eq('event_type', 'SUBSTITUTION')
+        .not('secondary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) return empty
+      const rows = (data ?? []) as Array<{ id: string; match_id: string; secondary_person_id: string }>
+      subEvents.push(...rows.map(({ match_id, secondary_person_id }) => ({ match_id, secondary_person_id })))
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
 
   const substitutedInByMatch = new Map<string, Set<string>>()
-  for (const ev of (subEvents ?? []) as Array<{ match_id: string; secondary_person_id: string }>) {
+  for (const ev of subEvents) {
     if (!substitutedInByMatch.has(ev.match_id)) substitutedInByMatch.set(ev.match_id, new Set())
     substitutedInByMatch.get(ev.match_id)!.add(ev.secondary_person_id)
   }
 
-  // 3. Get person names
-  const personIds = [...new Set((participants as Array<{ person_id: string }>).map((p) => p.person_id))]
-  const { data: people } = await supabase
-    .from('tbl_People')
-    .select('id, first_name, last_name, nickname')
-    .in('id', personIds)
+  // 5. Get person names (chunks)
+  const personIds = [...new Set(participants.map((p) => p.person_id))]
+  const people: Array<{ id: string; first_name: string | null; last_name: string | null; nickname: string | null }> = []
+  for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
+    const batch = personIds.slice(i, i + CHUNK_SIZE)
+    const { data, error } = await supabase
+      .from('tbl_People')
+      .select('id, first_name, last_name, nickname')
+      .in('id', batch)
+
+    if (error) return empty
+    people.push(...((data ?? []) as Array<{ id: string; first_name: string | null; last_name: string | null; nickname: string | null }>))
+  }
 
   const personNameMap = new Map<string, string>()
-  for (const person of (people ?? []) as Array<{ id: string; first_name: string | null; last_name: string | null; nickname: string | null }>) {
+  for (const person of people) {
     const first = person.first_name?.trim() ?? ''
     const last = person.last_name?.trim() ?? ''
     const nickname = person.nickname?.trim() ?? ''
     personNameMap.set(person.id, `${first} ${last}`.trim() || nickname || '—')
   }
 
-  // 4. Aggregate coaches and appearances per year
+  // 6. Aggregate coaches and appearances per year
   const coachYearMap = new Map<string, Map<string, number>>()
   const appearanceYearMap = new Map<string, Map<string, number>>()
   const polandPlayersByMatch = new Map<string, Set<string>>()
 
-  for (const p of participants as Array<{ match_id: string; person_id: string; role: string; is_starting: boolean | null }>) {
+  for (const p of participants) {
     const year = yearByMatchId.get(p.match_id)
     if (!year) continue
 
@@ -1869,17 +2011,32 @@ export async function getMatchesYearStats(
     }
   }
 
-  // 5. Get goal events for these matches
-  const { data: goalEvents } = await supabase
-    .from('tbl_Match_Events')
-    .select('match_id, primary_person_id, event_type')
-    .in('match_id', matchIds)
-    .in('event_type', ['GOAL', 'PENALTY_GOAL'])
-    .not('primary_person_id', 'is', null)
+  // 7. Get goal events for these matches (chunks)
+  const goalEvents: Array<{ match_id: string; primary_person_id: string; event_type: string }> = []
+  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
+    const batch = matchIds.slice(i, i + CHUNK_SIZE)
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Events')
+        .select('id, match_id, primary_person_id, event_type')
+        .in('match_id', batch)
+        .in('event_type', ['GOAL', 'PENALTY_GOAL'])
+        .not('primary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) return empty
+      const rows = (data ?? []) as Array<{ id: string; match_id: string; primary_person_id: string; event_type: string }>
+      goalEvents.push(...rows.map(({ match_id, primary_person_id, event_type }) => ({ match_id, primary_person_id, event_type })))
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
 
   const goalYearMap = new Map<string, Map<string, number>>()
 
-  for (const event of (goalEvents ?? []) as Array<{ match_id: string; primary_person_id: string; event_type: string }>) {
+  for (const event of goalEvents) {
     const year = yearByMatchId.get(event.match_id)
     if (!year) continue
     if (!polandPlayersByMatch.get(event.match_id)?.has(event.primary_person_id)) continue
@@ -1888,7 +2045,7 @@ export async function getMatchesYearStats(
     m.set(event.primary_person_id, (m.get(event.primary_person_id) ?? 0) + 1)
   }
 
-  // 6. Convert to sorted result arrays
+  // 8. Convert to sorted result arrays
   const coaches: Record<string, YearCoachEntry[]> = {}
   for (const [year, countMap] of coachYearMap) {
     coaches[year] = [...countMap.entries()]

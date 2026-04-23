@@ -1,3 +1,4 @@
+import { unstable_cache } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
@@ -358,17 +359,26 @@ async function getPersonStats(
   if (!personIds.length) return new Map()
 
   const CHUNK_SIZE = 80
+  const PAGE_SIZE = 1000
 
   type ParticipantRow = { person_id: string; match_id: string; is_starting: boolean | null }
   const allParticipants: ParticipantRow[] = []
   for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Match_Participants')
-      .select('person_id, match_id, is_starting')
-      .eq('role', 'PLAYER')
-      .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
-    if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
-    allParticipants.push(...((data ?? []) as ParticipantRow[]))
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Participants')
+        .select('person_id, match_id, is_starting')
+        .eq('role', 'PLAYER')
+        .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
+      const rows = (data ?? []) as ParticipantRow[]
+      allParticipants.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
   }
 
   if (!allParticipants.length) return new Map()
@@ -384,14 +394,22 @@ async function getPersonStats(
   }
   const allSubEvents: SubEvent[] = []
   for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Match_Events')
-      .select('match_id, primary_person_id, secondary_person_id, minute, minute_extra')
-      .eq('event_type', 'SUBSTITUTION')
-      .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
-      .not('secondary_person_id', 'is', null)
-    if (error) throw new Error(`tbl_Match_Events (substitutions): ${error.message}`)
-    allSubEvents.push(...((data ?? []) as SubEvent[]))
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, primary_person_id, secondary_person_id, minute, minute_extra')
+        .eq('event_type', 'SUBSTITUTION')
+        .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
+        .not('secondary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Events (substitutions): ${error.message}`)
+      const rows = (data ?? []) as SubEvent[]
+      allSubEvents.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
   }
 
   const subEnteredSet = new Set(
@@ -476,20 +494,38 @@ async function getPersonStats(
 
   for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
     const batch = playedMatchIds.slice(i, i + CHUNK_SIZE)
-    const [goalsRes, assistsRes, yellowsRes, redsRes] = await Promise.all([
-      supabase.from('tbl_Match_Events').select('primary_person_id').in('event_type', ['GOAL', 'PENALTY_GOAL']).in('match_id', batch).not('primary_person_id', 'is', null),
-      supabase.from('tbl_Match_Events').select('secondary_person_id').in('event_type', ['GOAL', 'OWN_GOAL']).in('match_id', batch).not('secondary_person_id', 'is', null),
-      supabase.from('tbl_Match_Events').select('primary_person_id').eq('event_type', 'YELLOW_CARD').in('match_id', batch).not('primary_person_id', 'is', null),
-      supabase.from('tbl_Match_Events').select('primary_person_id').in('event_type', ['RED_CARD', 'SECOND_YELLOW_CARD']).in('match_id', batch).not('primary_person_id', 'is', null),
-    ])
-    if (goalsRes.error) throw new Error(`tbl_Match_Events (goals): ${goalsRes.error.message}`)
-    if (assistsRes.error) throw new Error(`tbl_Match_Events (assists): ${assistsRes.error.message}`)
-    if (yellowsRes.error) throw new Error(`tbl_Match_Events (yellow cards): ${yellowsRes.error.message}`)
-    if (redsRes.error) throw new Error(`tbl_Match_Events (red cards): ${redsRes.error.message}`)
-    allGoals.push(...((goalsRes.data ?? []) as PrimaryEvent[]))
-    allAssists.push(...((assistsRes.data ?? []) as SecondaryEvent[]))
-    allYellows.push(...((yellowsRes.data ?? []) as PrimaryEvent[]))
-    allReds.push(...((redsRes.data ?? []) as PrimaryEvent[]))
+    let fromG = 0
+    while (true) {
+      const goalsRes = await supabase.from('tbl_Match_Events').select('primary_person_id').in('event_type', ['GOAL', 'PENALTY_GOAL']).in('match_id', batch).not('primary_person_id', 'is', null).order('id', { ascending: true }).range(fromG, fromG + PAGE_SIZE - 1)
+      if (goalsRes.error) throw new Error(`tbl_Match_Events (goals): ${goalsRes.error.message}`)
+      allGoals.push(...((goalsRes.data ?? []) as PrimaryEvent[]))
+      if ((goalsRes.data ?? []).length < PAGE_SIZE) break
+      fromG += PAGE_SIZE
+    }
+    let fromA = 0
+    while (true) {
+      const assistsRes = await supabase.from('tbl_Match_Events').select('secondary_person_id').in('event_type', ['GOAL', 'OWN_GOAL']).in('match_id', batch).not('secondary_person_id', 'is', null).order('id', { ascending: true }).range(fromA, fromA + PAGE_SIZE - 1)
+      if (assistsRes.error) throw new Error(`tbl_Match_Events (assists): ${assistsRes.error.message}`)
+      allAssists.push(...((assistsRes.data ?? []) as SecondaryEvent[]))
+      if ((assistsRes.data ?? []).length < PAGE_SIZE) break
+      fromA += PAGE_SIZE
+    }
+    let fromY = 0
+    while (true) {
+      const yellowsRes = await supabase.from('tbl_Match_Events').select('primary_person_id').eq('event_type', 'YELLOW_CARD').in('match_id', batch).not('primary_person_id', 'is', null).order('id', { ascending: true }).range(fromY, fromY + PAGE_SIZE - 1)
+      if (yellowsRes.error) throw new Error(`tbl_Match_Events (yellow cards): ${yellowsRes.error.message}`)
+      allYellows.push(...((yellowsRes.data ?? []) as PrimaryEvent[]))
+      if ((yellowsRes.data ?? []).length < PAGE_SIZE) break
+      fromY += PAGE_SIZE
+    }
+    let fromR = 0
+    while (true) {
+      const redsRes = await supabase.from('tbl_Match_Events').select('primary_person_id').in('event_type', ['RED_CARD', 'SECOND_YELLOW_CARD']).in('match_id', batch).not('primary_person_id', 'is', null).order('id', { ascending: true }).range(fromR, fromR + PAGE_SIZE - 1)
+      if (redsRes.error) throw new Error(`tbl_Match_Events (red cards): ${redsRes.error.message}`)
+      allReds.push(...((redsRes.data ?? []) as PrimaryEvent[]))
+      if ((redsRes.data ?? []).length < PAGE_SIZE) break
+      fromR += PAGE_SIZE
+    }
   }
 
   const statsMap = new Map<string, PersonStatRow>()
@@ -738,6 +774,17 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
     .sort((a, b) => buildDisplayName(a).localeCompare(buildDisplayName(b), 'pl'))
 }
 
+export async function getPublicPeople(): Promise<AdminPersonListItem[]> {
+  return unstable_cache(
+    async () => getAdminPeople(),
+    ['public-people'],
+    {
+      revalidate: 3600,
+      tags: ['public-people'],
+    }
+  )()
+}
+
 export async function getAdminPeoplePage(
   page: number,
   pageSize: number
@@ -832,6 +879,17 @@ export async function getAdminPeoplePage(
     }),
     total: count ?? 0,
   }
+}
+
+export async function getPublicPersonDetails(id: string): Promise<AdminPersonDetails | null> {
+  return unstable_cache(
+    async () => getAdminPersonDetails(id),
+    ['public-person-details', id],
+    {
+      revalidate: 3600,
+      tags: ['public-people', `public-person:${id}`],
+    }
+  )()
 }
 
 export async function getAdminPersonDetails(id: string): Promise<AdminPersonDetails | null> {

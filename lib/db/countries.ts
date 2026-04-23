@@ -92,14 +92,29 @@ async function getCountryVsPolandStats(
 
   const matchIds = allMatches.map((m) => m.id as string)
 
-  const { data: events } = await supabase
-    .from('tbl_Match_Events')
-    .select('match_id, team_id, event_type')
-    .in('match_id', matchIds)
-    .in('event_type', ['GOAL', 'OWN_GOAL', 'PENALTY_GOAL'])
+  const CHUNK_SIZE = 80
+  const PAGE_SIZE = 1000
+  const allEvents: Array<{ match_id: string; team_id: string | null; event_type: string }> = []
+  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, team_id, event_type')
+        .in('match_id', matchIds.slice(i, i + CHUNK_SIZE))
+        .in('event_type', ['GOAL', 'OWN_GOAL', 'PENALTY_GOAL'])
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) break
+      const rows = (data ?? []) as Array<{ match_id: string; team_id: string | null; event_type: string }>
+      allEvents.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
 
   const eventsByMatch = new Map<string, Array<{ team_id: string | null; event_type: string }>>()
-  for (const e of events ?? []) {
+  for (const e of allEvents) {
     const arr = eventsByMatch.get(e.match_id as string) ?? []
     arr.push({ team_id: e.team_id as string | null, event_type: e.event_type as string })
     eventsByMatch.set(e.match_id as string, arr)

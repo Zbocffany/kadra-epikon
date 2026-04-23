@@ -1,7 +1,7 @@
 import PublicMatchesContent from '@/components/matches/PublicMatchesPage'
 import type { RawSearchParams } from '@/lib/pagination'
 
-export const revalidate = 3600
+export const dynamic = 'force-dynamic'
 
 type SearchParams = Promise<RawSearchParams>
 

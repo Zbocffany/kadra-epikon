@@ -1,8 +1,8 @@
 ﻿'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
 import CountryFlag from '@/components/CountryFlag'
+import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import AdminSearchableTable from '@/components/admin/AdminSearchableTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import type { AdminPersonListItem, AdminPersonRole } from '@/lib/db/people'
@@ -45,7 +45,13 @@ function getActivityLabel(person: AdminPersonListItem): string {
   return person.is_active ? 'Aktywna' : 'Nieaktywna'
 }
 
-export default function PeopleSearchTable({ people }: { people: AdminPersonListItem[] }) {
+export default function PeopleSearchTable({
+  people,
+  basePath = '/admin/people',
+}: {
+  people: AdminPersonListItem[]
+  basePath?: string
+}) {
   type SortKey = 'appearance_count' | 'goal_count' | 'assist_count' | 'yellow_card_count' | 'red_card_count' | 'minute_count' | 'bench_count'
   const [sortKey, setSortKey] = useState<SortKey>('appearance_count')
 
@@ -81,8 +87,8 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
           ) : (
             <span className="inline-block h-3.5 w-[21px] shrink-0" />
           )}
-          <Link
-            href={`/admin/people/${person.id}`}
+          <SmartPrefetchLink
+            href={`${basePath}/${person.id}`}
             className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
           >
             {getPersonDisplayName(person)}
@@ -92,7 +98,7 @@ export default function PeopleSearchTable({ people }: { people: AdminPersonListI
             {getAgeDisplay(person) && (
               <span className="text-neutral-500 font-normal">{getAgeDisplay(person)}</span>
             )}
-          </Link>
+          </SmartPrefetchLink>
         </div>
       ),
       // min-w zapewnia stały układ kolumn stat niezależnie od długości nazwy (punkt odniesienia: widok wszystkich krajów w filtrze)

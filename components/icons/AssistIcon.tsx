@@ -16,7 +16,7 @@ export default function AssistIcon(props: SVGProps<SVGSVGElement>) {
         fontSize="20"
         fontWeight="900"
         fill="currentColor"
-        fontFamily="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
+        fontFamily="Barlow Condensed, sans-serif"
       >
         A
       </text>

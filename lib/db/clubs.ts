@@ -1,4 +1,5 @@
-﻿import { createServiceRoleClient } from '@/lib/supabase/server'
+﻿import { unstable_cache } from 'next/cache'
+import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
 export type AdminClub = {
@@ -55,16 +56,25 @@ async function getClubStats(
   const teamIds = [...clubIdByTeamId.keys()]
 
   const CHUNK_SIZE = 80
+  const PAGE_SIZE = 1000
   const allParticipants: ClubParticipantRow[] = []
   for (let i = 0; i < teamIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Match_Participants')
-      .select('person_id, match_id, is_starting, club_team_id')
-      .eq('role', 'PLAYER')
-      .eq('team_id', polandTeamId)
-      .in('club_team_id', teamIds.slice(i, i + CHUNK_SIZE))
-    if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
-    allParticipants.push(...((data ?? []) as ClubParticipantRow[]))
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Participants')
+        .select('person_id, match_id, is_starting, club_team_id')
+        .eq('role', 'PLAYER')
+        .eq('team_id', polandTeamId)
+        .in('club_team_id', teamIds.slice(i, i + CHUNK_SIZE))
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
+      const rows = (data ?? []) as ClubParticipantRow[]
+      allParticipants.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
   }
 
   if (!allParticipants.length) return new Map()
@@ -73,14 +83,22 @@ async function getClubStats(
 
   const allSubEvents: Array<{ match_id: string; secondary_person_id: string }> = []
   for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Match_Events')
-      .select('match_id, secondary_person_id')
-      .eq('event_type', 'SUBSTITUTION')
-      .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
-      .not('secondary_person_id', 'is', null)
-    if (error) throw new Error(`tbl_Match_Events (substitutions): ${error.message}`)
-    allSubEvents.push(...((data ?? []) as Array<{ match_id: string; secondary_person_id: string }>))
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, secondary_person_id')
+        .eq('event_type', 'SUBSTITUTION')
+        .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
+        .not('secondary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Events (substitutions): ${error.message}`)
+      const rows = (data ?? []) as Array<{ match_id: string; secondary_person_id: string }>
+      allSubEvents.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
   }
 
   const subEnteredSet = new Set(allSubEvents.map((e) => `${e.match_id}:${e.secondary_person_id}`))
@@ -95,14 +113,22 @@ async function getClubStats(
 
   const allGoalEvents: Array<{ match_id: string; primary_person_id: string }> = []
   for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Match_Events')
-      .select('match_id, primary_person_id')
-      .in('event_type', ['GOAL', 'PENALTY_GOAL'])
-      .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
-      .not('primary_person_id', 'is', null)
-    if (error) throw new Error(`tbl_Match_Events (goals): ${error.message}`)
-    allGoalEvents.push(...((data ?? []) as Array<{ match_id: string; primary_person_id: string }>))
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, primary_person_id')
+        .in('event_type', ['GOAL', 'PENALTY_GOAL'])
+        .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
+        .not('primary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Events (goals): ${error.message}`)
+      const rows = (data ?? []) as Array<{ match_id: string; primary_person_id: string }>
+      allGoalEvents.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
   }
 
   const statsMap = new Map<string, { players: Set<string>; appearances: number; goals: number }>()
@@ -201,6 +227,30 @@ export type AdminCity = {
   city_name: string
   current_country_id: string | null
   current_country_name: string | null
+}
+
+export type AdminClubPlayerStat = {
+  person_id: string
+  person_name: string
+  appearance_count: number
+  goal_count: number
+  assist_count: number
+  minute_count: number
+}
+
+function buildClubPlayerDisplayName(person: {
+  first_name: string | null
+  last_name: string | null
+  nickname: string | null
+}): string {
+  const first = person.first_name?.trim() ?? ''
+  const last = person.last_name?.trim() ?? ''
+  const nickname = person.nickname?.trim() ?? ''
+  const fullName = `${first} ${last}`.trim()
+
+  if (fullName) return fullName
+  if (nickname) return nickname
+  return '—'
 }
 
 export const CLUB_HISTORY_EVENT_TYPES = [
@@ -306,6 +356,17 @@ export async function getAdminClubs(): Promise<AdminClub[]> {
       goal_count: s?.goal_count ?? 0,
     }
   })
+}
+
+export async function getPublicClubs(): Promise<AdminClub[]> {
+  return unstable_cache(
+    async () => getAdminClubs(),
+    ['public-clubs'],
+    {
+      revalidate: 3600,
+      tags: ['public-clubs'],
+    }
+  )()
 }
 
 export async function getAdminClubsPage(
@@ -450,6 +511,17 @@ export async function getAdminCities(): Promise<AdminCity[]> {
   })
 }
 
+export async function getPublicClubDetails(id: string): Promise<AdminClubDetails | null> {
+  return unstable_cache(
+    async () => getAdminClubDetails(id),
+    ['public-club-details', id],
+    {
+      revalidate: 3600,
+      tags: ['public-clubs', `public-club:${id}`],
+    }
+  )()
+}
+
 export async function getAdminClubDetails(
   id: string
 ): Promise<AdminClubDetails | null> {
@@ -565,6 +637,23 @@ export async function getAdminClubDetails(
  * - Exit during added time is clamped to the regular period boundary.
  * - Regular match max: 90 min. Extra-time match (EXTRA_TIME, EXTRA_TIME_AND_PENALTIES, GOLDEN_GOAL): 120 min.
  */
+export async function getPublicClubDetailStats(clubId: string): Promise<{
+  player_count: number
+  appearance_count: number
+  goal_count: number
+  assist_count: number
+  minute_count: number
+}> {
+  return unstable_cache(
+    async () => getAdminClubDetailStats(clubId),
+    ['public-club-stats', clubId],
+    {
+      revalidate: 3600,
+      tags: ['public-clubs', `public-club:${clubId}`],
+    }
+  )()
+}
+
 export async function getAdminClubDetailStats(clubId: string): Promise<{
   player_count: number
   appearance_count: number
@@ -589,15 +678,24 @@ export async function getAdminClubDetailStats(clubId: string): Promise<{
 
   type ParticipantRow = { person_id: string; match_id: string; is_starting: boolean | null }
   const allParticipants: ParticipantRow[] = []
+  const PAGE_SIZE = 1000
   for (let i = 0; i < clubTeamIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Match_Participants')
-      .select('person_id, match_id, is_starting')
-      .eq('role', 'PLAYER')
-      .eq('team_id', polandTeamId)
-      .in('club_team_id', clubTeamIds.slice(i, i + CHUNK_SIZE))
-    if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
-    allParticipants.push(...((data ?? []) as ParticipantRow[]))
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Participants')
+        .select('person_id, match_id, is_starting')
+        .eq('role', 'PLAYER')
+        .eq('team_id', polandTeamId)
+        .in('club_team_id', clubTeamIds.slice(i, i + CHUNK_SIZE))
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
+      const rows = (data ?? []) as ParticipantRow[]
+      allParticipants.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
   }
   if (!allParticipants.length) return zero
 
@@ -607,14 +705,22 @@ export async function getAdminClubDetailStats(clubId: string): Promise<{
   type SubEvent = { match_id: string; secondary_person_id: string }
   const allSubEvents: SubEvent[] = []
   for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Match_Events')
-      .select('match_id, secondary_person_id')
-      .eq('event_type', 'SUBSTITUTION')
-      .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
-      .not('secondary_person_id', 'is', null)
-    if (error) throw new Error(`tbl_Match_Events (substitutions): ${error.message}`)
-    allSubEvents.push(...((data ?? []) as SubEvent[]))
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, secondary_person_id')
+        .eq('event_type', 'SUBSTITUTION')
+        .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
+        .not('secondary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Events (substitutions): ${error.message}`)
+      const rows = (data ?? []) as SubEvent[]
+      allSubEvents.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
   }
 
   const subEnteredSet = new Set(allSubEvents.map((e) => `${e.match_id}:${e.secondary_person_id}`))
@@ -633,14 +739,22 @@ export async function getAdminClubDetailStats(clubId: string): Promise<{
   const allAssistEvents: SecondaryEvent[] = []
   for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
     const batch = playedMatchIds.slice(i, i + CHUNK_SIZE)
-    const [goalsRes, assistsRes] = await Promise.all([
-      supabase.from('tbl_Match_Events').select('match_id, primary_person_id').in('event_type', ['GOAL', 'PENALTY_GOAL']).in('match_id', batch).not('primary_person_id', 'is', null),
-      supabase.from('tbl_Match_Events').select('match_id, secondary_person_id').in('event_type', ['GOAL', 'OWN_GOAL']).in('match_id', batch).not('secondary_person_id', 'is', null),
-    ])
-    if (goalsRes.error) throw new Error(`tbl_Match_Events (goals): ${goalsRes.error.message}`)
-    if (assistsRes.error) throw new Error(`tbl_Match_Events (assists): ${assistsRes.error.message}`)
-    allGoalEvents.push(...((goalsRes.data ?? []) as PrimaryEvent[]))
-    allAssistEvents.push(...((assistsRes.data ?? []) as SecondaryEvent[]))
+    let fromG = 0
+    while (true) {
+      const goalsRes = await supabase.from('tbl_Match_Events').select('match_id, primary_person_id').in('event_type', ['GOAL', 'PENALTY_GOAL']).in('match_id', batch).not('primary_person_id', 'is', null).order('id', { ascending: true }).range(fromG, fromG + PAGE_SIZE - 1)
+      if (goalsRes.error) throw new Error(`tbl_Match_Events (goals): ${goalsRes.error.message}`)
+      allGoalEvents.push(...((goalsRes.data ?? []) as PrimaryEvent[]))
+      if ((goalsRes.data ?? []).length < PAGE_SIZE) break
+      fromG += PAGE_SIZE
+    }
+    let fromA = 0
+    while (true) {
+      const assistsRes = await supabase.from('tbl_Match_Events').select('match_id, secondary_person_id').in('event_type', ['GOAL', 'OWN_GOAL']).in('match_id', batch).not('secondary_person_id', 'is', null).order('id', { ascending: true }).range(fromA, fromA + PAGE_SIZE - 1)
+      if (assistsRes.error) throw new Error(`tbl_Match_Events (assists): ${assistsRes.error.message}`)
+      allAssistEvents.push(...((assistsRes.data ?? []) as SecondaryEvent[]))
+      if ((assistsRes.data ?? []).length < PAGE_SIZE) break
+      fromA += PAGE_SIZE
+    }
   }
 
   // Sub-on / sub-off events for minute calculation
@@ -650,14 +764,22 @@ export async function getAdminClubDetailStats(clubId: string): Promise<{
   const allSubOffEvents: SubOffRow[] = []
   for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
     const batch = playedMatchIds.slice(i, i + CHUNK_SIZE)
-    const [subInRes, subOffRes] = await Promise.all([
-      supabase.from('tbl_Match_Events').select('match_id, secondary_person_id, minute, minute_extra').eq('event_type', 'SUBSTITUTION').in('match_id', batch).not('secondary_person_id', 'is', null),
-      supabase.from('tbl_Match_Events').select('match_id, primary_person_id, minute, minute_extra').eq('event_type', 'SUBSTITUTION').in('match_id', batch).not('primary_person_id', 'is', null),
-    ])
-    if (subInRes.error) throw new Error(`tbl_Match_Events (sub-in): ${subInRes.error.message}`)
-    if (subOffRes.error) throw new Error(`tbl_Match_Events (sub-off): ${subOffRes.error.message}`)
-    allSubInEvents.push(...((subInRes.data ?? []) as SubInRow[]))
-    allSubOffEvents.push(...((subOffRes.data ?? []) as SubOffRow[]))
+    let fromIn = 0
+    while (true) {
+      const subInRes = await supabase.from('tbl_Match_Events').select('match_id, secondary_person_id, minute, minute_extra').eq('event_type', 'SUBSTITUTION').in('match_id', batch).not('secondary_person_id', 'is', null).order('id', { ascending: true }).range(fromIn, fromIn + PAGE_SIZE - 1)
+      if (subInRes.error) throw new Error(`tbl_Match_Events (sub-in): ${subInRes.error.message}`)
+      allSubInEvents.push(...((subInRes.data ?? []) as SubInRow[]))
+      if ((subInRes.data ?? []).length < PAGE_SIZE) break
+      fromIn += PAGE_SIZE
+    }
+    let fromOff = 0
+    while (true) {
+      const subOffRes = await supabase.from('tbl_Match_Events').select('match_id, primary_person_id, minute, minute_extra').eq('event_type', 'SUBSTITUTION').in('match_id', batch).not('primary_person_id', 'is', null).order('id', { ascending: true }).range(fromOff, fromOff + PAGE_SIZE - 1)
+      if (subOffRes.error) throw new Error(`tbl_Match_Events (sub-off): ${subOffRes.error.message}`)
+      allSubOffEvents.push(...((subOffRes.data ?? []) as SubOffRow[]))
+      if ((subOffRes.data ?? []).length < PAGE_SIZE) break
+      fromOff += PAGE_SIZE
+    }
   }
 
   // Match result types to determine max duration
@@ -705,6 +827,287 @@ export async function getAdminClubDetailStats(clubId: string): Promise<{
   }
 
   return { player_count, appearance_count, goal_count, assist_count, minute_count }
+}
+
+export async function getPublicClubPlayerStats(clubId: string): Promise<AdminClubPlayerStat[]> {
+  return unstable_cache(
+    async () => getAdminClubPlayerStats(clubId),
+    ['public-club-player-stats', clubId],
+    {
+      revalidate: 3600,
+      tags: ['public-clubs', `public-club:${clubId}`],
+    }
+  )()
+}
+
+export async function getAdminClubPlayerStats(clubId: string): Promise<AdminClubPlayerStat[]> {
+  const supabase = createServiceRoleClient()
+  const CHUNK_SIZE = 80
+
+  const { data: polandCountry } = await supabase
+    .from('tbl_Countries')
+    .select('id')
+    .ilike('name', 'Polska')
+    .maybeSingle()
+  if (!polandCountry) return []
+
+  const { data: polandTeam } = await supabase
+    .from('tbl_Teams')
+    .select('id')
+    .eq('country_id', polandCountry.id)
+    .maybeSingle()
+  if (!polandTeam) return []
+
+  const { data: clubTeams, error: teamsError } = await supabase
+    .from('tbl_Teams')
+    .select('id')
+    .eq('club_id', clubId)
+  if (teamsError) throw new Error(`tbl_Teams: ${teamsError.message}`)
+
+  const clubTeamIds = (clubTeams ?? []).map((team) => team.id)
+  if (!clubTeamIds.length) return []
+
+  type ParticipantRow = {
+    person_id: string
+    match_id: string
+    is_starting: boolean | null
+    club_team_id: string
+  }
+
+  const allParticipants: ParticipantRow[] = []
+  const PAGE_SIZE = 1000
+  for (let i = 0; i < clubTeamIds.length; i += CHUNK_SIZE) {
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Participants')
+        .select('person_id, match_id, is_starting, club_team_id')
+        .eq('role', 'PLAYER')
+        .eq('team_id', polandTeam.id)
+        .in('club_team_id', clubTeamIds.slice(i, i + CHUNK_SIZE))
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
+      const rows = (data ?? []) as ParticipantRow[]
+      allParticipants.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+
+  if (!allParticipants.length) return []
+
+  const allMatchIds = [...new Set(allParticipants.map((p) => p.match_id))]
+
+  type SubEvent = { match_id: string; secondary_person_id: string }
+  const allSubEvents: SubEvent[] = []
+  for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, secondary_person_id')
+        .eq('event_type', 'SUBSTITUTION')
+        .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
+        .not('secondary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Events (substitutions): ${error.message}`)
+      const rows = (data ?? []) as SubEvent[]
+      allSubEvents.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+
+  const subEnteredSet = new Set(allSubEvents.map((e) => `${e.match_id}:${e.secondary_person_id}`))
+  const playedParticipants = allParticipants.filter(
+    (p) => p.is_starting || subEnteredSet.has(`${p.match_id}:${p.person_id}`)
+  )
+  if (!playedParticipants.length) return []
+
+  const personIds = [...new Set(playedParticipants.map((p) => p.person_id))]
+  const playedMatchIds = [...new Set(playedParticipants.map((p) => p.match_id))]
+  const playedMatchPersonSet = new Set(playedParticipants.map((p) => `${p.match_id}:${p.person_id}`))
+
+  const { data: people, error: peopleError } = await supabase
+    .from('tbl_People')
+    .select('id, first_name, last_name, nickname')
+    .in('id', personIds)
+  if (peopleError) throw new Error(`tbl_People: ${peopleError.message}`)
+
+  const statsByPersonId = new Map<string, AdminClubPlayerStat>()
+  for (const person of people ?? []) {
+    statsByPersonId.set(person.id as string, {
+      person_id: person.id as string,
+      person_name: buildClubPlayerDisplayName({
+        first_name: (person.first_name as string | null | undefined) ?? null,
+        last_name: (person.last_name as string | null | undefined) ?? null,
+        nickname: (person.nickname as string | null | undefined) ?? null,
+      }),
+      appearance_count: 0,
+      goal_count: 0,
+      assist_count: 0,
+      minute_count: 0,
+    })
+  }
+
+  for (const participation of playedParticipants) {
+    const entry = statsByPersonId.get(participation.person_id)
+    if (entry) entry.appearance_count += 1
+  }
+
+  type PrimaryEvent = { match_id: string; primary_person_id: string }
+  type SecondaryEvent = { match_id: string; secondary_person_id: string }
+  const allGoalEvents: PrimaryEvent[] = []
+  const allAssistEvents: SecondaryEvent[] = []
+
+  for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
+    const batch = playedMatchIds.slice(i, i + CHUNK_SIZE)
+    let fromG = 0
+    while (true) {
+      const goalsRes = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, primary_person_id')
+        .in('event_type', ['GOAL', 'PENALTY_GOAL'])
+        .in('match_id', batch)
+        .not('primary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(fromG, fromG + PAGE_SIZE - 1)
+      if (goalsRes.error) throw new Error(`tbl_Match_Events (goals): ${goalsRes.error.message}`)
+      allGoalEvents.push(...((goalsRes.data ?? []) as PrimaryEvent[]))
+      if ((goalsRes.data ?? []).length < PAGE_SIZE) break
+      fromG += PAGE_SIZE
+    }
+    let fromA = 0
+    while (true) {
+      const assistsRes = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, secondary_person_id')
+        .in('event_type', ['GOAL', 'OWN_GOAL'])
+        .in('match_id', batch)
+        .not('secondary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(fromA, fromA + PAGE_SIZE - 1)
+      if (assistsRes.error) throw new Error(`tbl_Match_Events (assists): ${assistsRes.error.message}`)
+      allAssistEvents.push(...((assistsRes.data ?? []) as SecondaryEvent[]))
+      if ((assistsRes.data ?? []).length < PAGE_SIZE) break
+      fromA += PAGE_SIZE
+    }
+  }
+
+  for (const event of allGoalEvents) {
+    if (!playedMatchPersonSet.has(`${event.match_id}:${event.primary_person_id}`)) continue
+    const entry = statsByPersonId.get(event.primary_person_id)
+    if (entry) entry.goal_count += 1
+  }
+
+  for (const event of allAssistEvents) {
+    if (!playedMatchPersonSet.has(`${event.match_id}:${event.secondary_person_id}`)) continue
+    const entry = statsByPersonId.get(event.secondary_person_id)
+    if (entry) entry.assist_count += 1
+  }
+
+  type SubInRow = { match_id: string; secondary_person_id: string; minute: number; minute_extra: number | null }
+  type SubOffRow = { match_id: string; primary_person_id: string; minute: number; minute_extra: number | null }
+  const allSubInEvents: SubInRow[] = []
+  const allSubOffEvents: SubOffRow[] = []
+
+  for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
+    const batch = playedMatchIds.slice(i, i + CHUNK_SIZE)
+    let fromIn = 0
+    while (true) {
+      const subInRes = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, secondary_person_id, minute, minute_extra')
+        .eq('event_type', 'SUBSTITUTION')
+        .in('match_id', batch)
+        .not('secondary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(fromIn, fromIn + PAGE_SIZE - 1)
+      if (subInRes.error) throw new Error(`tbl_Match_Events (sub-in): ${subInRes.error.message}`)
+      allSubInEvents.push(...((subInRes.data ?? []) as SubInRow[]))
+      if ((subInRes.data ?? []).length < PAGE_SIZE) break
+      fromIn += PAGE_SIZE
+    }
+    let fromOff = 0
+    while (true) {
+      const subOffRes = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, primary_person_id, minute, minute_extra')
+        .eq('event_type', 'SUBSTITUTION')
+        .in('match_id', batch)
+        .not('primary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(fromOff, fromOff + PAGE_SIZE - 1)
+      if (subOffRes.error) throw new Error(`tbl_Match_Events (sub-off): ${subOffRes.error.message}`)
+      allSubOffEvents.push(...((subOffRes.data ?? []) as SubOffRow[]))
+      if ((subOffRes.data ?? []).length < PAGE_SIZE) break
+      fromOff += PAGE_SIZE
+    }
+  }
+
+  const matchResultTypeMap = new Map<string, string | null>()
+  for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Matches')
+      .select('id, result_type')
+      .in('id', playedMatchIds.slice(i, i + CHUNK_SIZE))
+
+    if (error) throw new Error(`tbl_Matches: ${error.message}`)
+    for (const match of data ?? []) matchResultTypeMap.set(match.id as string, (match.result_type as string | null | undefined) ?? null)
+  }
+
+  type SubEntry = { minute: number; extra: number }
+  const subInMap = new Map<string, SubEntry>()
+  for (const event of allSubInEvents) {
+    subInMap.set(`${event.match_id}:${event.secondary_person_id}`, { minute: event.minute, extra: event.minute_extra ?? 0 })
+  }
+  const subOffMap = new Map<string, SubEntry>()
+  for (const event of allSubOffEvents) {
+    subOffMap.set(`${event.match_id}:${event.primary_person_id}`, { minute: event.minute, extra: event.minute_extra ?? 0 })
+  }
+
+  for (const participation of playedParticipants) {
+    const resultType = matchResultTypeMap.get(participation.match_id) ?? null
+    const hasExtraTime = resultType === 'EXTRA_TIME' || resultType === 'EXTRA_TIME_AND_PENALTIES' || resultType === 'GOLDEN_GOAL'
+    const matchRegularEnd = hasExtraTime ? 120 : 90
+    const isStarter = participation.is_starting === true
+    const subOn = isStarter ? null : (subInMap.get(`${participation.match_id}:${participation.person_id}`) ?? null)
+    if (!isStarter && !subOn) continue
+
+    const subOff = subOffMap.get(`${participation.match_id}:${participation.person_id}`) ?? null
+    const entryMin = isStarter ? 0 : subOn!.minute
+    const entryExtra = isStarter ? 0 : subOn!.extra
+    const exitMin = subOff ? subOff.minute : matchRegularEnd
+    const exitExtra = subOff ? subOff.extra : 0
+    const effectiveEntry = entryExtra > 0 ? entryMin - 1 : entryMin
+    const effectiveExit = Math.min(exitExtra > 0 ? exitMin : exitMin, matchRegularEnd)
+
+    const entry = statsByPersonId.get(participation.person_id)
+    if (entry) entry.minute_count += Math.max(0, effectiveExit - effectiveEntry)
+  }
+
+  return [...statsByPersonId.values()]
+    .filter((player) => player.appearance_count > 0)
+    .sort((a, b) => {
+      if (b.appearance_count !== a.appearance_count) return b.appearance_count - a.appearance_count
+      if (b.goal_count !== a.goal_count) return b.goal_count - a.goal_count
+      if (b.assist_count !== a.assist_count) return b.assist_count - a.assist_count
+      if (b.minute_count !== a.minute_count) return b.minute_count - a.minute_count
+      return a.person_name.localeCompare(b.person_name, 'pl')
+    })
+}
+
+export async function getPublicClubHistory(clubId: string): Promise<AdminClubHistoryEvent[]> {
+  return unstable_cache(
+    async () => getClubHistory(clubId),
+    ['public-club-history', clubId],
+    {
+      revalidate: 3600,
+      tags: ['public-clubs', `public-club:${clubId}`],
+    }
+  )()
 }
 
 export async function getClubHistory(

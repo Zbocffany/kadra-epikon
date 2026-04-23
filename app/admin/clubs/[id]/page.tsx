@@ -6,7 +6,12 @@ import {
   getAdminCities,
   getAdminClubDetails,
   getAdminClubDetailStats,
+  getAdminClubPlayerStats,
   getClubHistory,
+  getPublicClubDetails,
+  getPublicClubDetailStats,
+  getPublicClubHistory,
+  getPublicClubPlayerStats,
 } from '@/lib/db/clubs'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import { getAdminStadiumOptions } from '@/lib/db/stadiums'
@@ -23,6 +28,7 @@ import PlayerSilhouetteIcon from '@/components/icons/PlayerSilhouetteIcon'
 import PitchIcon from '@/components/icons/PitchIcon'
 import ClockIcon from '@/components/icons/ClockIcon'
 import { GoalIcon, AssistIcon } from '@/components/icons'
+import PublicClubPlayersTable from '@/components/clubs/PublicClubPlayersTable'
 import {
   DetailsPageContainer,
   DetailsPageHeader,
@@ -82,33 +88,37 @@ function StadiumInlineForm({ cities }: { cities: { id: string; city_name: string
 export default async function AdminClubDetailsPage({
   params,
   searchParams,
+  isPublic = false,
 }: {
   params: Params
   searchParams: SearchParams
+  isPublic?: boolean
 }) {
   const { id } = await params
   const { mode, saved, error, history } =
     (await searchParams) as Awaited<SearchParams> & { history?: string }
+  const isEdit = !isPublic && mode === 'edit'
 
-  const [club, cities, countries, stadiums, historyEvents, clubStats] = await Promise.all([
-    getAdminClubDetails(id),
-    getAdminCities(),
-    getAdminCountriesOptions(),
-    getAdminStadiumOptions(),
-    getClubHistory(id),
-    getAdminClubDetailStats(id),
+  const [club, cities, countries, stadiums, historyEvents, clubStats, clubPlayers] = await Promise.all([
+    isPublic ? getPublicClubDetails(id) : getAdminClubDetails(id),
+    isEdit ? getAdminCities() : Promise.resolve([]),
+    isEdit ? getAdminCountriesOptions() : Promise.resolve([]),
+    isEdit ? getAdminStadiumOptions() : Promise.resolve([]),
+    isPublic ? getPublicClubHistory(id) : getClubHistory(id),
+    isPublic ? getPublicClubDetailStats(id) : getAdminClubDetailStats(id),
+    isPublic ? getPublicClubPlayerStats(id) : getAdminClubPlayerStats(id),
   ])
 
   if (!club) {
     notFound()
   }
 
-  const isEdit = mode === 'edit'
   const selectedHistoryEvent = history && history !== 'new'
     ? historyEvents.find((event) => event.id === history) ?? null
     : null
-  const isHistoryModalOpen = Boolean(history)
+  const isHistoryModalOpen = !isPublic && Boolean(history)
   const isNewHistoryEvent = history === 'new'
+
   const fields = (
     <div className="mt-6 grid gap-4 sm:grid-cols-2">
       <DetailsFieldCard label="Nazwa klubu" spanTwo>
@@ -178,10 +188,11 @@ export default async function AdminClubDetailsPage({
       <DetailsPageHeader
         title={club.name}
         backLabel="Powrót do listy klubów"
-        backHref="/admin/clubs"
+        backHref={isPublic ? '/clubs' : '/admin/clubs'}
         editHref={`/admin/clubs/${club.id}?mode=edit`}
         deleteAction={deleteClub}
         deleteId={club.id}
+        showActions={!isPublic}
       />
 
       <DetailsPageContent
@@ -236,60 +247,76 @@ export default async function AdminClubDetailsPage({
               ))}
             </div>
 
-            <div className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-6">
-              <details open={historyEvents.length > 0} className="overflow-hidden rounded-lg border border-neutral-800 group/det">
-                <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-neutral-500 marker:content-none">
-                  <span>Historia</span>
-                  <GlossyDisclosureCircle rotateClassName="group-open/det:rotate-180" />
-                </summary>
-
-                <div className="p-3">
-                  <div className="mb-4 flex items-center justify-end">
-                    <Link
-                      href={`/admin/clubs/${id}?history=new`}
-                      className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
-                    >
-                      + Dodaj zdarzenie
-                    </Link>
+            <div className="mt-6">
+              {isPublic ? (
+                <div className="rounded-xl border border-neutral-800 bg-neutral-950">
+                  <div className="border-b border-neutral-800 bg-neutral-900 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-neutral-500">
+                    Piłkarze reprezentacji Polski w tym klubie
                   </div>
 
-                  {historyEvents.length > 0 ? (
-                    <div className="overflow-x-auto rounded-lg border border-neutral-800">
-                      <table className="min-w-full divide-y divide-neutral-800 text-sm">
-                        <thead className="bg-neutral-900/80 text-neutral-400">
-                          <tr>
-                            <th className="px-4 py-3 text-left font-medium">Data zdarzenia</th>
-                            <th className="px-4 py-3 text-left font-medium">Nazwa zdarzenia</th>
-                            <th className="px-4 py-3 text-right font-medium">Szczegóły</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-neutral-800 bg-neutral-900/40 text-neutral-200">
-                          {historyEvents.map((event) => {
-                            return (
-                              <tr key={event.id}>
-                                <td className="px-4 py-3 font-mono text-xs text-neutral-300">
-                                  {formatEventDate(event.event_date, event.event_date_precision)}
-                                </td>
-                                <td className="px-4 py-3">{event.title ?? '—'}</td>
-                                <td className="px-4 py-3 text-right">
-                                  <Link
-                                    href={`/admin/clubs/${id}?history=${event.id}`}
-                                    className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-                                  >
-                                    Pokaż więcej
-                                  </Link>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="mb-1 text-sm text-neutral-500">Brak wpisów w historii.</p>
-                  )}
+                  <div className="p-4">
+                    {clubPlayers.length > 0 ? (
+                      <PublicClubPlayersTable players={clubPlayers} />
+                    ) : (
+                      <p className="mb-1 text-sm text-neutral-500">Brak piłkarzy reprezentacji Polski powiązanych z tym klubem.</p>
+                    )}
+                  </div>
                 </div>
-              </details>
+              ) : (
+                <details open={historyEvents.length > 0} className="overflow-hidden rounded-lg border border-neutral-800 group/det">
+                  <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-neutral-500 marker:content-none">
+                    <span>Historia</span>
+                    <GlossyDisclosureCircle rotateClassName="group-open/det:rotate-180" />
+                  </summary>
+
+                  <div className="p-3">
+                    <div className="mb-4 flex items-center justify-end">
+                      <Link
+                        href={`/admin/clubs/${id}?history=new`}
+                        className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white"
+                      >
+                        + Dodaj zdarzenie
+                      </Link>
+                    </div>
+
+                    {historyEvents.length > 0 ? (
+                      <div className="overflow-x-auto rounded-lg border border-neutral-800">
+                        <table className="min-w-full divide-y divide-neutral-800 text-sm">
+                          <thead className="bg-neutral-900/80 text-neutral-400">
+                            <tr>
+                              <th className="px-4 py-3 text-left font-medium">Data zdarzenia</th>
+                              <th className="px-4 py-3 text-left font-medium">Nazwa zdarzenia</th>
+                              <th className="px-4 py-3 text-right font-medium">Szczegóły</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-neutral-800 bg-neutral-900/40 text-neutral-200">
+                            {historyEvents.map((event) => {
+                              return (
+                                <tr key={event.id}>
+                                  <td className="px-4 py-3 font-mono text-xs text-neutral-300">
+                                    {formatEventDate(event.event_date, event.event_date_precision)}
+                                  </td>
+                                  <td className="px-4 py-3">{event.title ?? '—'}</td>
+                                  <td className="px-4 py-3 text-right">
+                                    <Link
+                                      href={`/admin/clubs/${id}?history=${event.id}`}
+                                      className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+                                    >
+                                      Pokaż więcej
+                                    </Link>
+                                  </td>
+                                </tr>
+                              )
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="mb-1 text-sm text-neutral-500">Brak wpisów w historii.</p>
+                    )}
+                  </div>
+                </details>
+              )}
             </div>
           </>
         }
