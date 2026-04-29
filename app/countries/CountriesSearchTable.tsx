@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import SortableStatHeader from '@/components/admin/SortableStatHeader'
 import CountryFlag from '@/components/CountryFlag'
+import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import type { PublicCountry } from '@/lib/db/countries'
 
 type SortKey = 'matches' | 'wins' | 'draws' | 'losses' | 'goals_for' | 'goals_against'
@@ -91,9 +92,12 @@ export default function CountriesSearchTable({
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
                       <CountryFlag fifaCode={poland.fifa_code} countryName={poland.name} className="h-3.5 w-[21px] shrink-0" />
-                      <span className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200">
+                      <SmartPrefetchLink
+                        href={`/countries/${poland.id}`}
+                        className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+                      >
                         {poland.name}
-                      </span>
+                      </SmartPrefetchLink>
                     </div>
                   </td>
                   {STAT_COLS.map((c) => (
@@ -137,9 +141,12 @@ export default function CountriesSearchTable({
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
                       <CountryFlag fifaCode={country.fifa_code} countryName={country.name} className="h-3.5 w-[21px] shrink-0" />
-                      <span className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200">
+                      <SmartPrefetchLink
+                        href={`/countries/${country.id}`}
+                        className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+                      >
                         {country.name}
-                      </span>
+                      </SmartPrefetchLink>
                     </div>
                   </td>
                   {STAT_COLS.map((c) => (
