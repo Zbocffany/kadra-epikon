@@ -14,6 +14,19 @@ export type AdminCountry = {
   goals_against: number
 }
 
+export type PublicCountry = {
+  id: string
+  name: string
+  fifa_code: string | null
+  federation_short_name: string | null
+  matches: number
+  wins: number
+  draws: number
+  losses: number
+  goals_for: number
+  goals_against: number
+}
+
 export type AdminCountryDetails = {
   id: string
   name: string
@@ -199,6 +212,23 @@ export async function getAdminCountries(): Promise<AdminCountry[]> {
       goals_against: s?.goals_against ?? 0,
     }
   })
+}
+
+export async function getPublicCountries(): Promise<PublicCountry[]> {
+  const countries = await getAdminCountries()
+
+  return countries.map((country) => ({
+    id: country.id,
+    name: country.name,
+    fifa_code: country.fifa_code,
+    federation_short_name: country.federation_short_name,
+    matches: country.matches,
+    wins: country.wins,
+    draws: country.draws,
+    losses: country.losses,
+    goals_for: country.goals_for,
+    goals_against: country.goals_against,
+  }))
 }
 
 export async function getAdminCountriesPage(

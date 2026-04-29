@@ -194,7 +194,7 @@ export default function AdminSearchableTable<T extends Record<string, unknown>>(
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-4">
+      <div className="search-toolbar rounded-xl border border-neutral-800 bg-neutral-950 p-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-end">
           <div className="flex-1">
             <div className="flex flex-col gap-1.5">

@@ -3,7 +3,7 @@
 @custom-variant light (&:is(html.theme-light *));
 
 :root {
-  --background: #0a0a0a;
+  --background: #2f343a;
   --foreground: #ededed;
 }
 
@@ -15,14 +15,18 @@
   --font-barlow: var(--font-barlow-condensed);
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 html.theme-dark {
-  --background: #0a0a0a;
+  --background: #2f343a;
   --foreground: #ededed;
   color-scheme: dark;
 }
 
 html.theme-light {
-  --background: #f3f4f6;
+  --background: #e3e7eb;
   --foreground: #111827;
   color-scheme: light;
 }
@@ -94,6 +98,177 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+}
+
+/* Public pages: Home / Mecze / Osoby / Kluby cohesive metallic-green visual layer */
+.public-theme .bg-neutral-950 {
+  background-color: #062f1e !important;
+}
+
+.public-theme .bg-neutral-950\/80,
+.public-theme .bg-neutral-950\/60,
+.public-theme .bg-neutral-950\/50,
+.public-theme .bg-neutral-950\/40,
+.public-theme .bg-neutral-900,
+.public-theme .bg-neutral-900\/80,
+.public-theme .bg-neutral-900\/60,
+.public-theme .bg-neutral-900\/50,
+.public-theme .bg-neutral-900\/40,
+.public-theme .bg-neutral-900\/30,
+.public-theme .bg-neutral-800 {
+  background-image: linear-gradient(165deg, #1f9f4a 0%, #0e8a3a 18%, #087531 40%, #0f8a3d 58%, #0a6f31 78%, #0a5a2a 100%) !important;
+  background-color: #0a5a2a !important;
+}
+
+.public-theme .border-neutral-800,
+.public-theme .border-neutral-700,
+.public-theme .border-neutral-700\/80,
+.public-theme .border-neutral-600,
+.public-theme .border-neutral-600\/60,
+.public-theme .ring-neutral-700,
+.public-theme .ring-neutral-600 {
+  border-color: rgba(6, 78, 59, 0.72) !important;
+  --tw-ring-color: rgba(6, 78, 59, 0.72) !important;
+}
+
+.public-theme .text-neutral-100,
+.public-theme .text-neutral-200,
+.public-theme .text-neutral-300 {
+  color: #ecfdf5 !important;
+}
+
+.public-theme .text-neutral-400,
+.public-theme .text-neutral-500,
+.public-theme .text-neutral-600 {
+  color: rgba(209, 250, 229, 0.8) !important;
+}
+
+.public-theme .text-white {
+  color: #ecfdf5 !important;
+}
+
+.public-theme .hover\:text-white:hover {
+  color: #ecfdf5 !important;
+}
+
+.public-theme .hover\:bg-neutral-900\/60:hover,
+.public-theme .hover\:bg-neutral-900\/80:hover,
+.public-theme .hover\:bg-neutral-900:hover,
+.public-theme .hover\:bg-neutral-800:hover {
+  background-image: linear-gradient(165deg, #24ab52 0%, #139045 18%, #0a7b38 40%, #129247 58%, #0e7a3a 78%, #0d6331 100%) !important;
+  background-color: #0d6331 !important;
+}
+
+.public-theme .stat-badge {
+  border-color: rgba(209, 250, 229, 0.48) !important;
+  background-image: linear-gradient(180deg, rgba(236, 253, 245, 0.32) 0%, rgba(236, 253, 245, 0.06) 30%, rgba(6, 95, 70, 0.45) 100%) !important;
+  color: #ecfdf5 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 -1px 1px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.28) !important;
+}
+
+.public-theme .rounded-xl.border,
+.public-theme .rounded-lg.border {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), inset 0 -2px 10px rgba(0, 0, 0, 0.22), 0 8px 18px rgba(0, 0, 0, 0.2) !important;
+}
+
+.public-theme .search-toolbar {
+  border-color: rgba(6, 78, 59, 0.75) !important;
+  background-image: linear-gradient(165deg, #1f9f4a 0%, #0e8a3a 18%, #087531 40%, #0f8a3d 58%, #0a6f31 78%, #0a5a2a 100%) !important;
+  background-color: #0a5a2a !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), inset 0 -2px 8px rgba(0, 0, 0, 0.3), 0 8px 18px rgba(0, 0, 0, 0.2) !important;
+}
+
+.public-theme .table-header-bar {
+  border-color: rgba(6, 78, 59, 0.75) !important;
+  background-image: linear-gradient(165deg, #1f9f4a 0%, #0e8a3a 18%, #087531 40%, #0f8a3d 58%, #0a6f31 78%, #0a5a2a 100%) !important;
+  background-color: #0a5a2a !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), inset 0 -2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+.public-theme .table-data-row {
+  border-color: rgba(6, 78, 59, 0.65) !important;
+  background-image: linear-gradient(165deg, #179247 0%, #1ea853 18%, #179247 42%, #149249 62%, #0f7f3f 80%, #0c6d35 100%) !important;
+  background-color: #0c6d35 !important;
+}
+
+.public-theme .table-data-row:hover {
+  background-image: linear-gradient(165deg, #21a856 0%, #27b85e 18%, #20a353 42%, #1c9e4e 62%, #168f45 80%, #117d3a 100%) !important;
+  background-color: #117d3a !important;
+}
+
+html.theme-light .public-theme .text-neutral-100,
+html.theme-light .public-theme .text-neutral-200,
+html.theme-light .public-theme .text-neutral-300,
+html.theme-light .public-theme .text-neutral-400,
+html.theme-light .public-theme .text-neutral-500,
+html.theme-light .public-theme .text-neutral-600,
+html.theme-light .public-theme .text-white {
+  color: #eafff4 !important;
+}
+
+html.theme-light .public-theme .bg-neutral-950,
+html.theme-light .public-theme .bg-neutral-950\/80,
+html.theme-light .public-theme .bg-neutral-950\/60,
+html.theme-light .public-theme .bg-neutral-950\/50,
+html.theme-light .public-theme .bg-neutral-950\/40,
+html.theme-light .public-theme .bg-neutral-900,
+html.theme-light .public-theme .bg-neutral-900\/80,
+html.theme-light .public-theme .bg-neutral-900\/60,
+html.theme-light .public-theme .bg-neutral-900\/50,
+html.theme-light .public-theme .bg-neutral-900\/40,
+html.theme-light .public-theme .bg-neutral-900\/30,
+html.theme-light .public-theme .bg-neutral-800,
+html.theme-light .public-theme .bg-black {
+  background-image: linear-gradient(165deg, #1f9f4a 0%, #0e8a3a 18%, #087531 40%, #0f8a3d 58%, #0a6f31 78%, #0a5a2a 100%) !important;
+  background-color: #0a5a2a !important;
+}
+
+html.theme-light .public-theme .border-neutral-800,
+html.theme-light .public-theme .border-neutral-700,
+html.theme-light .public-theme .border-neutral-700\/80,
+html.theme-light .public-theme .border-neutral-600,
+html.theme-light .public-theme .border-neutral-600\/60,
+html.theme-light .public-theme .ring-neutral-700,
+html.theme-light .public-theme .ring-neutral-600 {
+  border-color: rgba(6, 78, 59, 0.72) !important;
+  --tw-ring-color: rgba(6, 78, 59, 0.72) !important;
+}
+
+html.theme-light .public-theme .search-toolbar {
+  border-color: rgba(6, 78, 59, 0.75) !important;
+  background-image: linear-gradient(165deg, #1f9f4a 0%, #0e8a3a 18%, #087531 40%, #0f8a3d 58%, #0a6f31 78%, #0a5a2a 100%) !important;
+  background-color: #0a5a2a !important;
+}
+
+html.theme-light .public-theme .table-header-bar {
+  border-color: rgba(6, 78, 59, 0.75) !important;
+  background-image: linear-gradient(165deg, #1f9f4a 0%, #0e8a3a 18%, #087531 40%, #0f8a3d 58%, #0a6f31 78%, #0a5a2a 100%) !important;
+  background-color: #0a5a2a !important;
+}
+
+html.theme-dark .public-theme .search-toolbar {
+  border-color: rgba(6, 78, 59, 0.75) !important;
+  background-image: linear-gradient(165deg, #1f9f4a 0%, #0e8a3a 18%, #087531 40%, #0f8a3d 58%, #0a6f31 78%, #0a5a2a 100%) !important;
+  background-color: #0a5a2a !important;
+}
+
+html.theme-dark .public-theme .table-header-bar {
+  border-color: rgba(6, 78, 59, 0.75) !important;
+  background-image: linear-gradient(165deg, #1f9f4a 0%, #0e8a3a 18%, #087531 40%, #0f8a3d 58%, #0a6f31 78%, #0a5a2a 100%) !important;
+  background-color: #0a5a2a !important;
+}
+
+html.theme-light .public-theme .table-data-row,
+html.theme-dark .public-theme .table-data-row {
+  border-color: rgba(6, 78, 59, 0.65) !important;
+  background-image: linear-gradient(165deg, #179247 0%, #1ea853 18%, #179247 42%, #149249 62%, #0f7f3f 80%, #0c6d35 100%) !important;
+  background-color: #0c6d35 !important;
+}
+
+html.theme-light .public-theme .table-data-row:hover,
+html.theme-dark .public-theme .table-data-row:hover {
+  background-image: linear-gradient(165deg, #21a856 0%, #27b85e 18%, #20a353 42%, #1c9e4e 62%, #168f45 80%, #117d3a 100%) !important;
+  background-color: #117d3a !important;
 }
 
 button,

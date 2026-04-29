@@ -110,7 +110,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
     matchLevelOptions = options.matchLevels
 
     if (selectedPeriod !== 'upcoming') {
-      yearStats = await getMatchesYearStats(matches)
+      yearStats = await getMatchesYearStats(matches.filter((match) => match.result_type !== 'WALKOVER'))
     }
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'

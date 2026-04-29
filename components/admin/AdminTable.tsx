@@ -58,7 +58,7 @@ export default function AdminTable<T extends Record<string, unknown>>({
       <table className={`w-full border-collapse text-sm overflow-visible ${tableClassName ?? ''}`}>
         <thead>
           {showHeader && (
-          <tr className="border-b border-neutral-800 bg-neutral-900 text-left">
+          <tr className="table-header-bar border-b border-neutral-800 bg-neutral-900 text-left">
             {columns.map((col) => (
               <th key={col.key} className={`px-4 py-3 font-medium text-neutral-400 ${col.className ?? ''}`}>
                 {col.headerRender ? col.headerRender() : col.label}
@@ -71,7 +71,7 @@ export default function AdminTable<T extends Record<string, unknown>>({
           {data.map((row, i) => (
             <tr
               key={String(row[idField] ?? i)}
-              className="border-b border-neutral-800 bg-neutral-950 last:border-b-0 transition-colors hover:bg-neutral-900/60"
+              className="table-data-row border-b border-neutral-800 bg-neutral-950 last:border-b-0 transition-colors hover:bg-neutral-900/60"
             >
               {columns.map((col) => (
                 <td key={col.key} className={`px-4 py-3 ${col.className ?? ''}`}>

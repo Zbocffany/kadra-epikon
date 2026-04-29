@@ -9,17 +9,16 @@ export default function AssistIcon(props: SVGProps<SVGSVGElement>) {
       aria-hidden="true"
       {...props}
     >
-      <text
-        x="12"
-        y="19"
-        textAnchor="middle"
-        fontSize="20"
-        fontWeight="900"
-        fill="currentColor"
-        fontFamily="Barlow Condensed, sans-serif"
-      >
-        A
-      </text>
+      {/* circle with white fill and outline */}
+      <circle cx="12" cy="12" r="10.25" stroke="currentColor" strokeWidth="1.5" fill="white" />
+      {/* letter A — strokes only, no fill */}
+      <path
+        d="M8.5 17L12 7L15.5 17M9.8 13.8H14.2"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
     </svg>
   )
 }

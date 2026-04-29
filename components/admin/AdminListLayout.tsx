@@ -7,6 +7,7 @@ interface AdminListLayoutProps {
   recordLabel?: string // singular (e.g., "kraj") or plural (e.g., "krajów")
   fetchError?: string | null
   headerActions?: ReactNode
+  maxWidthClass?: string
   children: ReactNode // Slot for add form + table (laid out vertically)
 }
 
@@ -38,11 +39,12 @@ export default function AdminListLayout({
   recordLabel,
   fetchError,
   headerActions,
+  maxWidthClass = 'max-w-6xl',
   children,
 }: AdminListLayoutProps) {
   return (
     <main className="min-h-screen px-4 py-10 sm:px-8">
-      <div className="mx-auto max-w-6xl">
+      <div className={`mx-auto ${maxWidthClass}`}>
         {/* Header */}
         <div className="mb-8 flex items-center justify-between gap-3">
           <div>

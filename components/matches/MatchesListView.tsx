@@ -110,16 +110,31 @@ function getScoreBadgeClass(match: AdminMatch): string {
   return 'border-neutral-400'
 }
 
+function formatInitialsAndSurname(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean)
+  if (parts.length <= 1) return parts[0] ?? fullName
+
+  const surname = parts[parts.length - 1]
+  const initials = parts.slice(0, -1).map((part) => `${part[0]?.toUpperCase() ?? ''}.`).join('')
+  return `${initials} ${surname}`.trim()
+}
+
 function GlossySelectorBadge({
   children,
   active = false,
+  activeTone = 'red',
 }: {
   children: ReactNode
   active?: boolean
+  activeTone?: 'red' | 'green'
 }) {
+  const activeClass = activeTone === 'green'
+    ? 'border-emerald-200/80 bg-[linear-gradient(165deg,#0a4f2d_0%,#083f24_45%,#052d19_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_2px_rgba(0,0,0,0.45),0_0_14px_rgba(16,185,129,0.42)]'
+    : 'border-red-500 bg-red-950 text-red-100 shadow-[0_0_16px_rgba(239,68,68,0.4)]'
+
   return (
     <span
-      className={`relative inline-flex items-center overflow-hidden rounded-md border px-[11px] py-[5px] text-[13px] font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${active ? 'border-red-500 bg-red-950 text-red-100 shadow-[0_0_16px_rgba(239,68,68,0.4)]' : 'border-neutral-700 bg-neutral-900 text-neutral-300 hover:border-neutral-500 hover:text-white'}`}
+      className={`relative inline-flex items-center overflow-hidden rounded-md border px-[11px] py-[5px] text-[13px] font-black shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${active ? activeClass : 'border-neutral-700 bg-neutral-900 text-neutral-300 hover:border-neutral-500 hover:text-white'}`}
     >
       <span
         aria-hidden="true"
@@ -134,6 +149,7 @@ function renderScoreWithFlags(match: AdminMatch) {
   const label = match.final_score ?? getScheduledCountdownLabel(match)
   if (!label) return null
 
+  const isWalkover = match.result_type === 'WALKOVER'
   const badgeClass = match.final_score
     ? `text-white ${getScoreBadgeClass(match)}`
     : 'border-blue-500 text-blue-400'
@@ -151,7 +167,20 @@ function renderScoreWithFlags(match: AdminMatch) {
     }
   }
 
+  let homeWalkoverWin = isWalkover && match.walkover_winner_team_id === match.home_team_id
+  let awayWalkoverWin = isWalkover && match.walkover_winner_team_id === match.away_team_id
+  if (isWalkover && !homeWalkoverWin && !awayWalkoverWin) {
+    const scoreMatch = label.match(/(\d+)\s*[:\-]\s*(\d+)/)
+    if (scoreMatch) {
+      const homeGoals = Number(scoreMatch[1])
+      const awayGoals = Number(scoreMatch[2])
+      if (homeGoals > awayGoals) homeWalkoverWin = true
+      if (awayGoals > homeGoals) awayWalkoverWin = true
+    }
+  }
+
   const starClass = 'absolute -top-2.5 z-10 text-[18px] leading-none text-amber-400 select-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]'
+  const walkoverMarkerClass = 'absolute -top-2.5 z-10 text-[14px] font-black leading-none text-sky-300 select-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]'
 
   return (
     <span className="inline-flex items-center gap-[0.5cm]">
@@ -164,8 +193,10 @@ function renderScoreWithFlags(match: AdminMatch) {
       <span className="group/score relative">
         {homeShootoutWin && <span className={`${starClass} -left-3`}>★</span>}
         {awayShootoutWin && <span className={`${starClass} -right-3`}>★</span>}
+        {homeWalkoverWin && <span className={`${walkoverMarkerClass} -left-3`}>W</span>}
+        {awayWalkoverWin && <span className={`${walkoverMarkerClass} -right-3`}>W</span>}
         <span
-          className={`relative inline-flex items-center overflow-hidden rounded-md border bg-black px-2 py-0.5 text-xs font-bold shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${badgeClass}`}
+          className={`relative inline-flex items-center overflow-hidden rounded-md border bg-emerald-950/85 px-2 py-0.5 text-xs font-bold shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${badgeClass}`}
           style={{ fontSize: '0.95em', fontWeight: 700 }}
         >
           <span
@@ -174,9 +205,9 @@ function renderScoreWithFlags(match: AdminMatch) {
           />
           <span className="relative z-10">{label}</span>
         </span>
-        {shootout && (
+        {(shootout || isWalkover) && (
           <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-neutral-500 bg-black px-2 py-1 text-[11px] font-bold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/score:opacity-100">
-            Karne {shootout}
+            {shootout ? `Karne ${shootout}` : 'Mecz zakończony walkowerem'}
           </span>
         )}
       </span>
@@ -230,13 +261,14 @@ function getPolandGoals(match: AdminMatch): { scored: number; conceded: number }
 }
 
 function getYearPolandResultStats(yearMatches: AdminMatch[]): YearPolandResultStats {
+  const nonWalkoverMatches = yearMatches.filter((match) => match.result_type !== 'WALKOVER')
   let wins = 0
   let draws = 0
   let losses = 0
   let goalsScored = 0
   let goalsConceded = 0
 
-  for (const match of yearMatches) {
+  for (const match of nonWalkoverMatches) {
     const outcome = getPolandMatchOutcome(match)
     if (outcome === 'WIN') wins += 1
     if (outcome === 'DRAW') draws += 1
@@ -249,7 +281,7 @@ function getYearPolandResultStats(yearMatches: AdminMatch[]): YearPolandResultSt
   }
 
   return {
-    totalMatches: yearMatches.length,
+    totalMatches: nonWalkoverMatches.length,
     wins,
     draws,
     losses,
@@ -260,7 +292,7 @@ function getYearPolandResultStats(yearMatches: AdminMatch[]): YearPolandResultSt
 
 function GlossyYearStatsBadge({ stats }: { stats: YearPolandResultStats }) {
   return (
-    <span className="relative inline-flex h-[28px] items-center gap-[7px] overflow-hidden rounded-md border border-neutral-500/80 bg-neutral-900 dark:bg-neutral-900 px-[9px] py-[3px] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]">
+    <span className="relative inline-grid h-[28px] w-[9.75rem] grid-cols-[2rem_4.1rem_3rem] items-center justify-items-center overflow-hidden rounded-md border border-neutral-500/80 bg-neutral-900 px-[9px] py-[3px] shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] [font-variant-numeric:tabular-nums] dark:bg-neutral-900">
       <span
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]"
@@ -278,6 +310,8 @@ type MatchesListViewProps = {
   matches: AdminMatch[]
   fetchError: string | null
   detailBasePath: string
+  maxWidthClass?: string
+  publicUnifiedSection?: boolean
   showEditorialStatus?: boolean
   headerActions?: ReactNode
   displayMode?: 'all' | 'upcoming' | 'history'
@@ -298,6 +332,8 @@ export default function MatchesListView({
   matches,
   fetchError,
   detailBasePath,
+  maxWidthClass = 'max-w-7xl',
+  publicUnifiedSection = false,
   showEditorialStatus = true,
   headerActions,
   displayMode = 'all',
@@ -327,275 +363,334 @@ export default function MatchesListView({
 
   return (
     <main className="min-h-screen px-4 py-10 sm:px-8">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="mt-1 text-3xl font-bold tracking-tight">{title}</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            {headerActions}
-          </div>
-        </div>
+      <div className={`mx-auto ${maxWidthClass}`}>
+        <section
+          className={publicUnifiedSection
+            ? 'relative overflow-hidden rounded-xl border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.2),0_8px_18px_rgba(0,0,0,0.2)] sm:p-6'
+            : ''}
+        >
+          {publicUnifiedSection ? <span aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.03)_30%,rgba(0,0,0,0.12)_100%)]" /> : null}
 
-        <div className="flex flex-col gap-6 lg:flex-row">
-          {leftFilters.length > 0 ? (
-            <aside className="lg:w-52 lg:shrink-0">
-              <div className="flex flex-wrap gap-[11px] lg:flex-col">
-                {leftFilters.map((filter) => {
-                  const badge = (
-                    <GlossySelectorBadge active={filter.isActive}>{filter.label}</GlossySelectorBadge>
-                  )
-
-                  return filter.href ? (
-                    <Link
-                      key={filter.key}
-                      href={filter.href}
-                      className="inline-flex"
-                      aria-current={filter.isActive ? 'page' : undefined}
-                    >
-                      {badge}
-                    </Link>
-                  ) : (
-                    <button
-                      key={filter.key}
-                      type="button"
-                      onClick={filter.onClick}
-                      className="inline-flex"
-                      aria-pressed={filter.isActive}
-                    >
-                      {badge}
-                    </button>
-                  )
-                })}
+          <div className={publicUnifiedSection ? 'relative z-10' : ''}>
+            <div className="mb-8 flex items-center justify-between">
+              <div>
+                {publicUnifiedSection ? (
+                  <h1 className="mt-1">
+                    <span className="inline-flex items-center rounded-md border border-white/12 bg-transparent px-2 py-0.5 text-2xl font-bold text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)] sm:text-3xl">
+                      {title}
+                    </span>
+                  </h1>
+                ) : (
+                  <h1 className="mt-1 text-3xl font-bold tracking-tight">{title}</h1>
+                )}
               </div>
-            </aside>
-          ) : null}
+              <div className="flex items-center gap-2">
+                {headerActions}
+              </div>
+            </div>
 
-          <div className="min-w-0 flex-1 space-y-6">
-            {!fetchError && showUpcomingSection ? (
-          <details className="mb-6 group overflow-visible rounded-xl border border-neutral-800 bg-neutral-950">
-            <summary className="relative z-20 flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-4 py-2.5 marker:content-none pointer-events-auto">
-              <GlossySummaryBadge>Najbliższe mecze</GlossySummaryBadge>
-              <span className="inline-flex items-center gap-3">
-                <span className="text-xs text-neutral-400">Mecze: {upcomingMatches.length}</span>
-                <GlossyDisclosureCircle rotateClassName="group-open:rotate-180" />
-              </span>
-            </summary>
+            <div className="flex flex-col gap-4 lg:flex-row lg:gap-3">
+              {leftFilters.length > 0 ? (
+                <aside className="lg:w-auto lg:shrink-0">
+                  <div className="flex flex-wrap gap-[11px] lg:flex-col">
+                    {leftFilters.map((filter) => {
+                      const badge = (
+                        <GlossySelectorBadge active={filter.isActive} activeTone={publicUnifiedSection ? 'green' : 'red'}>{filter.label}</GlossySelectorBadge>
+                      )
 
-            <div className="border-t border-neutral-800 bg-neutral-950">
-              {upcomingMatches.length === 0 ? (
-                <p className="rounded-md px-2 py-2 text-sm text-neutral-500">Brak nadchodzących meczów.</p>
-              ) : (
-                <div className="relative z-0 overflow-x-auto pt-6 -mt-6">
-                  <table className="w-full border-collapse text-sm table-auto">
-                    <colgroup>
-                      <col className="w-[7.5rem]" />
-                      <col className="w-[20rem]" />
-                      <col className="w-[14rem]" />
-                      <col className="w-[12rem]" />
-                      {showEditorialStatus ? <col className="w-[8rem]" /> : null}
-                    </colgroup>
-                    <tbody>
-                      {upcomingMatches.map((match) => {
-                        const competition = getCompetitionDisplay(match.competition_name)
-                        const showLevel = Boolean(
-                          match.match_level_name
-                          && match.competition_name !== 'Towarzyski'
-                          && match.competition_name !== 'Nieoficjalny'
-                        )
-                        const matchHref = buildMatchHref ? buildMatchHref(match) : `${detailBasePath}/${match.id}`
+                      return filter.href ? (
+                        <Link
+                          key={filter.key}
+                          href={filter.href}
+                          className="inline-flex"
+                          aria-current={filter.isActive ? 'page' : undefined}
+                        >
+                          {badge}
+                        </Link>
+                      ) : (
+                        <button
+                          key={filter.key}
+                          type="button"
+                          onClick={filter.onClick}
+                          className="inline-flex"
+                          aria-pressed={filter.isActive}
+                        >
+                          {badge}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </aside>
+              ) : null}
 
-                        return (
-                          <tr key={match.id} className="border-t border-neutral-800 bg-neutral-950 transition-colors hover:bg-neutral-900/60">
-                            <td className="whitespace-nowrap">
-                              <SmartPrefetchLink href={matchHref} className="block px-3 py-3" aria-label={`Otwórz mecz ${match.home_team_name} - ${match.away_team_name}`}>
-                                <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200">
-                                  {formatDate(match.match_date)}
-                                </span>
-                              </SmartPrefetchLink>
-                            </td>
-                            <td className="whitespace-nowrap font-semibold text-neutral-100">
-                              <SmartPrefetchLink href={matchHref} className="block pl-1 pr-2 py-3">
-                                {match.home_team_name} – {match.away_team_name}
-                              </SmartPrefetchLink>
-                            </td>
-                            <td className="whitespace-nowrap text-left">
-                              <SmartPrefetchLink href={matchHref} className="block pl-0 pr-2 py-3">
-                                {renderScoreWithFlags(match)}
-                              </SmartPrefetchLink>
-                            </td>
-                            <td className="whitespace-nowrap">
-                              <SmartPrefetchLink href={matchHref} className="block px-8 py-3">
-                                <span
-                                  title={getCompetitionLevelTooltip(match.competition_name, match.match_level_name)}
-                                  className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-neutral-200"
-                                >
-                                  <span className={`font-semibold ${competition.isCompact ? 'text-[10px]' : 'text-xs'}`}>
-                                    {competition.label}
+              <div className="min-w-0 flex-1 space-y-6">
+                {!fetchError && showUpcomingSection && upcomingMatches.length > 0 ? (
+              <details className="mb-6 group overflow-visible rounded-xl border border-neutral-800 bg-neutral-950">
+                <summary className="relative z-20 flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-4 py-2.5 marker:content-none pointer-events-auto">
+                  <GlossySummaryBadge>Najbliższe mecze</GlossySummaryBadge>
+                  <span className="inline-flex items-center gap-3">
+                    <span className="text-xs text-neutral-400">Mecze: {upcomingMatches.length}</span>
+                    <GlossyDisclosureCircle rotateClassName="group-open:rotate-180" />
+                  </span>
+                </summary>
+
+                <div className="border-t border-neutral-800 bg-neutral-950">
+                  <div className="relative z-0 overflow-x-auto pt-6 -mt-6">
+                    <table className="w-full border-collapse text-sm table-auto">
+                      <colgroup>
+                        <col className="w-[7.5rem]" />
+                        <col className="w-[20rem]" />
+                        <col className="w-[14rem]" />
+                        <col className="w-[12rem]" />
+                        {showEditorialStatus ? <col className="w-[8rem]" /> : null}
+                      </colgroup>
+                      <tbody>
+                        {upcomingMatches.map((match) => {
+                          const competition = getCompetitionDisplay(match.competition_name)
+                          const showLevel = Boolean(
+                            match.match_level_name
+                            && match.competition_name !== 'Towarzyski'
+                            && match.competition_name !== 'Nieoficjalny'
+                          )
+                          const matchHref = buildMatchHref ? buildMatchHref(match) : `${detailBasePath}/${match.id}`
+
+                          return (
+                            <tr
+                              key={match.id}
+                              className={match.result_type === 'WALKOVER'
+                                ? (publicUnifiedSection
+                                  ? 'border-t border-neutral-700/70 bg-[linear-gradient(165deg,#474747_0%,#5b5b5b_18%,#4f4f4f_42%,#454545_62%,#3d3d3d_80%,#363636_100%)] opacity-85 transition-colors hover:bg-[linear-gradient(165deg,#5b5b5b_0%,#6d6d6d_18%,#626262_42%,#585858_62%,#4f4f4f_80%,#474747_100%)]'
+                                  : 'border-t border-neutral-700 bg-neutral-900/80 opacity-80 transition-colors hover:bg-neutral-800/80')
+                                : (publicUnifiedSection
+                                  ? 'border-t border-emerald-900/65 bg-[linear-gradient(165deg,#179247_0%,#1ea853_18%,#179247_42%,#149249_62%,#0f7f3f_80%,#0c6d35_100%)] transition-colors hover:bg-[linear-gradient(165deg,#21a856_0%,#27b85e_18%,#20a353_42%,#1c9e4e_62%,#168f45_80%,#117d3a_100%)]'
+                                  : 'border-t border-neutral-800 bg-neutral-950 transition-colors hover:bg-neutral-900/60')
+                              }
+                            >
+                              <td className="whitespace-nowrap">
+                                <SmartPrefetchLink href={matchHref} className="block px-3 py-3" aria-label={`Otwórz mecz ${match.home_team_name} - ${match.away_team_name}`}>
+                                  <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200">
+                                    {formatDate(match.match_date)}
                                   </span>
-                                  {showLevel ? (
-                                    <>
-                                      <span className="text-[10px] text-neutral-500">/</span>
-                                      <span className="text-xs font-semibold text-neutral-200">{match.match_level_name}</span>
-                                    </>
-                                  ) : null}
-                                </span>
-                              </SmartPrefetchLink>
-                            </td>
-                            {showEditorialStatus ? (
-                              <td className="text-right whitespace-nowrap">
-                                <SmartPrefetchLink href={matchHref} className="flex justify-end px-2 py-3">
-                                  <span className="inline-flex"><EditorialStatusBadge status={match.editorial_status} /></span>
                                 </SmartPrefetchLink>
                               </td>
-                            ) : null}
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
+                              <td className="whitespace-nowrap text-neutral-100">
+                                <SmartPrefetchLink href={matchHref} className="block pl-1 pr-2 py-3">
+                                  <span className="inline-flex items-center rounded-md border border-white/12 bg-transparent px-2 py-0.5 text-[14px] font-bold text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)]">
+                                    {match.home_team_name} – {match.away_team_name}
+                                  </span>
+                                </SmartPrefetchLink>
+                              </td>
+                              <td className="whitespace-nowrap text-left">
+                                <SmartPrefetchLink href={matchHref} className="block pl-0 pr-2 py-3">
+                                  {renderScoreWithFlags(match)}
+                                </SmartPrefetchLink>
+                              </td>
+                              <td className="whitespace-nowrap">
+                                <SmartPrefetchLink href={matchHref} className="block px-8 py-3">
+                                  <span
+                                    title={getCompetitionLevelTooltip(match.competition_name, match.match_level_name)}
+                                    className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-neutral-200"
+                                  >
+                                    <span className={`font-semibold ${competition.isCompact ? 'text-[10px]' : 'text-xs'}`}>
+                                      {competition.label}
+                                    </span>
+                                    {showLevel ? (
+                                      <>
+                                        <span className="text-[10px] text-neutral-500">/</span>
+                                        <span className="text-xs font-semibold text-neutral-200">{match.match_level_name}</span>
+                                      </>
+                                    ) : null}
+                                  </span>
+                                </SmartPrefetchLink>
+                              </td>
+                              {showEditorialStatus ? (
+                                <td className="text-right whitespace-nowrap">
+                                  <SmartPrefetchLink href={matchHref} className="flex justify-end px-2 py-3">
+                                    <span className="inline-flex"><EditorialStatusBadge status={match.editorial_status} /></span>
+                                  </SmartPrefetchLink>
+                                </td>
+                              ) : null}
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-              )}
-            </div>
-          </details>
-            ) : null}
+              </details>
+                ) : null}
 
-            {fetchError && (
-              <div className="rounded-lg border border-red-800 bg-red-950/50 px-5 py-4 text-sm text-red-300">
-                <strong className="font-semibold">Błąd pobierania danych:</strong>{' '}
-                {fetchError}
-              </div>
-            )}
-
-            {!fetchError && matches.length === 0 && (
-              <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-6 py-16 text-center text-neutral-500">
-                Brak meczów w bazie danych.
-              </div>
-            )}
-
-            {matches.length > 0 && showHistorySection ? (
-              <div className="overflow-visible rounded-xl border border-neutral-800">
-                {yearStats && (
-                  <div className="flex gap-2 border-b border-neutral-800 bg-neutral-950 px-[18px] py-[9px]">
-                    {(
-                      [
-                        { key: 'coaches', label: 'Trenerzy' },
-                        { key: 'appearances', label: 'Występy' },
-                        { key: 'goals', label: 'Gole' },
-                      ] as const
-                    ).map(({ key, label }) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => togglePanel(key)}
-                        className="inline-flex"
-                      >
-                        <GlossySelectorBadge active={activePanel === key}>{label}</GlossySelectorBadge>
-                      </button>
-                    ))}
+                {fetchError && (
+                  <div className="rounded-lg border border-red-800 bg-red-950/50 px-5 py-4 text-sm text-red-300">
+                    <strong className="font-semibold">Błąd pobierania danych:</strong>{' '}
+                    {fetchError}
                   </div>
                 )}
-                <div className="divide-y divide-neutral-800">
-                  {years.length === 0 && (
-                    <div className="px-4 py-5 text-sm text-neutral-500">Brak meczów poza zaplanowanymi na tej stronie.</div>
-                  )}
-                  {years.map((year) => (
-                    <details key={year} className="group bg-neutral-950">
-                      <summary className="relative z-20 grid cursor-pointer list-none grid-cols-[auto_1fr_auto] items-center gap-[14px] bg-neutral-900 px-[18px] py-[9px] marker:content-none pointer-events-auto">
-                        <GlossySummaryBadge>{year}</GlossySummaryBadge>
-                        <span className="min-w-0 truncate text-center text-[13px] font-black text-neutral-300">
-                          {activePanel === 'coaches' && yearStats?.coaches[year]?.map((c, i) => (
-                            <span key={c.personId}>{i > 0 ? ', ' : ''}{c.name} ({c.matchCount})</span>
-                          ))}
-                          {activePanel === 'appearances' && yearStats?.topAppearances[year]?.map((p, i) => (
-                            <span key={p.personId}>{i > 0 ? ', ' : ''}{p.name} ({p.matchCount})</span>
-                          ))}
-                          {activePanel === 'goals' && yearStats?.topScorers[year]?.map((p, i) => (
-                            <span key={p.personId}>{i > 0 ? ', ' : ''}{p.name} ({p.goalCount})</span>
-                          ))}
-                        </span>
-                        <span className="inline-flex items-center justify-end gap-3">
-                          <GlossyYearStatsBadge stats={getYearPolandResultStats(matchesByYear[year])} />
-                          <GlossyDisclosureCircle rotateClassName="group-open:rotate-180" />
-                        </span>
-                      </summary>
 
-                      <div className="relative z-0 overflow-x-auto pt-6 -mt-6">
-                        <table className="w-full border-collapse text-sm table-auto">
-                          <colgroup>
-                            <col className="w-[7.5rem]" />
-                            <col className="w-[20rem]" />
-                            <col className="w-[14rem]" />
-                            <col className="w-[12rem]" />
-                            {showEditorialStatus ? <col className="w-[8rem]" /> : null}
-                          </colgroup>
-                          <tbody>
-                            {matchesByYear[year].map((match) => {
-                              const competition = getCompetitionDisplay(match.competition_name)
-                              const showLevel = Boolean(
-                                match.match_level_name
-                                && match.competition_name !== 'Towarzyski'
-                                && match.competition_name !== 'Nieoficjalny'
-                              )
-                              const matchHref = buildMatchHref ? buildMatchHref(match) : `${detailBasePath}/${match.id}`
+                {!fetchError && matches.length === 0 && displayMode !== 'upcoming' && (
+                  <div className="rounded-xl border border-neutral-800 bg-neutral-950 px-6 py-16 text-center text-neutral-500">
+                    Brak meczów w bazie danych.
+                  </div>
+                )}
 
-                              return (
-                                <tr key={match.id} className="border-t border-neutral-800 bg-neutral-950 transition-colors hover:bg-neutral-900/60">
-                                  <td className="whitespace-nowrap">
-                                    <SmartPrefetchLink href={matchHref} className="block px-3 py-3" aria-label={`Otwórz mecz ${match.home_team_name} - ${match.away_team_name}`}>
-                                      <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200">
-                                        {formatDate(match.match_date)}
-                                      </span>
-                                    </SmartPrefetchLink>
-                                  </td>
-                                  <td className="whitespace-nowrap font-semibold text-neutral-100">
-                                    <SmartPrefetchLink href={matchHref} className="block pl-1 pr-2 py-3">
-                                      {match.home_team_name} – {match.away_team_name}
-                                    </SmartPrefetchLink>
-                                  </td>
-                                  <td className="whitespace-nowrap text-left">
-                                    <SmartPrefetchLink href={matchHref} className="block pl-0 pr-2 py-3">
-                                      {renderScoreWithFlags(match)}
-                                    </SmartPrefetchLink>
-                                  </td>
-                                  <td className="whitespace-nowrap">
-                                    <SmartPrefetchLink href={matchHref} className="block px-8 py-3">
-                                      <span
-                                        title={getCompetitionLevelTooltip(match.competition_name, match.match_level_name)}
-                                        className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-neutral-200"
-                                      >
-                                        <span className={`font-semibold ${competition.isCompact ? 'text-[10px]' : 'text-xs'}`}>
-                                          {competition.label}
-                                        </span>
-                                        {showLevel ? (
-                                          <>
-                                            <span className="text-[10px] text-neutral-500">/</span>
-                                            <span className="text-xs font-semibold text-neutral-200">{match.match_level_name}</span>
-                                          </>
-                                        ) : null}
-                                      </span>
-                                    </SmartPrefetchLink>
-                                  </td>
-                                  {showEditorialStatus ? (
-                                    <td className="text-right whitespace-nowrap">
-                                      <SmartPrefetchLink href={matchHref} className="flex justify-end px-2 py-3">
-                                        <span className="inline-flex"><EditorialStatusBadge status={match.editorial_status} /></span>
-                                      </SmartPrefetchLink>
-                                    </td>
-                                  ) : null}
-                                </tr>
-                              )
-                            })}
-                          </tbody>
-                        </table>
+                {matches.length > 0 && showHistorySection ? (
+                  <div
+                    className={publicUnifiedSection
+                      ? 'overflow-hidden rounded-xl border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.2),0_8px_18px_rgba(0,0,0,0.2)]'
+                      : 'overflow-visible rounded-xl border border-neutral-800'
+                    }
+                  >
+                    {yearStats && (
+                      <div
+                        className={publicUnifiedSection
+                          ? 'flex gap-2 border-b border-emerald-900/75 bg-[linear-gradient(165deg,#0f6a34_0%,#0b5b2c_18%,#084a24_40%,#07501f_58%,#073f1d_78%,#062f18_100%)] px-[18px] py-[9px] shadow-[inset_0_1px_0_rgba(255,255,255,0.15),inset_0_-2px_8px_rgba(0,0,0,0.3)]'
+                          : 'flex gap-2 border-b border-neutral-800 bg-neutral-950 px-[18px] py-[9px]'
+                        }
+                      >
+                        {(
+                          [
+                            { key: 'coaches', label: 'Trenerzy' },
+                            { key: 'appearances', label: 'Występy' },
+                            { key: 'goals', label: 'Gole' },
+                          ] as const
+                        ).map(({ key, label }) => (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => togglePanel(key)}
+                            className="inline-flex"
+                          >
+                            <GlossySelectorBadge active={activePanel === key} activeTone={publicUnifiedSection ? 'green' : 'red'}>{label}</GlossySelectorBadge>
+                          </button>
+                        ))}
                       </div>
-                    </details>
-                  ))}
-                </div>
+                    )}
+                    <div className="divide-y divide-neutral-800">
+                      {years.length === 0 && (
+                        <div className="px-4 py-5 text-sm text-neutral-500">Brak meczów poza zaplanowanymi na tej stronie.</div>
+                      )}
+                      {years.map((year) => (
+                        <details key={year} className="group bg-neutral-950">
+                          <summary className="relative z-20 grid min-h-[58px] cursor-pointer list-none grid-cols-[auto_1fr_auto] items-center gap-[14px] bg-neutral-900 px-[18px] py-[9px] marker:content-none pointer-events-auto">
+                            <GlossySummaryBadge>{year}</GlossySummaryBadge>
+                            <div className="flex min-h-[32px] min-w-0 items-center justify-center text-center">
+                              <div className="flex flex-wrap items-center justify-center gap-1.5">
+                                {activePanel === 'coaches' && yearStats?.coaches[year]?.map((c) => (
+                                  <span key={`${year}-coach-${c.personId}`} className="inline-flex items-center rounded-md border border-white/12 bg-transparent px-2 py-0.5 text-[13px] font-black text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)]">
+                                    <span>{formatInitialsAndSurname(c.name)}</span>
+                                    <span className="ml-1.5 stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{c.matchCount}</span>
+                                  </span>
+                                ))}
+                                {activePanel === 'appearances' && yearStats?.topAppearances[year]?.map((p) => (
+                                  <span key={`${year}-app-${p.personId}`} className="inline-flex items-center rounded-md border border-white/12 bg-transparent px-2 py-0.5 text-[13px] font-black text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)]">
+                                    <span>{formatInitialsAndSurname(p.name)}</span>
+                                    <span className="ml-1.5 stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{p.matchCount}</span>
+                                  </span>
+                                ))}
+                                {activePanel === 'goals' && yearStats?.topScorers[year]?.map((p) => (
+                                  <span key={`${year}-goal-${p.personId}`} className="inline-flex items-center rounded-md border border-white/12 bg-transparent px-2 py-0.5 text-[13px] font-black text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)]">
+                                    <span>{formatInitialsAndSurname(p.name)}</span>
+                                    <span className="ml-1.5 stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{p.goalCount}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            <span className="inline-flex items-center justify-end gap-3">
+                              <GlossyYearStatsBadge stats={getYearPolandResultStats(matchesByYear[year])} />
+                              <GlossyDisclosureCircle rotateClassName="group-open:rotate-180" />
+                            </span>
+                          </summary>
+
+                          <div className="relative z-0 overflow-x-auto pt-6 -mt-6">
+                            <table className="w-full border-collapse text-sm table-auto">
+                              <colgroup>
+                                <col className="w-[7.5rem]" />
+                                <col className="w-[20rem]" />
+                                <col className="w-[14rem]" />
+                                <col className="w-[12rem]" />
+                                {showEditorialStatus ? <col className="w-[8rem]" /> : null}
+                              </colgroup>
+                              <tbody>
+                                {matchesByYear[year].map((match) => {
+                                  const competition = getCompetitionDisplay(match.competition_name)
+                                  const showLevel = Boolean(
+                                    match.match_level_name
+                                    && match.competition_name !== 'Towarzyski'
+                                    && match.competition_name !== 'Nieoficjalny'
+                                  )
+                                  const matchHref = buildMatchHref ? buildMatchHref(match) : `${detailBasePath}/${match.id}`
+
+                                  return (
+                                    <tr
+                                      key={match.id}
+                                      className={match.result_type === 'WALKOVER'
+                                        ? (publicUnifiedSection
+                                          ? 'border-t border-neutral-700/70 bg-[linear-gradient(165deg,#474747_0%,#5b5b5b_18%,#4f4f4f_42%,#454545_62%,#3d3d3d_80%,#363636_100%)] opacity-85 transition-colors hover:bg-[linear-gradient(165deg,#5b5b5b_0%,#6d6d6d_18%,#626262_42%,#585858_62%,#4f4f4f_80%,#474747_100%)]'
+                                          : 'border-t border-neutral-700 bg-neutral-900/80 opacity-80 transition-colors hover:bg-neutral-800/80')
+                                        : (publicUnifiedSection
+                                          ? 'border-t border-emerald-900/65 bg-[linear-gradient(165deg,#179247_0%,#1ea853_18%,#179247_42%,#149249_62%,#0f7f3f_80%,#0c6d35_100%)] transition-colors hover:bg-[linear-gradient(165deg,#21a856_0%,#27b85e_18%,#20a353_42%,#1c9e4e_62%,#168f45_80%,#117d3a_100%)]'
+                                          : 'border-t border-neutral-800 bg-neutral-950 transition-colors hover:bg-neutral-900/60')
+                                      }
+                                    >
+                                      <td className="whitespace-nowrap">
+                                        <SmartPrefetchLink href={matchHref} className="block px-3 py-3" aria-label={`Otwórz mecz ${match.home_team_name} - ${match.away_team_name}`}>
+                                          <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200">
+                                            {formatDate(match.match_date)}
+                                          </span>
+                                        </SmartPrefetchLink>
+                                      </td>
+                                      <td className="whitespace-nowrap text-neutral-100">
+                                        <SmartPrefetchLink href={matchHref} className="block pl-1 pr-2 py-3">
+                                          <span className="inline-flex items-center rounded-md border border-white/12 bg-transparent px-2 py-0.5 text-[14px] font-bold text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)]">
+                                            {match.home_team_name} – {match.away_team_name}
+                                          </span>
+                                        </SmartPrefetchLink>
+                                      </td>
+                                      <td className="whitespace-nowrap text-left">
+                                        <SmartPrefetchLink href={matchHref} className="block pl-0 pr-2 py-3">
+                                          {renderScoreWithFlags(match)}
+                                        </SmartPrefetchLink>
+                                      </td>
+                                      <td className="whitespace-nowrap">
+                                        <SmartPrefetchLink href={matchHref} className="block px-8 py-3">
+                                          <span
+                                            title={getCompetitionLevelTooltip(match.competition_name, match.match_level_name)}
+                                            className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-neutral-200"
+                                          >
+                                            <span className={`font-semibold ${competition.isCompact ? 'text-[10px]' : 'text-xs'}`}>
+                                              {competition.label}
+                                            </span>
+                                            {showLevel ? (
+                                              <>
+                                                <span className="text-[10px] text-neutral-500">/</span>
+                                                <span className="text-xs font-semibold text-neutral-200">{match.match_level_name}</span>
+                                              </>
+                                            ) : null}
+                                          </span>
+                                        </SmartPrefetchLink>
+                                      </td>
+                                      {showEditorialStatus ? (
+                                        <td className="text-right whitespace-nowrap">
+                                          <SmartPrefetchLink href={matchHref} className="flex justify-end px-2 py-3">
+                                            <span className="inline-flex"><EditorialStatusBadge status={match.editorial_status} /></span>
+                                          </SmartPrefetchLink>
+                                        </td>
+                                      ) : null}
+                                    </tr>
+                                  )
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
               </div>
-            ) : null}
+            </div>
           </div>
-        </div>
+        </section>
       </div>
     </main>
   )

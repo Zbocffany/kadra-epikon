@@ -10,6 +10,8 @@ type PublicMatchesPageProps = {
   title?: string
 }
 
+const PUBLIC_CONTENT_MAX_WIDTH_CLASS = 'max-w-[74rem]'
+
 type DecadeFilter = {
   startYear: number
   endYear: number
@@ -58,7 +60,7 @@ export default async function PublicMatchesPage({
   searchParams,
   basePath,
   detailBasePath,
-  title = 'Mecze reprezentacji',
+  title = 'Mecze reprezentacji Polski',
 }: PublicMatchesPageProps) {
   const period = parseSingleSearchParam(searchParams.period)
   let allMatches: AdminMatch[] = []
@@ -86,26 +88,33 @@ export default async function PublicMatchesPage({
 
   if (fetchError) {
     return (
-      <MatchesListView
-        title={title}
-        totalMatches={0}
-        matches={[]}
-        fetchError={fetchError}
-        detailBasePath={detailBasePath}
-        showEditorialStatus={false}
-      />
+      <div className="public-theme">
+        <MatchesListView
+          title={title}
+          totalMatches={0}
+          matches={[]}
+          fetchError={fetchError}
+          detailBasePath={detailBasePath}
+          maxWidthClass={PUBLIC_CONTENT_MAX_WIDTH_CLASS}
+          publicUnifiedSection
+          showEditorialStatus={false}
+        />
+      </div>
     )
   }
 
   return (
-    <PublicMatchesClient
-      title={title}
-      basePath={basePath}
-      detailBasePath={detailBasePath}
-      allMatches={allMatches}
-      decadeFilters={decadeFilters}
-      initialPeriod={initialPeriod}
-      yearStats={yearStats}
-    />
+    <div className="public-theme">
+      <PublicMatchesClient
+        title={title}
+        basePath={basePath}
+        detailBasePath={detailBasePath}
+        maxWidthClass={PUBLIC_CONTENT_MAX_WIDTH_CLASS}
+        allMatches={allMatches}
+        decadeFilters={decadeFilters}
+        initialPeriod={initialPeriod}
+        yearStats={yearStats}
+      />
+    </div>
   )
 }

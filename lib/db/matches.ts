@@ -106,6 +106,7 @@ export type AdminMatch = {
   match_time: string | null
   match_status: MatchStatus
   result_type: ResultType | null
+  walkover_winner_team_id: string | null
   editorial_status: EditorialStatus
   competition_name: string
   match_level_name: string | null
@@ -299,6 +300,7 @@ type MatchListRow = {
   match_time: string | null
   match_status: MatchStatus
   result_type: ResultType | null
+  walkover_winner_team_id: string | null
   editorial_status: EditorialStatus
   competition_id: string
   home_team_id: string
@@ -338,6 +340,13 @@ function getDerivedClubTeamId(
     .sort((a, b) => b.valid_from.localeCompare(a.valid_from))
 
   return matching[0]?.club_team_id ?? null
+}
+
+function getWalkoverFinalScore(match: Pick<MatchListRow, 'result_type' | 'walkover_winner_team_id' | 'home_team_id' | 'away_team_id'>): string | null {
+  if (match.result_type !== 'WALKOVER' || !match.walkover_winner_team_id) return null
+  if (match.walkover_winner_team_id === match.home_team_id) return '3:0'
+  if (match.walkover_winner_team_id === match.away_team_id) return '0:3'
+  return null
 }
 
 function sortTeamParticipants(participants: AdminMatchParticipant[]): AdminMatchParticipant[] {
@@ -479,6 +488,7 @@ export async function getAdminMatches(options?: AdminMatchFilterOptions): Promis
     .from('tbl_Matches')
     .select(
       'id, match_date, match_time, match_status, result_type, editorial_status, competition_id, home_team_id, away_team_id'
+      + ', walkover_winner_team_id'
     )
 
   if (options?.status) {
@@ -499,7 +509,7 @@ export async function getAdminMatches(options?: AdminMatchFilterOptions): Promis
   if (matchError) throw new Error(`tbl_Matches: ${matchError.message}`)
   if (!matches?.length) return []
 
-  return mapAdminMatches(supabase, matches)
+  return mapAdminMatches(supabase, matches as unknown as MatchListRow[])
 }
 
 export async function getPublicMatches(): Promise<AdminMatch[]> {
@@ -536,7 +546,7 @@ export async function getAdminMatchesForPlayer(personId: string): Promise<AdminP
 
   const { data: matches, error: matchesError } = await supabase
     .from('tbl_Matches')
-    .select('id, match_date, match_time, match_status, result_type, editorial_status, competition_id, home_team_id, away_team_id')
+    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id')
     .in('id', allMatchIds)
     .order('match_date', { ascending: false })
     .order('match_time', { ascending: false })
@@ -942,7 +952,7 @@ export async function getAdminMatchesPage(
   const { data: matches, error: matchError, count } = await supabase
     .from('tbl_Matches')
     .select(
-      'id, match_date, match_time, match_status, result_type, editorial_status, competition_id, home_team_id, away_team_id',
+      'id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id',
       { count: 'exact' }
     )
     .order('match_date', { ascending: false })
@@ -955,7 +965,7 @@ export async function getAdminMatchesPage(
     return { items: [], total: count ?? 0 }
   }
 
-  const items = await mapAdminMatches(supabase, matches)
+  const items = await mapAdminMatches(supabase, matches as unknown as MatchListRow[])
   return { items, total: count ?? 0 }
 }
 
@@ -1042,6 +1052,9 @@ async function mapAdminMatches(
   }
 
   function getFinalScore(match: MatchListRow): string | null {
+    const walkoverScore = getWalkoverFinalScore(match)
+    if (walkoverScore) return walkoverScore
+
     const events = eventsByMatchId.get(match.id) ?? []
     if (!events.length) return null
 
@@ -1083,6 +1096,7 @@ async function mapAdminMatches(
     match_time: m.match_time ?? null,
     match_status: m.match_status,
     result_type: m.result_type,
+    walkover_winner_team_id: m.walkover_winner_team_id,
     editorial_status: m.editorial_status,
     competition_name: compMap.get(m.competition_id) ?? '—',
     match_level_name: (() => {
@@ -1105,7 +1119,7 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
   const { data: match, error: matchError } = await supabase
     .from('tbl_Matches')
     .select(
-      'id, match_date, match_time, match_status, result_type, editorial_status, competition_id, home_team_id, away_team_id, match_city_id, match_stadium_id'
+      'id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id, match_city_id, match_stadium_id'
     )
     .eq('id', id)
     .maybeSingle()
@@ -1164,12 +1178,18 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
     match_time: match.match_time ?? null,
     match_status: match.match_status,
     result_type: match.result_type,
+    walkover_winner_team_id: match.walkover_winner_team_id ?? null,
     editorial_status: match.editorial_status,
     competition_name: competition?.name ?? '—',
     match_level_name: matchLevelName,
     home_team_name: teamNameMap.get(match.home_team_id) ?? '—',
     away_team_name: teamNameMap.get(match.away_team_id) ?? '—',
-    final_score: null,
+    final_score: getWalkoverFinalScore({
+      result_type: match.result_type,
+      walkover_winner_team_id: match.walkover_winner_team_id ?? null,
+      home_team_id: match.home_team_id,
+      away_team_id: match.away_team_id,
+    }),
     competition_id: match.competition_id,
     match_level_id: matchLevelId,
     home_team_id: match.home_team_id,

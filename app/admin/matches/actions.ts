@@ -32,6 +32,7 @@ type MatchInput = {
   matchCityIdRaw: string | null
   matchStatus: 'SCHEDULED' | 'FINISHED' | 'ABANDONED' | 'CANCELLED'
   resultType: 'REGULAR_TIME' | 'EXTRA_TIME' | 'PENALTIES' | 'EXTRA_TIME_AND_PENALTIES' | 'GOLDEN_GOAL' | 'WALKOVER' | null
+  walkoverWinnerTeamId: string | null
   editorialStatus: 'DRAFT' | 'PARTIAL' | 'COMPLETE' | 'VERIFIED'
 }
 
@@ -178,6 +179,8 @@ function readMatchInput(
   const resultType = resultTypeRaw && RESULT_TYPES.includes(resultTypeRaw as (typeof RESULT_TYPES)[number])
     ? resultTypeRaw as MatchInput['resultType']
     : null
+  const effectiveResultType = matchStatus === 'FINISHED' ? resultType : null
+  const walkoverWinnerTeamIdRaw = getTrimmedNullable(formData, 'walkover_winner_team_id')
 
   return {
     matchDate: getTrimmedString(formData, 'match_date'),
@@ -189,7 +192,8 @@ function readMatchInput(
     matchStadiumId: getTrimmedNullable(formData, 'match_stadium_id'),
     matchCityIdRaw: getTrimmedNullable(formData, 'match_city_id'),
     matchStatus,
-    resultType: matchStatus === 'FINISHED' ? resultType : null,
+    resultType: effectiveResultType,
+    walkoverWinnerTeamId: effectiveResultType === 'WALKOVER' ? walkoverWinnerTeamIdRaw : null,
     editorialStatus,
   }
 }
@@ -248,14 +252,31 @@ function validateMatchInputOrRedirect(input: MatchInput, redirectPath: string): 
   if (input.matchStatus === 'FINISHED' && !input.resultType) {
     redirectWithError(redirectPath, 'Dla meczu zakończonego wybierz sposób zakończenia meczu.')
   }
+
+  if (input.resultType === 'WALKOVER' && !input.walkoverWinnerTeamId) {
+    redirectWithError(redirectPath, 'Dla walkoweru wybierz zwycięzcę meczu.')
+  }
+
+  if (
+    input.walkoverWinnerTeamId
+    && input.walkoverWinnerTeamId !== input.homeTeamId
+    && input.walkoverWinnerTeamId !== input.awayTeamId
+  ) {
+    redirectWithError(redirectPath, 'Zwycięzca walkoweru musi być gospodarzem albo gościem.')
+  }
 }
 
 async function resolveMatchCityId(
   supabase: ReturnType<typeof createServiceRoleClient>,
   matchStadiumId: string | null,
   matchCityIdRaw: string | null,
+  resultType: MatchInput['resultType'],
   redirectPath: string
 ): Promise<string | null> {
+  if (resultType === 'WALKOVER') {
+    return null
+  }
+
   let matchCityId = matchCityIdRaw
 
   if (matchStadiumId) {
@@ -1408,7 +1429,13 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
 
   const supabase = createServiceRoleClient()
   const supportsMatchLevel = await hasMatchLevelColumn(supabase)
-  const matchCityId = await resolveMatchCityId(supabase, input.matchStadiumId, input.matchCityIdRaw, redirectPath)
+  const matchCityId = await resolveMatchCityId(
+    supabase,
+    input.matchStadiumId,
+    input.matchCityIdRaw,
+    input.resultType,
+    redirectPath
+  )
   await validateTeamsExistOrRedirect(supabase, input.homeTeamId, input.awayTeamId, redirectPath)
 
   const payload: Record<string, unknown> = {
@@ -1421,6 +1448,7 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
     match_city_id: matchCityId,
     match_status: input.matchStatus,
     result_type: input.resultType,
+    walkover_winner_team_id: input.walkoverWinnerTeamId,
     editorial_status: input.editorialStatus,
   }
 
@@ -1492,6 +1520,7 @@ export async function createMatch(formData: FormData): Promise<void> {
     supabase,
     input.matchStadiumId,
     input.matchCityIdRaw,
+    input.resultType,
     '/admin/matches'
   )
   await validateTeamsExistOrRedirect(supabase, input.homeTeamId, input.awayTeamId, '/admin/matches')
@@ -1507,6 +1536,7 @@ export async function createMatch(formData: FormData): Promise<void> {
     match_city_id: matchCityId,
     match_status: input.matchStatus,
     result_type: input.resultType,
+    walkover_winner_team_id: input.walkoverWinnerTeamId,
     editorial_status: 'DRAFT',
   }
 
@@ -1517,6 +1547,12 @@ export async function createMatch(formData: FormData): Promise<void> {
   const { error } = await supabase.from('tbl_Matches').insert(payload)
 
   if (error) {
+    if (error.code === '23514' && error.message.includes('chk_tbl_Matches_stadium_or_city')) {
+      redirectWithError('/admin/matches', 'Wybierz stadion albo miasto meczu. Wyjatek: dla walkoweru oba pola moga pozostac puste.')
+    }
+    if (error.code === '23514' && error.message.includes('chk_tbl_Matches_walkover_winner_team')) {
+      redirectWithError('/admin/matches', 'Dla walkoweru wybierz zwyciezce: gospodarza albo goscia. Poza walkowerem to pole musi pozostac puste.')
+    }
     redirectWithError('/admin/matches', 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
@@ -1547,6 +1583,7 @@ export async function updateMatch(formData: FormData): Promise<void> {
     supabase,
     input.matchStadiumId,
     input.matchCityIdRaw,
+    input.resultType,
     redirectPath
   )
 
@@ -1562,6 +1599,7 @@ export async function updateMatch(formData: FormData): Promise<void> {
     match_city_id: matchCityId,
     match_status: input.matchStatus,
     result_type: input.resultType,
+    walkover_winner_team_id: input.walkoverWinnerTeamId,
     editorial_status: input.editorialStatus,
   }
 
@@ -1575,6 +1613,12 @@ export async function updateMatch(formData: FormData): Promise<void> {
     .eq('id', id)
 
   if (error) {
+    if (error.code === '23514' && error.message.includes('chk_tbl_Matches_stadium_or_city')) {
+      redirectWithError(redirectPath, 'Wybierz stadion albo miasto meczu. Wyjatek: dla walkoweru oba pola moga pozostac puste.')
+    }
+    if (error.code === '23514' && error.message.includes('chk_tbl_Matches_walkover_winner_team')) {
+      redirectWithError(redirectPath, 'Dla walkoweru wybierz zwyciezce: gospodarza albo goscia. Poza walkowerem to pole musi pozostac puste.')
+    }
     redirectWithError(redirectPath, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 

@@ -51,6 +51,8 @@ export default function MatchCreateModal({
   const [awayTeamId, setAwayTeamId] = useState('')
   const [pendingStadiumCityId, setPendingStadiumCityId] = useState('')
   const [matchStatus, setMatchStatus] = useState('FINISHED')
+  const [resultType, setResultType] = useState('REGULAR_TIME')
+  const [walkoverWinnerTeamId, setWalkoverWinnerTeamId] = useState('')
 
   const handleCityOptionCreated = (option: { id: string; label?: string }) => {
     setCityOptions((prev) => {
@@ -92,6 +94,18 @@ export default function MatchCreateModal({
       setSelectedCityId(stadium.stadium_city_id)
     }
   }
+
+  useEffect(() => {
+    if (matchStatus !== 'FINISHED' || resultType !== 'WALKOVER') {
+      setWalkoverWinnerTeamId('')
+    }
+  }, [matchStatus, resultType])
+
+  useEffect(() => {
+    if (walkoverWinnerTeamId && walkoverWinnerTeamId !== homeTeamId && walkoverWinnerTeamId !== awayTeamId) {
+      setWalkoverWinnerTeamId('')
+    }
+  }, [homeTeamId, awayTeamId, walkoverWinnerTeamId])
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">
@@ -152,7 +166,8 @@ export default function MatchCreateModal({
               <select
                 id="result_type"
                 name="result_type"
-                defaultValue="REGULAR_TIME"
+                value={resultType}
+                onChange={(e) => setResultType(e.target.value)}
                 disabled={matchStatus !== 'FINISHED'}
                 className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 disabled:opacity-40"
               >
@@ -163,6 +178,24 @@ export default function MatchCreateModal({
                 <option value="PENALTIES">Rzuty karne</option>
                 <option value="GOLDEN_GOAL">Złoty gol</option>
                 <option value="WALKOVER">Walkower</option>
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label htmlFor="walkover_winner_team_id" className="text-sm font-medium text-neutral-300">
+                Zwycięzca walkoweru
+              </label>
+              <select
+                id="walkover_winner_team_id"
+                name="walkover_winner_team_id"
+                value={walkoverWinnerTeamId}
+                onChange={(e) => setWalkoverWinnerTeamId(e.target.value)}
+                disabled={matchStatus !== 'FINISHED' || resultType !== 'WALKOVER'}
+                className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 disabled:opacity-40"
+              >
+                <option value="">— wybierz —</option>
+                {homeTeamId ? <option value={homeTeamId}>Gospodarz</option> : null}
+                {awayTeamId ? <option value={awayTeamId}>Gość</option> : null}
               </select>
             </div>
 

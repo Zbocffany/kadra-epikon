@@ -6,6 +6,7 @@ type DetailsPageHeaderProps = {
   title: string
   backLabel: string
   backHref: string
+  showBackButton?: boolean
   editHref: string
   deleteAction: (formData: FormData) => Promise<void>
   deleteId: string
@@ -29,6 +30,7 @@ export function DetailsPageHeader({
   title,
   backLabel,
   backHref,
+  showBackButton = true,
   editHref,
   deleteAction,
   deleteId,
@@ -40,12 +42,14 @@ export function DetailsPageHeader({
 
   return (
     <div className="mb-6 flex items-center justify-between gap-3">
-      <Link
-        href={backHref}
-        className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-      >
-        {backLabel}
-      </Link>
+      {showBackButton ? (
+        <Link
+          href={backHref}
+          className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+        >
+          {backLabel}
+        </Link>
+      ) : <span />}
 
       {showActions ? (
         <div className="flex items-center gap-2">

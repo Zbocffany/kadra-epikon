@@ -74,7 +74,6 @@ export default function EditMatchLocationFields({
           <AdminSelectField
             name="match_stadium_id"
             label="Stadion"
-            required
             selectedId={selectedStadiumId}
             options={stadiumOptions.map((stadium) => ({ id: stadium.id, label: stadium.label }))}
             displayKey="label"
@@ -155,7 +154,7 @@ export default function EditMatchLocationFields({
             })}
           />
           <p className="mt-1 text-xs text-neutral-500">
-            Miasto meczu uzupełnia się automatycznie na podstawie wybranego stadionu.
+            Miasto meczu uzupełnia się automatycznie na podstawie wybranego stadionu. Dla walkoweru stadion i miasto mogą pozostać puste.
           </p>
         </div>
       </div>

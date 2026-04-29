@@ -23,14 +23,17 @@ export default async function PublicClubsPage() {
   })()
 
   return (
-    <AdminListLayout
-      title="Kluby"
-      breadcrumb="Publiczne"
-      recordCount={clubs.length}
-      recordLabel={pluralLabel}
-      fetchError={fetchError}
-    >
-      {!fetchError && <ClubsSearchTable clubs={clubs} basePath="/clubs" />}
-    </AdminListLayout>
+    <div className="public-theme">
+      <AdminListLayout
+        title="Kluby"
+        breadcrumb="Publiczne"
+        maxWidthClass="max-w-[74rem]"
+        recordCount={clubs.length}
+        recordLabel={pluralLabel}
+        fetchError={fetchError}
+      >
+        {!fetchError && <ClubsSearchTable clubs={clubs} basePath="/clubs" />}
+      </AdminListLayout>
+    </div>
   )
 }

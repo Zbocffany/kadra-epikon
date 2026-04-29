@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react'
 import CountryFlag from '@/components/CountryFlag'
-import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
-import { DetailsPageContainer, DetailsPageContent } from '@/components/admin/DetailsPageLayout'
-import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
+import InteractiveLineupGraphic from '@/components/matches/InteractiveLineupGraphic'
+import { DetailsPageContainer } from '@/components/admin/DetailsPageLayout'
 import { Icon, type AppIconName } from '@/components/icons'
 import { compareByPlayerPosition } from '@/app/admin/matches/playerPositionSort'
 import { calculateMatchScore } from '@/app/admin/matches/scoreCalculation'
+import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import type {
   AdminMatchDetails,
   AdminMatchEvent,
@@ -82,40 +82,49 @@ function getSquadEventIconName(eventType: AdminMatchEvent['event_type']): AppIco
   return null
 }
 
+function getPositionInitial(position: PlayerPosition | null): string {
+  if (position === 'GOALKEEPER') return 'B'
+  if (position === 'DEFENDER') return 'O'
+  if (position === 'MIDFIELDER') return 'P'
+  if (position === 'ATTACKER') return 'N'
+  return '?'
+}
+
 function PositionBadge({ position }: { position: PlayerPosition | null }) {
   const label = getPlayerPositionLabel(position)
-  const letter = label?.[0] ?? '–'
-  const letterColorByPosition: Partial<Record<PlayerPosition, string>> = {
-    GOALKEEPER: 'text-orange-300',
-    DEFENDER: 'text-rose-300',
-    MIDFIELDER: 'text-sky-300',
-    ATTACKER: 'text-lime-300',
-  }
-  const letterClass = position ? (letterColorByPosition[position] ?? 'text-neutral-100') : 'text-neutral-100'
+  const letter = getPositionInitial(position)
 
   return (
     <span
-      className={`relative inline-flex h-5 w-5 items-center justify-center overflow-hidden rounded-full border border-neutral-300 bg-black ring-1 ring-neutral-700/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.6),inset_0_-1px_1px_rgba(0,0,0,0.9),0_0_0_1px_rgba(255,255,255,0.08),0_2px_4px_rgba(0,0,0,0.9),0_6px_10px_rgba(0,0,0,0.45)] ${letterClass}`}
+      className="relative inline-flex h-6 w-6 items-center justify-center text-[9px] font-black uppercase tracking-[0.12em] text-emerald-900 shadow-[0_3px_6px_rgba(0,0,0,0.32)]"
       title={label ?? undefined}
     >
-      <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_30%,rgba(255,255,255,0)_58%),linear-gradient(130deg,rgba(255,255,255,0.28)_0%,rgba(255,255,255,0)_50%)]" />
-      <span className="absolute inset-0 z-10 flex items-center justify-center text-[11px] font-black leading-none [text-shadow:0_1px_1px_rgba(0,0,0,0.9)]">{letter}</span>
+      <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full" aria-hidden="true">
+        <path d="M18 10h28l8 9-8 7v28H18V26l-8-7z" fill="#f2f7f3" stroke="#d9e7de" strokeWidth="2" />
+        <path d="M26 10h12v8H26z" fill="#1e7a43" opacity="0.85" />
+        <path d="M11 19l7-9 8 9-8 7z" fill="#f2f7f3" stroke="#d9e7de" strokeWidth="2" />
+        <path d="M53 19l-7-9-8 9 8 7z" fill="#f2f7f3" stroke="#d9e7de" strokeWidth="2" />
+      </svg>
+      <span className="relative z-10 mt-1">{letter}</span>
     </span>
   )
 }
 
-function MatchTeamParticipantsView({ participants, events }: { participants: AdminMatchParticipant[]; events: AdminMatchEvent[] }) {
-  const sortByPos = (a: AdminMatchParticipant, b: AdminMatchParticipant) => compareByPlayerPosition(a, b, (player) => player.player_position)
-  const starters = participants.filter((p) => p.role === 'PLAYER' && p.is_starting).sort(sortByPos)
-  const bench = participants.filter((p) => p.role === 'PLAYER' && !p.is_starting).sort(sortByPos)
-  const coaches = participants.filter((p) => p.role === 'COACH')
-  const hasPlayers = starters.length > 0 || bench.length > 0
-  type PlayerEventIcon = { iconName: AppIconName; minute: string | null; minuteLeft: boolean }
+type PlayerEventIcon = { iconName: AppIconName; minute: string | null; minuteLeft: boolean }
+
+function buildPersonEventIcons(events: AdminMatchEvent[]) {
   const personEventIcons = new Map<string, PlayerEventIcon[]>()
   const orderedEvents = [...events].sort(compareEventsChronologically)
 
-  const formatEventMinute = (ev: AdminMatchEvent): string => ev.minute_extra && ev.minute_extra > 0 ? `${ev.minute}+${ev.minute_extra}'` : `${ev.minute}'`
-  const appendIcon = (personId: string | null, iconName: AppIconName, minute: string | null = null, minuteLeft = false) => {
+  const formatEventMinute = (ev: AdminMatchEvent): string =>
+    ev.minute_extra && ev.minute_extra > 0 ? `${ev.minute}+${ev.minute_extra}'` : `${ev.minute}'`
+
+  const appendIcon = (
+    personId: string | null,
+    iconName: AppIconName,
+    minute: string | null = null,
+    minuteLeft = false
+  ) => {
     if (!personId) return
     const entry: PlayerEventIcon = { iconName, minute, minuteLeft }
     const existing = personEventIcons.get(personId)
@@ -133,8 +142,35 @@ function MatchTeamParticipantsView({ participants, events }: { participants: Adm
     }
   }
 
+  return personEventIcons
+}
+
+function renderPlayerEventIcons(playerId: string, playerRowId: string, personEventIcons: Map<string, PlayerEventIcon[]>) {
+  const icons = personEventIcons.get(playerId) ?? []
+  if (icons.length === 0) return null
+
+  return (
+    <span className="inline-flex items-center gap-1.5 text-neutral-300">
+      {icons.map(({ iconName, minute, minuteLeft }, index) => (
+        <span key={`${playerRowId}-${iconName}-${index}`} className="inline-flex items-center gap-0.5">
+          {minute && minuteLeft ? <span className="text-[10px] font-semibold leading-none text-neutral-400">{minute}</span> : null}
+          <Icon name={iconName} className="h-4 w-4 shrink-0" />
+          {minute && !minuteLeft ? <span className="text-[10px] font-semibold leading-none text-neutral-400">{minute}</span> : null}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+function MatchTeamParticipantsView({ title, participants, events }: { title: string; participants: AdminMatchParticipant[]; events: AdminMatchEvent[] }) {
+  const sortByPos = (a: AdminMatchParticipant, b: AdminMatchParticipant) => compareByPlayerPosition(a, b, (player) => player.player_position)
+  const starters = participants.filter((p) => p.role === 'PLAYER' && p.is_starting).sort(sortByPos)
+  const bench = participants.filter((p) => p.role === 'PLAYER' && !p.is_starting).sort(sortByPos)
+  const coaches = participants.filter((p) => p.role === 'COACH')
+  const hasPlayers = starters.length > 0 || bench.length > 0
+  const personEventIcons = buildPersonEventIcons(events)
+
   function renderPlayerNameWithIcons(player: AdminMatchParticipant, textClassName: string) {
-    const icons = personEventIcons.get(player.person_id) ?? [];
     return (
       <div className="flex items-center">
         {player.person_id ? (
@@ -156,18 +192,10 @@ function MatchTeamParticipantsView({ participants, events }: { participants: Adm
         ) : (
           <span className={`min-w-0 truncate ${textClassName}`}>{player.person_name}</span>
         )}
-        {icons.length > 0 ? (
+        {personEventIcons.get(player.person_id)?.length ? (
           <span className="inline-flex shrink-0 items-center">
             <span aria-hidden>{'\u00A0'.repeat(5)}</span>
-            <span className="inline-flex items-center gap-1.5 text-neutral-300">
-              {icons.map(({ iconName, minute, minuteLeft }, index) => (
-                <span key={`${player.id}-${iconName}-${index}`} className="inline-flex items-center gap-0.5">
-                  {minute && minuteLeft ? <span className="text-[10px] font-semibold leading-none text-neutral-400">{minute}</span> : null}
-                  <Icon name={iconName} className="h-4 w-4 shrink-0" />
-                  {minute && !minuteLeft ? <span className="text-[10px] font-semibold leading-none text-neutral-400">{minute}</span> : null}
-                </span>
-              ))}
-            </span>
+            {renderPlayerEventIcons(player.person_id, player.id, personEventIcons)}
           </span>
         ) : null}
       </div>
@@ -177,38 +205,70 @@ function MatchTeamParticipantsView({ participants, events }: { participants: Adm
   return (
     <div className="mt-4 space-y-4">
       {hasPlayers ? (
-        <div className="overflow-hidden rounded-lg border border-neutral-800">
-          <table className="w-full table-fixed">
-            <colgroup><col className="w-8" /><col className="w-8" /><col /></colgroup>
-            <tbody>
-              {starters.map((player, index) => (
-                <tr key={player.id}>
-                  <td className="bg-neutral-950 px-3 py-1.5 text-sm text-neutral-500">{index + 1}</td>
-                  <td className="bg-neutral-950 py-1.5 pl-0 pr-2"><PositionBadge position={player.player_position} /></td>
-                  <td className="bg-neutral-950 px-3 py-1.5 text-sm">{renderPlayerNameWithIcons(player, 'text-neutral-100')}</td>
-                </tr>
-              ))}
-              {bench.length > 0 ? <tr><td colSpan={3} className="bg-neutral-950 px-3 py-2.5 text-xs font-semibold uppercase tracking-widest text-neutral-500">Ławka rezerwowych</td></tr> : null}
-              {bench.map((player, index) => (
-                <tr key={player.id}>
-                  <td className="bg-neutral-900/40 px-3 py-1.5 text-sm text-neutral-600">{starters.length + index + 1}</td>
-                  <td className="bg-neutral-900/40 py-1.5 pl-0 pr-2"><PositionBadge position={player.player_position} /></td>
-                  <td className="bg-neutral-900/40 px-3 py-1.5 text-sm">{renderPlayerNameWithIcons(player, 'text-neutral-300')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : <p className="text-sm text-neutral-500">Brak zawodników.</p>}
+        <table className="w-full table-fixed">
+          <colgroup><col className="w-8" /><col className="w-8" /><col /></colgroup>
+          <tbody>
+            {starters.map((player, index) => (
+              <tr key={player.id}>
+                <td className="px-3 py-1.5 text-sm font-semibold text-emerald-100/70">{index + 1}</td>
+                <td className="py-1.5 pl-0 pr-2"><PositionBadge position={player.player_position} /></td>
+                <td className="px-2 py-1.5 text-sm">
+                  <span className="inline-flex items-center gap-1.5">
+                    {player.person_id ? (
+                      <SmartPrefetchLink
+                        href={`/people/${player.person_id}`}
+                        className="group inline-flex items-center rounded-md border border-white/12 bg-transparent px-1.5 py-0.5 text-sm font-semibold text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)] transition-colors hover:border-white/25"
+                      >
+                        {player.person_name}
+                        <span aria-hidden className="ml-1 text-[10px] text-emerald-100/30 opacity-0 transition-opacity group-hover:opacity-100">↗</span>
+                      </SmartPrefetchLink>
+                    ) : (
+                      <span className="inline-flex items-center rounded-md border border-white/12 bg-transparent px-1.5 py-0.5 text-sm font-semibold text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)]">{player.person_name}</span>
+                    )}
+                    {personEventIcons.get(player.person_id)?.length ? renderPlayerEventIcons(player.person_id, player.id, personEventIcons) : null}
+                  </span>
+                </td>
+              </tr>
+            ))}
+            {bench.length > 0 ? (
+              <tr>
+                <td colSpan={3} className="px-3 py-2 text-[11px] font-semibold uppercase tracking-widest text-emerald-100/60">Ławka rezerwowych</td>
+              </tr>
+            ) : null}
+            {bench.map((player, index) => (
+              <tr key={player.id}>
+                <td className="px-3 py-1.5 text-sm font-semibold text-emerald-100/50">{starters.length + index + 1}</td>
+                <td className="py-1.5 pl-0 pr-2"><PositionBadge position={player.player_position} /></td>
+                <td className="px-2 py-1.5 text-sm">
+                  <span className="inline-flex items-center gap-1.5">
+                    {player.person_id ? (
+                      <SmartPrefetchLink
+                        href={`/people/${player.person_id}`}
+                        className="group inline-flex items-center rounded-md border border-white/12 bg-transparent px-1.5 py-0.5 text-sm font-normal text-emerald-100/80 shadow-[0_4px_10px_rgba(0,0,0,0.35)] transition-colors hover:border-white/25"
+                      >
+                        {player.person_name}
+                        <span aria-hidden className="ml-1 text-[10px] text-emerald-100/25 opacity-0 transition-opacity group-hover:opacity-100">↗</span>
+                      </SmartPrefetchLink>
+                    ) : (
+                      <span className="inline-flex items-center rounded-md border border-white/12 bg-transparent px-1.5 py-0.5 text-sm font-normal text-emerald-100/80 shadow-[0_4px_10px_rgba(0,0,0,0.35)]">{player.person_name}</span>
+                    )}
+                    {personEventIcons.get(player.person_id)?.length ? renderPlayerEventIcons(player.person_id, player.id, personEventIcons) : null}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : <p className="text-sm text-emerald-100/60">Brak zawodników.</p>}
 
       {coaches.length > 0 ? (
         <div>
-          <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">Sztab</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-emerald-100/60">Sztab</p>
           <ul className="mt-2 flex flex-wrap gap-2">
             {coaches.map((coach) => (
-              <li key={coach.id} className="inline-flex w-fit rounded-lg border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-sm font-semibold text-neutral-200">
+              <li key={coach.id} className="inline-flex w-fit items-center rounded-md border border-white/12 bg-transparent px-1.5 py-0.5 text-sm font-semibold text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)]">
                 {coach.person_name}
-                {coach.country_code ? <span className="font-semibold text-neutral-200">{'\u00A0'}({coach.country_code})</span> : null}
+                {coach.country_code ? <span className="font-normal text-emerald-100/70">{'\u00A0'}({coach.country_code})</span> : null}
               </li>
             ))}
           </ul>
@@ -220,9 +280,16 @@ function MatchTeamParticipantsView({ participants, events }: { participants: Adm
 
 function ReadOnlyParticipantsSection({ title, participants, events }: { title: string; participants: AdminMatchParticipant[]; events: AdminMatchEvent[] }) {
   return (
-    <section className="rounded-xl border border-neutral-800 bg-neutral-950 p-6">
-      <h2 className="text-xl font-semibold text-neutral-100">{title}</h2>
-      <MatchTeamParticipantsView participants={participants} events={events} />
+    <section className="overflow-hidden rounded-xl border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.2),0_8px_18px_rgba(0,0,0,0.2)]">
+      <div className="relative">
+        <span aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.03)_30%,rgba(0,0,0,0.12)_100%)]" />
+        <div className="relative z-10 px-5 pt-5 pb-1">
+          <h2 className="text-xl font-semibold text-emerald-50">{title}</h2>
+        </div>
+        <div className="relative z-10 px-5 pb-5">
+          <MatchTeamParticipantsView title={title} participants={participants} events={events} />
+        </div>
+      </div>
     </section>
   )
 }
@@ -231,10 +298,16 @@ function MatchLineupsSummarySection({
   match,
   events,
   personNameById,
+  topSpacingClassName,
+  topPanel,
+  lineupGraphic,
 }: {
   match: AdminMatchDetails
   events: AdminMatchEvent[]
   personNameById: Map<string, string>
+  topSpacingClassName?: string
+  topPanel?: ReactNode
+  lineupGraphic?: ReactNode
 }) {
   const sortedEvents = [...events].sort((a, b) => {
     if (a.minute !== b.minute) return b.minute - a.minute
@@ -275,39 +348,59 @@ function MatchLineupsSummarySection({
 
   function renderGlossyScorerBadge(iconName: 'goal' | 'ownGoal' | 'penaltyGoal', label: string) {
     return (
-      <span className="relative inline-flex items-center overflow-hidden rounded-md border border-neutral-500/80 bg-neutral-900 px-1.5 py-0.5 text-sm font-semibold text-neutral-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]">
-        <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]" />
+      <span className="relative inline-flex items-center overflow-hidden rounded-md border border-emerald-300/50 bg-emerald-950/82 px-1.5 py-0.5 text-sm font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),inset_0_-1px_1px_rgba(0,0,0,0.4),0_2px_5px_rgba(0,0,0,0.28)]">
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0.08)_34%,rgba(255,255,255,0)_72%)]" />
         <span className="relative z-10 inline-flex items-center"><Icon name={iconName} className="mr-1 h-4 w-4 shrink-0" />{label}</span>
       </span>
     )
   }
 
   function renderGlossyEventScore(label: string, variant?: 'green' | 'red') {
-    const borderClass = variant === 'green' ? 'border-emerald-500' : variant === 'red' ? 'border-red-500' : 'border-neutral-500/80'
+    const borderClass = variant === 'green' ? 'border-lime-300/65' : variant === 'red' ? 'border-rose-300/65' : 'border-emerald-300/50'
     return (
-      <span className={`relative inline-flex items-center overflow-hidden rounded-md border ${borderClass} bg-neutral-900 px-1.5 py-0.5 text-xs font-semibold text-neutral-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)]`}>
-        <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]" />
+      <span className={`relative inline-flex items-center overflow-hidden rounded-md border ${borderClass} bg-emerald-950/82 px-1.5 py-0.5 text-xs font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),inset_0_-1px_1px_rgba(0,0,0,0.4),0_2px_5px_rgba(0,0,0,0.28)]`}>
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0.08)_34%,rgba(255,255,255,0)_72%)]" />
         <span className="relative z-10">{label}</span>
       </span>
     )
   }
 
-  function renderEventText(event: AdminMatchEvent): ReactNode {
+  function renderPlayerBadge(label: string, bold = true) {
+    return (
+      <span className={`inline-flex items-center rounded-md border border-white/12 bg-transparent px-1.5 py-0.5 text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)] ${bold ? 'text-sm font-semibold' : 'text-xs font-normal'}`}>
+        {label}
+      </span>
+    )
+  }
+
+  function renderEventText(event: AdminMatchEvent, mirrored = false): ReactNode {
     const primary = event.primary_person_id ? (personNameById.get(event.primary_person_id) ?? 'Nieznany') : null
     const secondary = event.secondary_person_id ? (personNameById.get(event.secondary_person_id) ?? 'Nieznany') : null
     if (event.event_type === 'SUBSTITUTION') {
       const incoming = secondary ?? 'Nieznany'
       const outgoing = primary ?? 'Nieznany'
-      return <><span className="font-semibold text-neutral-100">{incoming}</span><span className="font-normal text-neutral-500"> {outgoing}</span></>
+      return mirrored ? (
+        <span className="inline-flex items-center gap-1.5">
+          {renderPlayerBadge(outgoing, false)}
+          {renderPlayerBadge(incoming, true)}
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1.5">
+          {renderPlayerBadge(incoming, true)}
+          {renderPlayerBadge(outgoing, false)}
+        </span>
+      )
     }
-    if (event.event_type === 'GOAL') return <>{renderGlossyScorerBadge('goal', primary ?? 'Nieznany')}{secondary ? <span className="font-normal text-neutral-500"> {secondary}</span> : null}</>
-    if (event.event_type === 'PENALTY_GOAL') return <>{renderGlossyScorerBadge('penaltyGoal', primary ?? 'Nieznany')}<span className="font-normal text-neutral-500"> (Rzut karny)</span></>
-    if (event.event_type === 'OWN_GOAL') return <>{renderGlossyScorerBadge('ownGoal', primary ?? 'Nieznany')}<span className="font-normal text-neutral-500"> (Gol samobójczy)</span></>
+    if (event.event_type === 'GOAL') return mirrored
+      ? <span className="inline-flex items-center gap-1.5">{secondary ? renderPlayerBadge(secondary, false) : null}{renderGlossyScorerBadge('goal', primary ?? 'Nieznany')}</span>
+      : <span className="inline-flex items-center gap-1.5">{renderGlossyScorerBadge('goal', primary ?? 'Nieznany')}{secondary ? renderPlayerBadge(secondary, false) : null}</span>
+    if (event.event_type === 'PENALTY_GOAL') return <>{renderGlossyScorerBadge('penaltyGoal', primary ?? 'Nieznany')}<span className="font-normal text-emerald-100/90"> (Rzut karny)</span></>
+    if (event.event_type === 'OWN_GOAL') return <>{renderGlossyScorerBadge('ownGoal', primary ?? 'Nieznany')}<span className="font-normal text-emerald-100/90"> (Gol samobójczy)</span></>
     if (event.event_type === 'PENALTY_SHOOTOUT_SCORED') return <>{renderGlossyScorerBadge('penaltyGoal', primary ?? 'Nieznany')}</>
-    if (event.event_type === 'PENALTY_SHOOTOUT_MISSED' || event.event_type === 'MATCH_PENALTY_MISSED') return <><span className="font-semibold text-neutral-100">{primary ?? 'Nieznany'}</span><span className="font-normal text-neutral-500"> (Nietrafiony karny)</span></>
-    if (event.event_type === 'PENALTY_SHOOTOUT_SAVED' || event.event_type === 'MATCH_PENALTY_SAVED') return <><span className="font-semibold text-neutral-100">{primary ?? 'Nieznany'}</span><span className="font-normal text-neutral-500"> (Obroniony karny)</span></>
-    if (event.event_type === 'YELLOW_CARD' || event.event_type === 'SECOND_YELLOW_CARD' || event.event_type === 'RED_CARD') return primary ?? 'Nieznany'
-    return primary ?? 'Nieznany'
+    if (event.event_type === 'PENALTY_SHOOTOUT_MISSED' || event.event_type === 'MATCH_PENALTY_MISSED') return <>{renderPlayerBadge(primary ?? 'Nieznany')}<span className="font-normal text-emerald-100/90"> (Nietrafiony karny)</span></>
+    if (event.event_type === 'PENALTY_SHOOTOUT_SAVED' || event.event_type === 'MATCH_PENALTY_SAVED') return <>{renderPlayerBadge(primary ?? 'Nieznany')}<span className="font-normal text-emerald-100/90"> (Obroniony karny)</span></>
+    if (event.event_type === 'YELLOW_CARD' || event.event_type === 'SECOND_YELLOW_CARD' || event.event_type === 'RED_CARD') return renderPlayerBadge(primary ?? 'Nieznany')
+    return renderPlayerBadge(primary ?? 'Nieznany')
   }
 
   function getHalfScore(halfEvents: AdminMatchEvent[]): string {
@@ -366,17 +459,19 @@ function MatchLineupsSummarySection({
 
   function HalfBlock({ title, halfEvents }: { title: string; halfEvents: AdminMatchEvent[] }) {
     return (
-      <details open className="overflow-hidden rounded-lg border border-neutral-800 group">
-        <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-neutral-400 marker:content-none">
+      <details open className="group overflow-hidden rounded-lg border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.2),0_8px_18px_rgba(0,0,0,0.2)]">
+        <summary className="relative flex cursor-pointer list-none items-center justify-between overflow-hidden px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-emerald-100 marker:content-none">
+          <span aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.03)_30%,rgba(0,0,0,0.12)_100%)]" />
           <span>{title}</span>
-          <span className="inline-flex items-center gap-2"><span>{getHalfScore(halfEvents)}</span><GlossyDisclosureCircle rotateClassName="group-open:rotate-180" /></span>
+          <span className="inline-flex items-center gap-2"><span>{getHalfScore(halfEvents)}</span><span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/12 bg-emerald-950/40 text-[10px] transition-transform duration-200 group-open:rotate-180">▾</span></span>
         </summary>
-        {halfEvents.length === 0 ? <div className="bg-neutral-950 px-3 py-3 text-sm text-neutral-500">Brak zdarzeń.</div> : (
-          <div>
+        {halfEvents.length === 0 ? <div className="bg-emerald-950/40 px-3 py-3 text-sm text-emerald-100/80">Brak zdarzeń.</div> : (
+          <div className="relative overflow-hidden bg-emerald-950/18">
+            <span aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0.01)_35%,rgba(0,0,0,0.12)_100%)]" />
             {halfEvents.map((event) => {
               const side = event.team_id === match.home_team_id ? 'home' : event.team_id === match.away_team_id ? 'away' : 'neutral'
               const iconName = getEventIconName(event.event_type)
-              const text = renderEventText(event)
+              const text = renderEventText(event, side === 'away')
               const minuteLabel = renderMinute(event)
               const runningScore = SHOOTOUT_TYPES.has(event.event_type)
                 ? runningShootoutScoreByEventId.get(event.id)
@@ -387,10 +482,10 @@ function MatchLineupsSummarySection({
                   ? 'red'
                   : undefined
               const isShootoutEvent = SHOOTOUT_TYPES.has(event.event_type)
-              const minuteClass = 'inline-flex shrink-0 items-center rounded-md border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-xs font-semibold leading-none text-neutral-200'
+              const minuteClass = 'inline-flex shrink-0 items-center rounded-md border border-emerald-300/50 bg-emerald-950/85 px-1.5 py-0.5 text-xs font-semibold leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]'
               const minuteBadge = isShootoutEvent ? null : <span className={minuteClass}>{minuteLabel}</span>
               const content = (
-                <div className="inline-flex items-center gap-2 text-sm text-neutral-100">
+                <div className="inline-flex items-center gap-2 text-sm text-emerald-50">
                   {event.event_type === 'GOAL' || event.event_type === 'OWN_GOAL' || event.event_type === 'PENALTY_GOAL' || event.event_type === 'PENALTY_SHOOTOUT_SCORED' ? (
                     <span>{text}</span>
                   ) : event.event_type === 'PENALTY_SHOOTOUT_MISSED' || event.event_type === 'MATCH_PENALTY_MISSED' ? (
@@ -404,7 +499,7 @@ function MatchLineupsSummarySection({
               )
 
               return (
-                <div key={event.id} className="bg-neutral-950 px-3 py-2">
+                <div key={event.id} className="relative z-10 px-3 py-1">
                   {side === 'home' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><div className="flex items-center gap-2">{minuteBadge}<div className="min-w-0">{content}</div></div>{runningScore ? renderGlossyEventScore(runningScore, scoreBadgeVariant) : <span />}<span /></div> : null}
                   {side === 'away' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><span />{runningScore ? renderGlossyEventScore(runningScore, scoreBadgeVariant) : <span />}<div className="flex items-center justify-end gap-2"><div className="min-w-0 text-right">{content}</div>{minuteBadge}</div></div> : null}
                   {side === 'neutral' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><span /><div className="flex items-center gap-2">{minuteBadge}{content}{runningScore ? renderGlossyEventScore(runningScore, scoreBadgeVariant) : null}</div><span /></div> : null}
@@ -418,26 +513,36 @@ function MatchLineupsSummarySection({
   }
 
   const summaryScore = calculateMatchScore(events, match.home_team_id, match.away_team_id)
-  const summaryScoreLabel = `${summaryScore.homeGoals}:${summaryScore.awayGoals}`
-  const halftimeScoreLabel = `${summaryScore.homeGoalsHT}:${summaryScore.awayGoalsHT}`
+  const walkoverScoreLabel = match.result_type === 'WALKOVER'
+    ? match.walkover_winner_team_id === match.home_team_id
+      ? '3:0 w.o.'
+      : match.walkover_winner_team_id === match.away_team_id
+        ? '0:3 w.o.'
+        : null
+    : null
+  const summaryScoreLabel = walkoverScoreLabel ?? `${summaryScore.homeGoals}:${summaryScore.awayGoals}`
+  const halftimeScoreLabel = walkoverScoreLabel ? '—' : `${summaryScore.homeGoalsHT}:${summaryScore.awayGoalsHT}`
 
   return (
-    <section className="mt-6 rounded-xl border border-neutral-800 bg-neutral-950 p-5 sm:p-6">
-      <div className="rounded-2xl border border-neutral-700 bg-neutral-900/60 px-5 py-3">
-        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-          <div className="flex items-center gap-2"><CountryFlag fifaCode={match.home_team_fifa_code} countryName={match.home_team_name} className="h-5 w-[30px]" /><p className="truncate text-left text-2xl font-bold text-neutral-100 sm:text-3xl">{match.home_team_name}</p></div>
-          <div className="text-center"><p className="text-2xl font-bold text-neutral-100 sm:text-3xl">{summaryScoreLabel}</p><p className="mt-0.5 text-[11px] font-medium text-neutral-400">Do przerwy: {halftimeScoreLabel}</p>{hasExtraTime && <p className="mt-0.5 text-[11px] font-medium text-neutral-400">Po dogrywce: {summaryScoreLabel}</p>}{hasShootout && <p className="mt-0.5 text-[11px] font-medium text-neutral-400">Karne: {summaryScore.homeShootoutScore}:{summaryScore.awayShootoutScore}</p>}</div>
-          <div className="flex items-center justify-end gap-2"><p className="truncate text-right text-2xl font-bold text-neutral-100 sm:text-3xl">{match.away_team_name}</p><CountryFlag fifaCode={match.away_team_fifa_code} countryName={match.away_team_name} className="h-5 w-[30px]" /></div>
+    <section className={`${topSpacingClassName ?? 'mt-6'} overflow-hidden rounded-xl border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.2),0_8px_18px_rgba(0,0,0,0.2)] p-5 sm:p-6`}>
+      {topPanel ? <div className="mb-4">{topPanel}</div> : null}
+      <div className="relative overflow-hidden rounded-xl border border-white/10 px-5 py-4">
+        <span aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.10)_0%,rgba(255,255,255,0.02)_30%,rgba(0,0,0,0.10)_100%)]" />
+        <div className="relative z-10 grid grid-cols-[1fr_auto_1fr] items-start gap-4">
+          <div className="flex items-start"><span className="inline-flex items-center gap-2 rounded-md border border-white/12 bg-transparent px-2 py-0.5 text-2xl font-bold text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)] sm:text-3xl"><CountryFlag fifaCode={match.home_team_fifa_code} countryName={match.home_team_name} className="h-5 w-[30px]" /><span className="max-w-[15rem] truncate text-left">{match.home_team_name}</span></span></div>
+          <div className="text-center"><p><span className="inline-flex items-center rounded-md border border-white/12 bg-transparent px-2 py-0.5 text-2xl font-bold text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)] sm:text-3xl">{summaryScoreLabel}</span></p><p className="mt-0.5 text-[14px] font-medium text-emerald-100/60">Do przerwy: {halftimeScoreLabel}</p>{hasExtraTime && <p className="mt-0.5 text-[11px] font-medium text-emerald-100/60">Po dogrywce: {summaryScoreLabel}</p>}{hasShootout && <p className="mt-0.5 text-[11px] font-medium text-emerald-100/60">Karne: {summaryScore.homeShootoutScore}:{summaryScore.awayShootoutScore}</p>}</div>
+          <div className="flex items-start justify-end"><span className="inline-flex items-center gap-2 rounded-md border border-white/12 bg-transparent px-2 py-0.5 text-2xl font-bold text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)] sm:text-3xl"><span className="max-w-[15rem] truncate text-right">{match.away_team_name}</span><CountryFlag fifaCode={match.away_team_fifa_code} countryName={match.away_team_name} className="h-5 w-[30px]" /></span></div>
         </div>
 
         {(homeScorers.length > 0 || awayScorers.length > 0) ? (
-          <div className="mt-2 grid grid-cols-[1fr_auto_1fr] items-start gap-4">
-            <div className="space-y-1">{homeScorers.map((entry) => <div key={entry.id} className="flex items-center gap-2 text-[13px]"><span className="inline-flex shrink-0 items-center rounded-md border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-neutral-200">{entry.minuteLabel}</span><span className="truncate font-semibold text-neutral-100">{entry.scorerName}{entry.eventType === 'PENALTY_GOAL' ? <span className="ml-1 font-normal text-neutral-400">(k.)</span> : entry.eventType === 'OWN_GOAL' ? <span className="ml-1 font-normal text-neutral-400">(sam.)</span> : null}</span></div>)}</div>
+          <div className="relative z-10 mt-2 grid grid-cols-[1fr_auto_1fr] items-start gap-4">
+            <div className="space-y-1">{homeScorers.map((entry) => <div key={entry.id} className="flex items-center gap-2 text-[13px]"><span className="inline-flex shrink-0 items-center rounded-md border border-white/12 bg-transparent px-1.5 py-0.5 text-[11px] font-semibold leading-none text-emerald-50 shadow-[0_2px_6px_rgba(0,0,0,0.35)]">{entry.minuteLabel}</span><span className="truncate font-semibold text-emerald-50">{entry.scorerName}{entry.eventType === 'PENALTY_GOAL' ? <span className="ml-1 font-normal text-emerald-100/60">(k.)</span> : entry.eventType === 'OWN_GOAL' ? <span className="ml-1 font-normal text-emerald-100/60">(sam.)</span> : null}</span></div>)}</div>
             <div />
-            <div className="space-y-1">{awayScorers.map((entry) => <div key={entry.id} className="flex items-center justify-end gap-2 text-[13px]"><span className="truncate font-semibold text-neutral-100">{entry.scorerName}{entry.eventType === 'PENALTY_GOAL' ? <span className="ml-1 font-normal text-neutral-400">(k.)</span> : entry.eventType === 'OWN_GOAL' ? <span className="ml-1 font-normal text-neutral-400">(sam.)</span> : null}</span><span className="inline-flex shrink-0 items-center rounded-md border border-neutral-600 bg-neutral-900 px-1.5 py-0.5 text-[11px] font-semibold leading-none text-neutral-200">{entry.minuteLabel}</span></div>)}</div>
+            <div className="space-y-1">{awayScorers.map((entry) => <div key={entry.id} className="flex items-center justify-end gap-2 text-[13px]"><span className="truncate font-semibold text-emerald-50">{entry.scorerName}{entry.eventType === 'PENALTY_GOAL' ? <span className="ml-1 font-normal text-emerald-100/60">(k.)</span> : entry.eventType === 'OWN_GOAL' ? <span className="ml-1 font-normal text-emerald-100/60">(sam.)</span> : null}</span><span className="inline-flex shrink-0 items-center rounded-md border border-white/12 bg-transparent px-1.5 py-0.5 text-[11px] font-semibold leading-none text-emerald-50 shadow-[0_2px_6px_rgba(0,0,0,0.35)]">{entry.minuteLabel}</span></div>)}</div>
           </div>
         ) : null}
       </div>
+      {lineupGraphic ? <div className="mt-4">{lineupGraphic}</div> : null}
       <div className="mt-4 space-y-3">
         {phaseSections.length === 0 ? <div className="rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-3 text-sm text-neutral-500">Brak zdarzeń.</div> : phaseSections.map((section) => <HalfBlock key={section.phase} title={section.title} halfEvents={section.events} />)}
       </div>
@@ -449,63 +554,104 @@ export default function MatchReadOnlyPage({
   match,
   participants,
   events,
-  backHref,
-  backLabel,
   competitionName,
   matchDateTimeLabel,
   stadiumSummary,
   headerRight,
   topBar,
 }: MatchReadOnlyPageProps) {
+  const sortByPos = (a: AdminMatchParticipant, b: AdminMatchParticipant) => compareByPlayerPosition(a, b, (player) => player.player_position)
+  const homeStarters = participants.homeParticipants
+    .filter((player) => player.role === 'PLAYER' && player.is_starting)
+    .sort(sortByPos)
+  const awayStarters = participants.awayParticipants
+    .filter((player) => player.role === 'PLAYER' && player.is_starting)
+    .sort(sortByPos)
   const peopleById = new Map(participants.people.map((person) => [person.id, person]))
   const personNameById = new Map(
     participants.people.map((person) => [person.id, peopleById.get(person.id) ? formatEventPersonDisplayName(peopleById.get(person.id) as AdminMatchParticipantPersonOption) : person.label])
   )
   const currentReferee = participants.referees[0] ?? null
-  const matchTitle = `${match.home_team_name} vs ${match.away_team_name}`
 
   return (
     <DetailsPageContainer maxWidthClass="max-w-5xl">
-      {topBar ?? (
-        <div className="mb-6">
-          <SmartPrefetchLink
-            href={backHref}
-            prefetchOnMount
-            preferHistoryBack
-            className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-1.5 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-          >
-            {backLabel}
-          </SmartPrefetchLink>
-        </div>
-      )}
+      {topBar ?? null}
 
-      <DetailsPageContent
-        title={null}
-        breadcrumb={
-          <div className="flex items-center gap-3">
-            <span>{matchDateTimeLabel}</span>
-            {competitionName ? (
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center rounded-md border border-neutral-400 px-2 py-0.5 font-bold text-xs text-white bg-black" style={{ fontSize: '0.95em', fontWeight: 700 }}>{competitionName}</span>
-                {match.match_level_name ? <span className="inline-flex items-center rounded-md border border-neutral-400 px-2 py-0.5 font-bold text-xs text-white bg-black" style={{ fontSize: '0.95em', fontWeight: 700 }}>{match.match_level_name}</span> : null}
+      <MatchLineupsSummarySection
+        match={match}
+        events={events}
+        personNameById={personNameById}
+        topSpacingClassName={topBar ? 'mt-6' : 'mt-0'}
+        topPanel={
+          <section className="relative overflow-hidden rounded-xl border border-emerald-900/70 bg-[linear-gradient(165deg,#2d7a52_0%,#1e603f_18%,#134b33_40%,#0f3f2b_60%,#0b3423_80%,#08281c_100%)] px-4 py-3 text-emerald-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.34),0_8px_18px_rgba(0,0,0,0.28)]">
+            <span aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.18)_0%,rgba(255,255,255,0.05)_30%,rgba(0,0,0,0.16)_100%)]" />
+            <div className="relative z-10 flex w-full items-start justify-between gap-4">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2.5 text-sm font-semibold">
+                  <span className="inline-flex items-center rounded-md border border-white/30 bg-slate-950/35 px-2 py-0.5 text-slate-50 shadow-[0_3px_8px_rgba(0,0,0,0.3)]">{matchDateTimeLabel}</span>
+                  {headerRight ? (
+                    <>
+                      {competitionName ? (
+                        <span className="inline-flex items-center rounded-md border border-white/25 bg-slate-950/28 px-2 py-0.5 text-xs font-bold uppercase tracking-[0.08em] text-slate-100 shadow-[0_3px_8px_rgba(0,0,0,0.25)]">{competitionName}</span>
+                      ) : null}
+                      {match.match_level_name ? (
+                        <span className="inline-flex items-center rounded-md border border-white/25 bg-slate-950/28 px-2 py-0.5 text-xs font-bold uppercase tracking-[0.08em] text-slate-100 shadow-[0_3px_8px_rgba(0,0,0,0.25)]">{match.match_level_name}</span>
+                      ) : null}
+                    </>
+                  ) : null}
+                </div>
+
+                {stadiumSummary || currentReferee ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-medium text-slate-200">
+                    {stadiumSummary ? (
+                      <span className="inline-flex items-center rounded-md border border-white/20 bg-slate-950/24 px-2 py-0.5 shadow-[0_2px_6px_rgba(0,0,0,0.24)]">{stadiumSummary}</span>
+                    ) : null}
+                    {currentReferee ? (
+                      <span className="inline-flex items-center rounded-md border border-white/20 bg-slate-950/24 px-2 py-0.5 shadow-[0_2px_6px_rgba(0,0,0,0.24)]">Sędzia: {currentReferee.person_name}{currentReferee.country_code ? ` (${currentReferee.country_code})` : ''}</span>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
-            ) : null}
-          </div>
-        }
-        subtitle={
-          <div className="mt-2">
-            {stadiumSummary ? <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset bg-neutral-800 text-neutral-300 ring-neutral-700">{stadiumSummary}</span> : null}
-            {stadiumSummary && currentReferee ? <span className="block h-2" /> : null}
-            {currentReferee ? <span className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset bg-neutral-800 text-neutral-300 ring-neutral-700">Sędzia: {currentReferee.person_name}{currentReferee.country_code ? ` (${currentReferee.country_code})` : ''}</span> : null}
-          </div>
-        }
-        headerRight={headerRight}
-        isEdit={false}
-        editContent={null}
-        viewContent={null}
-      />
 
-      <MatchLineupsSummarySection match={match} events={events} personNameById={personNameById} />
+              {headerRight ? (
+                <div className="shrink-0 self-start">
+                  {headerRight}
+                </div>
+              ) : (competitionName || match.match_level_name) ? (
+                <div className="shrink-0 self-start">
+                  <div className="flex flex-wrap items-center justify-end gap-2 text-xs font-bold uppercase tracking-[0.08em]">
+                    {competitionName ? (
+                      <span className="inline-flex items-center rounded-md border border-white/25 bg-slate-950/28 px-2 py-0.5 text-slate-100 shadow-[0_3px_8px_rgba(0,0,0,0.25)]">{competitionName}</span>
+                    ) : null}
+                    {match.match_level_name ? (
+                      <span className="inline-flex items-center rounded-md border border-white/25 bg-slate-950/28 px-2 py-0.5 text-slate-100 shadow-[0_3px_8px_rgba(0,0,0,0.25)]">{match.match_level_name}</span>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          </section>
+        }
+        lineupGraphic={
+          (homeStarters.length > 0 || awayStarters.length > 0)
+            ? (
+                <InteractiveLineupGraphic
+                  homeTeamName={match.home_team_name}
+                  awayTeamName={match.away_team_name}
+                  homeTeamId={match.home_team_id}
+                  awayTeamId={match.away_team_id}
+                  homeTeamFifaCode={match.home_team_fifa_code}
+                  awayTeamFifaCode={match.away_team_fifa_code}
+                  homeStarters={homeStarters}
+                  awayStarters={awayStarters}
+                  homeParticipants={participants.homeParticipants}
+                  awayParticipants={participants.awayParticipants}
+                  events={events}
+                />
+              )
+            : undefined
+        }
+      />
 
       <section className="mt-6 grid gap-6 xl:grid-cols-2">
         <ReadOnlyParticipantsSection title={match.home_team_name} participants={participants.homeParticipants} events={events} />

@@ -42,6 +42,7 @@ import {
   type PlayerPosition,
 } from '@/lib/db/matches'
 import CountryFlag from '@/components/CountryFlag'
+import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import { getAdminPersonBirthCityOptions, type AdminPersonBirthCityOption } from '@/lib/db/people'
 import { getAdminCountriesOptions, type AdminCountryOption } from '@/lib/db/cities'
 import { getAdminFederations, type AdminFederation } from '@/lib/db/countries'
@@ -277,7 +278,18 @@ function MatchTeamParticipantsView({
 
     return (
       <div className="flex items-center">
-        <span className={`min-w-0 truncate ${textClassName}`}>{player.person_name}</span>
+        {player.person_id ? (
+          <SmartPrefetchLink
+            href={`/people/${player.person_id}`}
+            className={`group min-w-0 truncate ${textClassName} flex items-center`}
+            style={{ textDecoration: 'none' }}
+          >
+            <span>{player.person_name}</span>
+            <span aria-hidden className="ml-1 text-[10px] text-neutral-500 opacity-0 transition-opacity group-hover:opacity-100">↗</span>
+          </SmartPrefetchLink>
+        ) : (
+          <span className={`min-w-0 truncate ${textClassName}`}>{player.person_name}</span>
+        )}
         {icons.length > 0 ? (
           <span className="inline-flex shrink-0 items-center">
             <span aria-hidden>{'\u00A0'.repeat(5)}</span>
@@ -1155,6 +1167,24 @@ export default async function AdminMatchDetailsPage({
         </div>
       </MatchDetailCard>
 
+      <MatchDetailCard label="Zwycięzca walkoweru">
+        <div className="flex flex-col gap-1.5">
+          <select
+            id="walkover_winner_team_id"
+            name="walkover_winner_team_id"
+            defaultValue={match.walkover_winner_team_id ?? ''}
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+          >
+            <option value="">Brak danych</option>
+            <option value={match.home_team_id}>{match.home_team_name}</option>
+            <option value={match.away_team_id}>{match.away_team_name}</option>
+          </select>
+          <p className="text-xs text-neutral-500">
+            Ustaw tylko dla meczu zakończonego walkowerem.
+          </p>
+        </div>
+      </MatchDetailCard>
+
       <MatchDetailCard label="Status redakcji" spanTwo>
         <div className="flex flex-col gap-1.5">
           <select
@@ -1178,7 +1208,13 @@ export default async function AdminMatchDetailsPage({
   const deleteWarningMessage = `Uwaga: usunięcie meczu "${matchTitle}" jest nieodwracalne. Zostaną usunięte wszystkie zdarzenia meczowe oraz wszystkie przypisania osób do tego meczu (składy, sztab, sędzia). Same osoby nie zostaną usunięte z bazy.`
   const matchDateTimeLabel = `${formatDate(match.match_date)}${match.match_time ? ` ${match.match_time.slice(0, 5)}` : ''}`
   const currentReferee = participants.referees[0] ?? null
-  const displayScore = getDisplayScore(events, match.result_type, match.home_team_id, match.away_team_id)
+  const displayScore = getDisplayScore(
+    events,
+    match.result_type,
+    match.home_team_id,
+    match.away_team_id,
+    match.walkover_winner_team_id
+  )
 
   if (isEdit) {
     return (
@@ -1325,6 +1361,7 @@ export default async function AdminMatchDetailsPage({
           title={matchTitle}
           backLabel="Powrót do listy meczów"
           backHref="/admin/matches"
+          showBackButton={false}
           editHref={`/admin/matches/${match.id}?mode=edit`}
           deleteAction={deleteMatch}
           deleteId={match.id}

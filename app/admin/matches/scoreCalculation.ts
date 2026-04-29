@@ -95,8 +95,15 @@ export function getDisplayScore(
   events: AdminMatchEvent[],
   resultType: ResultType | null,
   homeTeamId: string,
-  awayTeamId: string
+  awayTeamId: string,
+  walkoverWinnerTeamId?: string | null
 ): string | null {
+  if (resultType === 'WALKOVER') {
+    if (walkoverWinnerTeamId === homeTeamId) return '3:0 w.o.'
+    if (walkoverWinnerTeamId === awayTeamId) return '0:3 w.o.'
+    return null
+  }
+
   if (events.length === 0) {
     return null
   }

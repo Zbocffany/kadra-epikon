@@ -13,6 +13,7 @@ type PublicMatchesClientProps = {
   title: string
   basePath: string
   detailBasePath: string
+  maxWidthClass: string
   allMatches: AdminMatch[]
   decadeFilters: DecadeFilter[]
   initialPeriod: string
@@ -23,6 +24,7 @@ export default function PublicMatchesClient({
   title,
   basePath,
   detailBasePath,
+  maxWidthClass,
   allMatches,
   decadeFilters,
   initialPeriod,
@@ -81,6 +83,8 @@ export default function PublicMatchesClient({
       matches={visibleMatches}
       fetchError={null}
       detailBasePath={detailBasePath}
+      maxWidthClass={maxWidthClass}
+      publicUnifiedSection
       showEditorialStatus={false}
       displayMode={selectedPeriod === 'upcoming' ? 'upcoming' : 'history'}
       buildMatchHref={(match) => `${detailBasePath}/${match.id}?from=${encodeURIComponent(currentListHref)}`}
