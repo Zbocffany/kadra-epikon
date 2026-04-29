@@ -167,9 +167,9 @@ function renderScoreWithFlags(match: AdminMatch) {
     }
   }
 
-  let homeWalkoverWin = isWalkover && match.walkover_winner_team_id === match.home_team_id
-  let awayWalkoverWin = isWalkover && match.walkover_winner_team_id === match.away_team_id
-  if (isWalkover && !homeWalkoverWin && !awayWalkoverWin) {
+  let homeWalkoverWin = false
+  let awayWalkoverWin = false
+  if (isWalkover) {
     const scoreMatch = label.match(/(\d+)\s*[:\-]\s*(\d+)/)
     if (scoreMatch) {
       const homeGoals = Number(scoreMatch[1])
