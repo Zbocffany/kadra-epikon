@@ -32,10 +32,12 @@ export default function PublicPeopleSearchTable({
   people,
   basePath = '/people',
   variant = 'players',
+  defaultCountryFilter,
 }: {
   people: AdminPersonListItem[]
   basePath?: string
   variant?: PeopleCardVariant
+  defaultCountryFilter?: string
 }) {
   type PlayerSortKey = 'appearance_count' | 'goal_count' | 'assist_count' | 'yellow_card_count' | 'red_card_count' | 'minute_count' | 'bench_count'
   type CoachSortKey = 'coach_match_count' | 'coach_wins' | 'coach_draws' | 'coach_losses' | 'coach_goals_scored' | 'coach_goals_conceded' | 'coach_points_per_match'
@@ -43,18 +45,46 @@ export default function PublicPeopleSearchTable({
   const [sortKey, setSortKey] = useState<PlayerSortKey>('appearance_count')
   const [coachSortKey, setCoachSortKey] = useState<CoachSortKey>('coach_match_count')
   const [query, setQuery] = useState('')
+  const [countryFilter, setCountryFilter] = useState(defaultCountryFilter ?? '')
+
+  const countryOptions = useMemo(() => {
+    const countries = new Set<string>()
+    for (const person of people) {
+      if (variant === 'coaches') {
+        person.coached_country_names.forEach(name => countries.add(name))
+      } else {
+        person.represented_country_names.forEach(name => countries.add(name))
+      }
+    }
+    return [...countries].sort((a, b) => a.localeCompare(b, 'pl'))
+  }, [people, variant])
 
   const filtered = useMemo(() => {
     const q = normalizeText(query)
-    const base = q
-      ? people.filter((p) => 
-          normalizeText(getPersonDisplayName(p) ?? '').includes(q) || 
-          normalizeText(p.nickname ?? '').includes(q) ||
-          normalizeText(p.birth_country_name ?? '').includes(q) ||
-          p.represented_country_names.some(name => normalizeText(name).includes(q)) ||
-          p.coached_country_names.some(name => normalizeText(name).includes(q))
-        )
-      : people
+    let base = people
+    
+    // Apply country filter
+    if (countryFilter) {
+      base = base.filter(p => {
+        if (variant === 'coaches') {
+          return p.coached_country_names.includes(countryFilter)
+        } else {
+          return p.represented_country_names.includes(countryFilter) || 
+                 (p.represented_country_names.length === 0 && p.birth_country_name === countryFilter)
+        }
+      })
+    }
+
+    // Apply search query
+    if (q) {
+      base = base.filter((p) => 
+        normalizeText(getPersonDisplayName(p) ?? '').includes(q) || 
+        normalizeText(p.nickname ?? '').includes(q) ||
+        normalizeText(p.birth_country_name ?? '').includes(q) ||
+        p.represented_country_names.some(name => normalizeText(name).includes(q)) ||
+        p.coached_country_names.some(name => normalizeText(name).includes(q))
+      )
+    }
 
     if (variant === 'coaches') {
       return [...base].sort((a, b) => (b[coachSortKey] as number) - (a[coachSortKey] as number))
@@ -67,7 +97,7 @@ export default function PublicPeopleSearchTable({
       })
     }
     return [...base].sort((a, b) => (b[sortKey] as number) - (a[sortKey] as number))
-  }, [people, query, sortKey, coachSortKey, variant])
+  }, [people, query, sortKey, coachSortKey, countryFilter, variant])
 
   function renderStatBadge(value: number) {
     return value > 0
@@ -81,15 +111,31 @@ export default function PublicPeopleSearchTable({
 
   return (
     <div className="space-y-3">
-      {/* Search bar — blends with green card */}
-      <div className="flex items-center gap-2">
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={variant === 'coaches' ? 'Wpisz imię lub nazwisko trenera...' : variant === 'referees' ? 'Wpisz imię lub nazwisko sędziego...' : 'Wpisz imię lub nazwisko gracza...'}
-          className="w-full max-w-sm rounded-lg border border-emerald-700/60 bg-emerald-950/50 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-300/40 focus:border-emerald-400/70 focus:outline-none focus:ring-1 focus:ring-emerald-400/50"
-        />
+      {/* Search bar and filter — blends with green card */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="flex-1">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={variant === 'coaches' ? 'Wpisz imię lub nazwisko trenera...' : variant === 'referees' ? 'Wpisz imię lub nazwisko sędziego...' : 'Wpisz imię lub nazwisko gracza...'}
+            className="w-full rounded-lg border border-emerald-700/60 bg-emerald-950/50 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-300/40 focus:border-emerald-400/70 focus:outline-none focus:ring-1 focus:ring-emerald-400/50"
+          />
+        </div>
+        <div className="w-full sm:w-52">
+          <select
+            value={countryFilter}
+            onChange={(e) => setCountryFilter(e.target.value)}
+            className="w-full rounded-lg border border-emerald-700/60 bg-emerald-950/50 px-3 py-2 text-sm text-emerald-50 focus:border-emerald-400/70 focus:outline-none focus:ring-1 focus:ring-emerald-400/50"
+          >
+            <option value="">Wszystkie kraje</option>
+            {countryOptions.map((country) => (
+              <option key={country} value={country}>
+                {country}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* People table */}
