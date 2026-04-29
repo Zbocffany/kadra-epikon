@@ -107,6 +107,8 @@ export default function PublicPeopleSearchTable({
                 <col className="w-[4.5rem]" />
                 <col className="w-[5rem]" />
               </>
+            ) : variant === 'referees' ? (
+              <col className="w-[4.5rem]" />
             ) : (
               <>
                 <col className="w-[4.5rem]" />
