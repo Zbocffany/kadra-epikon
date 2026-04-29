@@ -39,6 +39,7 @@ export type AdminPersonListItem = {
   represented_country_names: string[]
   represented_country_fifa_codes: (string | null)[]
   coached_country_names: string[]
+  coached_country_fifa_codes: (string | null)[]
   roles: AdminPersonRole[]
   role_labels: string[]
   appearance_count: number
@@ -323,6 +324,106 @@ async function getCoachedCountryNamesByPersonId(
   const result = new Map<string, string[]>()
   for (const [personId, names] of namesByPersonId) {
     result.set(personId, [...names].sort((a, b) => a.localeCompare(b, 'pl')))
+  }
+
+  return result
+}
+
+async function getCoachedCountryDataByPersonId(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  personIds: string[]
+): Promise<Map<string, { names: string[]; fifaCodes: (string | null)[] }>> {
+  if (!personIds.length) {
+    return new Map()
+  }
+
+  const CHUNK_SIZE = 80
+  const PAGE_SIZE = 1000
+
+  type CoachParticipationRow = { person_id: string; team_id: string | null }
+  const participations: CoachParticipationRow[] = []
+
+  for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Participants')
+        .select('person_id, team_id')
+        .eq('role', 'COACH')
+        .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) throw new Error(`tbl_Match_Participants (coached countries): ${error.message}`)
+
+      const rows = (data ?? []) as CoachParticipationRow[]
+      participations.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+
+  const teamIds = [...new Set(participations.map((row) => row.team_id).filter((teamId): teamId is string => Boolean(teamId)))]
+  if (!teamIds.length) {
+    return new Map()
+  }
+
+  const countryIdByTeamId = new Map<string, string>()
+  for (let i = 0; i < teamIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Teams')
+      .select('id, country_id')
+      .in('id', teamIds.slice(i, i + CHUNK_SIZE))
+
+    if (error) throw new Error(`tbl_Teams (coached countries): ${error.message}`)
+
+    for (const row of (data ?? []) as Array<{ id: string; country_id: string | null }>) {
+      if (row.country_id) {
+        countryIdByTeamId.set(row.id, row.country_id)
+      }
+    }
+  }
+
+  const countryIds = [...new Set(countryIdByTeamId.values())]
+  if (!countryIds.length) {
+    return new Map()
+  }
+
+  const countryDataById = new Map<string, { name: string; fifaCode: string | null }>()
+  for (let i = 0; i < countryIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Countries')
+      .select('id, name, fifa_code')
+      .in('id', countryIds.slice(i, i + CHUNK_SIZE))
+
+    if (error) throw new Error(`tbl_Countries (coached countries): ${error.message}`)
+
+    for (const row of (data ?? []) as Array<{ id: string; name: string | null; fifa_code: string | null }>) {
+      if (row.name) {
+        countryDataById.set(row.id, { name: row.name, fifaCode: row.fifa_code ?? null })
+      }
+    }
+  }
+
+  const dataByPersonId = new Map<string, { names: Set<string>; fifaCodes: Map<string, string | null> }>()
+  for (const participation of participations) {
+    if (!participation.team_id) continue
+    const countryId = countryIdByTeamId.get(participation.team_id)
+    if (!countryId) continue
+    const countryData = countryDataById.get(countryId)
+    if (!countryData) continue
+
+    const existing = dataByPersonId.get(participation.person_id) ?? { names: new Set<string>(), fifaCodes: new Map<string, string | null>() }
+    existing.names.add(countryData.name)
+    existing.fifaCodes.set(countryData.name, countryData.fifaCode)
+    dataByPersonId.set(participation.person_id, existing)
+  }
+
+  const result = new Map<string, { names: string[]; fifaCodes: (string | null)[] }>()
+  for (const [personId, data] of dataByPersonId) {
+    const names = [...data.names].sort((a, b) => a.localeCompare(b, 'pl'))
+    const fifaCodes = names.map((name) => data.fifaCodes.get(name) ?? null)
+    result.set(personId, { names, fifaCodes })
   }
 
   return result
@@ -1104,7 +1205,7 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
     supabase,
     people.map((person) => person.id)
   )
-  const coachedCountryNamesByPersonId = await getCoachedCountryNamesByPersonId(
+  const coachedCountryDataByPersonId = await getCoachedCountryDataByPersonId(
     supabase,
     people.map((person) => person.id)
   )
@@ -1134,6 +1235,7 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
       const fallbackFifaCode = person.birth_country_id ? (countryFifaCodeMap.get(person.birth_country_id) ?? null) : null
       const representedNames = representedData.length ? representedData.map((d) => d.name) : (fallbackName ? [fallbackName] : [])
       const representedFifaCodes = representedData.length ? representedData.map((d) => d.fifaCode) : (fallbackFifaCode ? [fallbackFifaCode] : [])
+      const coachedData = coachedCountryDataByPersonId.get(person.id) ?? { names: [], fifaCodes: [] }
       const stats = statsByPersonId.get(person.id)
       const roleMatchCounts = roleMatchCountsByPersonId.get(person.id)
       const coachStats = coachResultStatsByPersonId.get(person.id)
@@ -1160,7 +1262,8 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
           : null,
         represented_country_names: representedNames,
         represented_country_fifa_codes: representedFifaCodes,
-        coached_country_names: coachedCountryNamesByPersonId.get(person.id) ?? [],
+        coached_country_names: coachedData.names,
+        coached_country_fifa_codes: coachedData.fifaCodes,
         roles: rolesByPersonId.get(person.id) ?? [],
         role_labels: mapRolesToLabels(rolesByPersonId.get(person.id) ?? []),
         appearance_count: stats?.appearance_count ?? 0,
@@ -1248,7 +1351,7 @@ export async function getAdminPeoplePage(
     supabase,
     people.map((person) => person.id)
   )
-  const coachedCountryNamesByPersonId = await getCoachedCountryNamesByPersonId(
+  const coachedCountryDataByPersonId = await getCoachedCountryDataByPersonId(
     supabase,
     people.map((person) => person.id)
   )
@@ -1268,6 +1371,7 @@ export async function getAdminPeoplePage(
       const fallbackFifaCode = person.birth_country_id ? (countryFifaCodeMap.get(person.birth_country_id) ?? null) : null
       const representedNames = representedData.length ? representedData.map((d) => d.name) : (fallbackName ? [fallbackName] : [])
       const representedFifaCodes = representedData.length ? representedData.map((d) => d.fifaCode) : (fallbackFifaCode ? [fallbackFifaCode] : [])
+      const coachedData = coachedCountryDataByPersonId.get(person.id) ?? { names: [], fifaCodes: [] }
       const roleMatchCounts = roleMatchCountsByPersonId.get(person.id)
 
       return {
@@ -1289,7 +1393,8 @@ export async function getAdminPeoplePage(
           : null,
         represented_country_names: representedNames,
         represented_country_fifa_codes: representedFifaCodes,
-        coached_country_names: coachedCountryNamesByPersonId.get(person.id) ?? [],
+        coached_country_names: coachedData.names,
+        coached_country_fifa_codes: coachedData.fifaCodes,
         roles: rolesByPersonId.get(person.id) ?? [],
         role_labels: mapRolesToLabels(rolesByPersonId.get(person.id) ?? []),
         appearance_count: 0,
@@ -1362,11 +1467,12 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
 
   const representedCountryDataByPersonId = await getExplicitRepresentedCountryDataByPersonId(supabase, [person.id])
   const representedCountryIdsByPersonId = await getExplicitRepresentedCountryIdsByPersonId(supabase, [person.id])
-  const coachedCountryNamesByPersonId = await getCoachedCountryNamesByPersonId(supabase, [person.id])
+  const coachedCountryDataByPersonId = await getCoachedCountryDataByPersonId(supabase, [person.id])
   const rolesByPersonId = await getRolesByPersonId(supabase, [person.id])
   const roleMatchCountsByPersonId = await getRoleMatchCountsByPersonId(supabase, [person.id])
   const explicitRepresentedData = representedCountryDataByPersonId.get(person.id) ?? []
   const explicitRepresentedIds = representedCountryIdsByPersonId.get(person.id) ?? []
+  const coachedData = coachedCountryDataByPersonId.get(person.id) ?? { names: [], fifaCodes: [] }
   const fallbackRepresented = country?.name ?? null
   const fallbackFifaCode = country?.fifa_code ?? null
   const roles = rolesByPersonId.get(person.id) ?? []
@@ -1407,7 +1513,8 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     represented_country_ids: explicitRepresentedIds,
     represented_country_names: representedNames,
     represented_country_fifa_codes: representedFifaCodes,
-    coached_country_names: coachedCountryNamesByPersonId.get(person.id) ?? [],
+    coached_country_names: coachedData.names,
+    coached_country_fifa_codes: coachedData.fifaCodes,
     roles,
     role_labels: mapRolesToLabels(roles),
     appearance_count: stats?.appearance_count ?? 0,

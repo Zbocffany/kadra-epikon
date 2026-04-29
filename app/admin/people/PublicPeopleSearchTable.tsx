@@ -198,7 +198,7 @@ export default function PublicPeopleSearchTable({
                             {person.coached_country_names.map((name, idx) => (
                               <CountryFlag
                                 key={`${name}-${idx}`}
-                                fifaCode={null}
+                                fifaCode={(person.coached_country_fifa_codes?.[idx]) ?? null}
                                 countryName={name}
                                 className="h-3.5 w-[21px] shrink-0"
                               />
