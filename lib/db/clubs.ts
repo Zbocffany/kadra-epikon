@@ -43,19 +43,22 @@ async function getClubStats(
 
   const polandTeamId = polandTeam.id
 
-  const { data: teams, error: teamsError } = await supabase
-    .from('tbl_Teams')
-    .select('id, club_id')
-    .in('club_id', clubIds)
-  if (teamsError) throw new Error(`tbl_Teams: ${teamsError.message}`)
+  const CHUNK_SIZE = 80
+  const allTeamRows: Array<{ id: string; club_id: string }> = []
+  for (let i = 0; i < clubIds.length; i += CHUNK_SIZE) {
+    const { data: teams, error: teamsError } = await supabase
+      .from('tbl_Teams')
+      .select('id, club_id')
+      .in('club_id', clubIds.slice(i, i + CHUNK_SIZE))
+    if (teamsError) throw new Error(`tbl_Teams: ${teamsError.message}`)
+    allTeamRows.push(...((teams ?? []) as Array<{ id: string; club_id: string }>))
+  }
 
-  const teamRows = (teams ?? []) as Array<{ id: string; club_id: string }>
+  const teamRows = allTeamRows
   if (!teamRows.length) return new Map()
 
   const clubIdByTeamId = new Map(teamRows.map((t) => [t.id, t.club_id]))
   const teamIds = [...clubIdByTeamId.keys()]
-
-  const CHUNK_SIZE = 80
   const PAGE_SIZE = 1000
   const allParticipants: ClubParticipantRow[] = []
   for (let i = 0; i < teamIds.length; i += CHUNK_SIZE) {
