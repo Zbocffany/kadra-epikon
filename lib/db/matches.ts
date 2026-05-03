@@ -320,6 +320,9 @@ type MatchEventRow = {
   event_order: number | null
 }
 
+// Maximum number of IDs per .in() query to avoid timeouts on large arrays
+const CHUNK_SIZE = 80
+
 function buildPersonDisplayName(person: MatchParticipantPersonRow): string {
   const first = person.first_name?.trim() ?? ''
   const last = person.last_name?.trim() ?? ''
@@ -382,20 +385,24 @@ async function getTeamDisplayMap(teamIds: string[]): Promise<Map<string, string>
     return new Map()
   }
 
-  const { data: teams, error: teamError } = await runSelectWithRetry<TeamRow>(async () =>
-    await supabase
-      .from('tbl_Teams')
-      .select('id, country_id, club_id')
-      .in('id', teamIds)
-  )
+  // Chunk team lookups to avoid timeout on large .in() queries
+  const allTeams: TeamRow[] = []
+  for (let i = 0; i < teamIds.length; i += CHUNK_SIZE) {
+    const { data: teamChunk, error: teamError } = await runSelectWithRetry<TeamRow>(async () =>
+      await supabase
+        .from('tbl_Teams')
+        .select('id, country_id, club_id')
+        .in('id', teamIds.slice(i, i + CHUNK_SIZE))
+    )
+    if (teamError) throw new Error(`tbl_Teams: ${teamError.message}`)
+    allTeams.push(...(teamChunk ?? []))
+  }
 
-  if (teamError) throw new Error(`tbl_Teams: ${teamError.message}`)
-
+  const teams = allTeams
   const countryIds = [...new Set((teams ?? []).map((t) => t.country_id).filter(Boolean))]
   const clubIds = [...new Set((teams ?? []).map((t) => t.club_id).filter(Boolean))]
 
   // Chunk club lookups to avoid URL length limit
-  const CHUNK_SIZE = 80
   let allClubs: NamedRow[] = []
   for (let i = 0; i < clubIds.length; i += CHUNK_SIZE) {
     const { data: clubChunk, error: clubError } = await runSelectWithRetry<NamedRow>(async () =>
@@ -440,15 +447,20 @@ async function getTeamCountryFifaCodeMap(teamIds: string[]): Promise<Map<string,
     return new Map()
   }
 
-  const { data: teams, error: teamError } = await runSelectWithRetry<TeamCountryRow>(async () =>
-    await supabase
-      .from('tbl_Teams')
-      .select('id, country_id')
-      .in('id', teamIds)
-  )
+  // Chunk team lookups to avoid timeout on large .in() queries
+  const allTeams: TeamCountryRow[] = []
+  for (let i = 0; i < teamIds.length; i += CHUNK_SIZE) {
+    const { data: teamChunk, error: teamError } = await runSelectWithRetry<TeamCountryRow>(async () =>
+      await supabase
+        .from('tbl_Teams')
+        .select('id, country_id')
+        .in('id', teamIds.slice(i, i + CHUNK_SIZE))
+    )
+    if (teamError) throw new Error(`tbl_Teams: ${teamError.message}`)
+    allTeams.push(...(teamChunk ?? []))
+  }
 
-  if (teamError) throw new Error(`tbl_Teams: ${teamError.message}`)
-
+  const teams = allTeams
   const countryIds = [...new Set((teams ?? []).map((t) => t.country_id).filter(Boolean))]
   const { data: countries, error: countryError } = countryIds.length
     ? await runSelectWithRetry<CountryRow>(async () =>
