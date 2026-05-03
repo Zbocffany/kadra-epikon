@@ -3,9 +3,9 @@ import { createMatch } from './actions'
 import MatchCreateModal from './MatchCreateModal'
 import MatchesListView from '@/components/matches/MatchesListView'
 import {
-  getAdminMatches,
+  getCachedAdminMatches,
+  getCachedAdminMatchYearBounds,
   getAdminMatchCreateOptions,
-  getAdminMatchYearBounds,
   getMatchesYearStats,
   type AdminMatch,
   type AdminStadiumOption,
@@ -80,7 +80,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
 
   try {
     const [yearBounds, options, countries, federations] = await Promise.all([
-      getAdminMatchYearBounds(),
+      getCachedAdminMatchYearBounds(),
       getAdminMatchCreateOptions(),
       getAdminCountriesOptions(),
       getAdminFederations(),
@@ -91,9 +91,9 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
     selectedPeriod = period === 'upcoming' ? 'upcoming' : (selectedDecade ? String(selectedDecade.startYear) : 'upcoming')
 
     if (selectedPeriod === 'upcoming') {
-      matches = await getAdminMatches({ status: 'SCHEDULED' })
+      matches = await getCachedAdminMatches({ status: 'SCHEDULED' })
     } else if (selectedDecade) {
-      matches = await getAdminMatches({
+      matches = await getCachedAdminMatches({
         fromDate: `${selectedDecade.startYear}-01-01`,
         toDate: `${selectedDecade.endYear}-12-31`,
       })

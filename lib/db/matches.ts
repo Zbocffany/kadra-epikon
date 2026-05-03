@@ -535,6 +535,19 @@ export async function getPublicMatches(): Promise<AdminMatch[]> {
   )()
 }
 
+/**
+ * Admin list view — cached for 30 s so rapid page navigations don't hammer the DB.
+ * Key includes serialised options so filters don't bleed into each other.
+ */
+export async function getCachedAdminMatches(options?: AdminMatchFilterOptions): Promise<AdminMatch[]> {
+  const key = options ? JSON.stringify(options) : 'all'
+  return unstable_cache(
+    () => getAdminMatches(options),
+    [`admin-matches-${key}`],
+    { revalidate: 30 }
+  )()
+}
+
 export async function getAdminMatchesForPlayer(personId: string): Promise<AdminPlayerMatch[]> {
   const supabase = createServiceRoleClient()
 
@@ -953,6 +966,16 @@ export async function getAdminMatchYearBounds(): Promise<AdminMatchYearBounds | 
     maxYear: Number(maxDate.slice(0, 4)),
   }
 }
+
+/**
+ * Cached version of getAdminMatchYearBounds — revalidates every 5 minutes.
+ * The year range changes rarely; no need to hit the DB on every page load.
+ */
+export const getCachedAdminMatchYearBounds = unstable_cache(
+  getAdminMatchYearBounds,
+  ['admin-match-year-bounds'],
+  { revalidate: 300 }
+)
 
 export async function getAdminMatchesPage(
   page: number,
