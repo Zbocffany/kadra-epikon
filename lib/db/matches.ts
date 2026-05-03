@@ -536,6 +536,19 @@ export async function getPublicMatches(): Promise<AdminMatch[]> {
 }
 
 /**
+ * Public list view — cached for 30 min per period key.
+ * Key includes serialised options so different decades don't share cache entries.
+ */
+export async function getCachedPublicMatches(options?: AdminMatchFilterOptions): Promise<AdminMatch[]> {
+  const key = options ? JSON.stringify(options) : 'all'
+  return unstable_cache(
+    () => getAdminMatches(options),
+    [`public-matches-${key}`],
+    { revalidate: 1800 }
+  )()
+}
+
+/**
  * Admin list view — cached for 30 s so rapid page navigations don't hammer the DB.
  * Key includes serialised options so filters don't bleed into each other.
  */
@@ -975,6 +988,15 @@ export const getCachedAdminMatchYearBounds = unstable_cache(
   getAdminMatchYearBounds,
   ['admin-match-year-bounds'],
   { revalidate: 300 }
+)
+
+/**
+ * Same as above for the public site — 1 h TTL since public data changes infrequently.
+ */
+export const getCachedPublicMatchYearBounds = unstable_cache(
+  getAdminMatchYearBounds,
+  ['public-match-year-bounds'],
+  { revalidate: 3600 }
 )
 
 export async function getAdminMatchesPage(

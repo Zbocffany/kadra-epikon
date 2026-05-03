@@ -1,6 +1,12 @@
 import MatchesListView from '@/components/matches/MatchesListView'
 import PublicMatchesClient from '@/components/matches/PublicMatchesClient'
-import { getPublicMatches, getMatchesYearStats, type AdminMatch, type MatchYearStatsData } from '@/lib/db/matches'
+import {
+  getCachedPublicMatchYearBounds,
+  getCachedPublicMatches,
+  getMatchesYearStats,
+  type AdminMatch,
+  type MatchYearStatsData,
+} from '@/lib/db/matches'
 import type { RawSearchParams } from '@/lib/pagination'
 
 type PublicMatchesPageProps = {
@@ -63,27 +69,38 @@ export default async function PublicMatchesPage({
   title = 'Mecze reprezentacji Polski',
 }: PublicMatchesPageProps) {
   const period = parseSingleSearchParam(searchParams.period)
-  let allMatches: AdminMatch[] = []
+  let matches: AdminMatch[] = []
   let decadeFilters: DecadeFilter[] = []
-  let initialPeriod = 'upcoming'
+  let selectedPeriod = 'upcoming'
   let fetchError: string | null = null
   let yearStats: MatchYearStatsData | undefined = undefined
 
   try {
-    allMatches = await getPublicMatches()
+    const yearBounds = await getCachedPublicMatchYearBounds()
 
-    const historyMatches = allMatches.filter((match) => match.match_status !== 'SCHEDULED')
-    if (historyMatches.length > 0) {
-      const years = historyMatches.map((match) => Number(match.match_date.slice(0, 4)))
-      decadeFilters = buildDecades(Math.min(...years), Math.max(...years))
-      yearStats = await getMatchesYearStats(historyMatches)
+    if (yearBounds) {
+      decadeFilters = buildDecades(yearBounds.minYear, yearBounds.maxYear)
     }
 
     const selectedDecade = parseRequestedDecade(period, decadeFilters)
-    initialPeriod = period === 'upcoming' ? 'upcoming' : (selectedDecade ? String(selectedDecade.startYear) : 'upcoming')
+    selectedPeriod = period === 'upcoming' ? 'upcoming' : (selectedDecade ? String(selectedDecade.startYear) : 'upcoming')
+
+    if (selectedPeriod === 'upcoming') {
+      matches = await getCachedPublicMatches({ status: 'SCHEDULED' })
+    } else if (selectedDecade) {
+      matches = await getCachedPublicMatches({
+        fromDate: `${selectedDecade.startYear}-01-01`,
+        toDate: `${selectedDecade.endYear}-12-31`,
+      })
+    }
+
+    const historyMatches = matches.filter((match) => match.match_status !== 'SCHEDULED')
+    if (historyMatches.length > 0) {
+      yearStats = await getMatchesYearStats(historyMatches)
+    }
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
-    allMatches = []
+    matches = []
   }
 
   if (fetchError) {
@@ -110,9 +127,9 @@ export default async function PublicMatchesPage({
         basePath={basePath}
         detailBasePath={detailBasePath}
         maxWidthClass={PUBLIC_CONTENT_MAX_WIDTH_CLASS}
-        allMatches={allMatches}
+        matches={matches}
         decadeFilters={decadeFilters}
-        initialPeriod={initialPeriod}
+        selectedPeriod={selectedPeriod}
         yearStats={yearStats}
       />
     </div>
