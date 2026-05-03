@@ -926,14 +926,17 @@ export default async function AdminMatchDetailsPage({
     notFound()
   }
 
-  const [options, participants, cities, countries, federations, clubTeams, events] = await Promise.all([
+  // Split into two sequential batches to avoid overwhelming Supabase connection limits in local dev
+  const [options, participants, events] = await Promise.all([
     getAdminMatchCreateOptions(),
     getAdminMatchParticipants(match),
+    getAdminMatchEvents(match.id),
+  ])
+  const [cities, countries, federations, clubTeams] = await Promise.all([
     getAdminPersonBirthCityOptions(),
     getAdminCountriesOptions(),
     getAdminFederations(),
     getAdminClubTeamOptions(),
-    getAdminMatchEvents(match.id),
   ])
 
   const teamsWithCurrentMatchMap = new Map(options.teams.map((team) => [team.id, team.label]))

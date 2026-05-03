@@ -1594,14 +1594,18 @@ export async function getAdminMatchCreateOptions(): Promise<{
   const typedTeams = (teams ?? []) as TeamOptionRow[]
   const countryIds = [...new Set(typedTeams.map((team) => team.country_id).filter(Boolean))]
   const clubIds = [...new Set(typedTeams.map((team) => team.club_id).filter(Boolean))]
-  const [countriesByTeam, clubsByTeam] = await Promise.all([
-    countryIds.length
-      ? supabase.from('tbl_Countries').select('id, name').in('id', countryIds)
-      : Promise.resolve({ data: [] as NamedRow[], error: null }),
-    clubIds.length
-      ? supabase.from('tbl_Clubs').select('id, name').in('id', clubIds)
-      : Promise.resolve({ data: [] as NamedRow[], error: null }),
-  ])
+
+  const countriesByTeam = countryIds.length
+    ? await runSelectWithRetry<NamedRow>(async () =>
+        supabase.from('tbl_Countries').select('id, name').in('id', countryIds)
+      )
+    : { data: [] as NamedRow[], error: null }
+
+  const clubsByTeam = clubIds.length
+    ? await runSelectWithRetry<NamedRow>(async () =>
+        supabase.from('tbl_Clubs').select('id, name').in('id', clubIds)
+      )
+    : { data: [] as NamedRow[], error: null }
 
   if (countriesByTeam.error) throw new Error(`tbl_Countries: ${countriesByTeam.error.message}`)
   if (clubsByTeam.error) throw new Error(`tbl_Clubs: ${clubsByTeam.error.message}`)
