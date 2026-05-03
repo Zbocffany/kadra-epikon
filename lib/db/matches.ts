@@ -394,32 +394,32 @@ async function getTeamDisplayMap(teamIds: string[]): Promise<Map<string, string>
   const countryIds = [...new Set((teams ?? []).map((t) => t.country_id).filter(Boolean))]
   const clubIds = [...new Set((teams ?? []).map((t) => t.club_id).filter(Boolean))]
 
-  const [
-    { data: countries, error: countryError },
-    { data: clubs, error: clubError },
-  ] = await Promise.all([
-    countryIds.length
-      ? runSelectWithRetry<NamedRow>(async () =>
-          await supabase.from('tbl_Countries').select('id, name').in('id', countryIds)
-        )
-      : Promise.resolve({ data: [] as NamedRow[], error: null }),
-    clubIds.length
-      ? runSelectWithRetry<NamedRow>(async () =>
-          await supabase.from('tbl_Clubs').select('id, name').in('id', clubIds)
-        )
-      : Promise.resolve({ data: [] as NamedRow[], error: null }),
-  ])
+  // Chunk club lookups to avoid URL length limit
+  const CHUNK_SIZE = 80
+  let allClubs: NamedRow[] = []
+  for (let i = 0; i < clubIds.length; i += CHUNK_SIZE) {
+    const { data: clubChunk, error: clubError } = await runSelectWithRetry<NamedRow>(async () =>
+      await supabase.from('tbl_Clubs').select('id, name').in('id', clubIds.slice(i, i + CHUNK_SIZE))
+    )
+    if (clubError && !isTransientGatewayError(clubError)) {
+      throw new Error(`tbl_Clubs: ${clubError.message}`)
+    }
+    allClubs.push(...(clubChunk ?? []))
+  }
+
+  const { data: countries, error: countryError } = countryIds.length
+    ? await runSelectWithRetry<NamedRow>(async () =>
+        await supabase.from('tbl_Countries').select('id, name').in('id', countryIds)
+      )
+    : { data: [] as NamedRow[], error: null }
 
   // For transient upstream outages, degrade labels instead of crashing the whole page.
   if (countryError && !isTransientGatewayError(countryError)) {
     throw new Error(`tbl_Countries: ${countryError.message}`)
   }
-  if (clubError && !isTransientGatewayError(clubError)) {
-    throw new Error(`tbl_Clubs: ${clubError.message}`)
-  }
 
   const countryMap = new Map(countries?.map((c) => [c.id, c.name]) ?? [])
-  const clubMap = new Map(clubs?.map((c) => [c.id, c.name]) ?? [])
+  const clubMap = new Map(allClubs.map((c) => [c.id, c.name]) ?? [])
 
   return new Map(
     (teams ?? []).map((t) => [
@@ -983,18 +983,22 @@ async function mapAdminMatches(
     ]),
   ]
 
-  const { data: competitions, error: compError } = await supabase
-    .from('tbl_Competitions')
-    .select('id, name')
-    .in('id', competitionIds)
+  const { data: competitions, error: compError } = await runSelectWithRetry<any>(async () =>
+    await supabase
+      .from('tbl_Competitions')
+      .select('id, name')
+      .in('id', competitionIds)
+  )
 
   if (compError) throw new Error(`tbl_Competitions: ${compError.message}`)
 
   let matchLevelIdByMatchId = new Map<string, string | null>()
-  const { data: matchesWithLevel, error: matchesWithLevelError } = await supabase
-    .from('tbl_Matches')
-    .select('id, match_level_id')
-    .in('id', matches.map((match) => match.id))
+  const { data: matchesWithLevel, error: matchesWithLevelError } = await runSelectWithRetry(async () =>
+    await supabase
+      .from('tbl_Matches')
+      .select('id, match_level_id')
+      .in('id', matches.map((match) => match.id))
+  )
 
   if (matchesWithLevelError) {
     if (!isMissingSchemaObjectMessage(matchesWithLevelError.message, 'match_level_id')) {
@@ -1015,10 +1019,12 @@ async function mapAdminMatches(
 
   let matchLevelNameById = new Map<string, string>()
   if (matchLevelIds.length > 0) {
-    const { data: levels, error: levelsError } = await supabase
-      .from('tbl_Match_Levels')
-      .select('id, name')
-      .in('id', matchLevelIds)
+    const { data: levels, error: levelsError } = await runSelectWithRetry<any>(async () =>
+      await supabase
+        .from('tbl_Match_Levels')
+        .select('id, name')
+        .in('id', matchLevelIds)
+    )
 
     if (levelsError) {
       if (!isMissingSchemaObjectMessage(levelsError.message, 'tbl_match_levels')) {
@@ -1030,10 +1036,12 @@ async function mapAdminMatches(
   }
 
   const [{ data: matchEvents, error: matchEventsError }, teamNameMap, teamFifaMap] = await Promise.all([
-    supabase
-      .from('tbl_Match_Events')
-      .select('match_id, team_id, event_type')
-      .in('match_id', matches.map((match) => match.id)),
+    runSelectWithRetry<any>(async () =>
+      await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, team_id, event_type')
+        .in('match_id', matches.map((match) => match.id))
+    ),
     getTeamDisplayMap(teamIds),
     getTeamCountryFifaCodeMap(teamIds),
   ])
