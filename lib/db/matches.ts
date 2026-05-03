@@ -1678,18 +1678,20 @@ export async function getAdminMatchEvents(matchId: string): Promise<AdminMatchEv
 export async function getAdminClubTeamOptions(): Promise<AdminTeamOption[]> {
   const supabase = createServiceRoleClient()
 
+  // Single query with JOIN to avoid fetching all IDs then doing a huge .in() lookup
   const { data: clubTeams, error } = await supabase
     .from('tbl_Teams')
-    .select('id, club_id')
+    .select('id, tbl_Clubs(name)')
     .not('club_id', 'is', null)
 
   if (error) throw new Error(`tbl_Teams: ${error.message}`)
 
-  const teamIds = (clubTeams ?? []).map((team) => team.id)
-  const teamDisplayMap = await getTeamDisplayMap(teamIds)
-
-  return teamIds
-    .map((id) => ({ id, label: teamDisplayMap.get(id) ?? '—' }))
+  return (clubTeams ?? [])
+    .map((t) => {
+      const club = t.tbl_Clubs as { name: string } | { name: string }[] | null
+      const name = Array.isArray(club) ? (club[0]?.name ?? '—') : (club?.name ?? '—')
+      return { id: t.id, label: name }
+    })
     .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
 }
 
