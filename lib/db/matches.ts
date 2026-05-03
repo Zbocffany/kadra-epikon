@@ -1580,13 +1580,21 @@ export async function getAdminMatchCreateOptions(): Promise<{
     { data: cities, error: citiesError },
     { data: stadiums, error: stadiumsError },
   ] = await Promise.all([
-    supabase
-      .from('tbl_Competitions')
-      .select('id, name')
-      .order('name', { ascending: true }),
-    supabase.from('tbl_Teams').select('id, country_id, club_id').order('id', { ascending: true }),
-    supabase.from('tbl_Cities').select('id, city_name').order('city_name', { ascending: true }),
-    supabase.from('tbl_Stadiums').select('id, name, stadium_city_id').order('name', { ascending: true }),
+    runSelectWithRetry<any>(async () =>
+      await supabase
+        .from('tbl_Competitions')
+        .select('id, name')
+        .order('name', { ascending: true })
+    ),
+    runSelectWithRetry<any>(async () =>
+      await supabase.from('tbl_Teams').select('id, country_id, club_id').order('id', { ascending: true })
+    ),
+    runSelectWithRetry<any>(async () =>
+      await supabase.from('tbl_Cities').select('id, city_name').order('city_name', { ascending: true })
+    ),
+    runSelectWithRetry<any>(async () =>
+      await supabase.from('tbl_Stadiums').select('id, name, stadium_city_id').order('name', { ascending: true })
+    ),
   ])
 
   if (competitionsError) throw new Error(`tbl_Competitions: ${competitionsError.message}`)
