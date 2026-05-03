@@ -65,6 +65,7 @@ export default function RefereePersonField({
       name={name}
       value={selectedPersonId}
       people={people}
+      searchUrl="/api/admin/people/search"
       placeholder={placeholder}
       onChange={setSelectedPersonId}
       onPeopleUpdate={handlePeopleUpdate}

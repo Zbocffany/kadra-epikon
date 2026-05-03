@@ -939,12 +939,11 @@ export default async function AdminMatchDetailsPage({
     getAdminClubTeamOptions(),
   ])
 
-  const teamsWithCurrentMatchMap = new Map(options.teams.map((team) => [team.id, team.label]))
-  teamsWithCurrentMatchMap.set(match.home_team_id, match.home_team_name)
-  teamsWithCurrentMatchMap.set(match.away_team_id, match.away_team_name)
-  const teamsWithCurrentMatch = [...teamsWithCurrentMatchMap.entries()]
-    .map(([id, label]) => ({ id, label }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
+  // Teams are now fetched async via /api/admin/teams/search — only include current match teams for label display
+  const teamsWithCurrentMatch = [
+    { id: match.home_team_id, label: match.home_team_name },
+    { id: match.away_team_id, label: match.away_team_name },
+  ]
 
   const personIds = participants.people.map((person) => person.id)
   const [latestPlayerClubTeamByPersonId, latestPlayerPositionByPersonId] = await Promise.all([
@@ -976,14 +975,8 @@ export default async function AdminMatchDetailsPage({
   const eventPeople = [...eventPeopleById.values()]
     .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
   const eventTeams = [
-    teamsWithCurrentMatch.find((team) => team.id === match.home_team_id) ?? {
-      id: match.home_team_id,
-      label: match.home_team_name,
-    },
-    teamsWithCurrentMatch.find((team) => team.id === match.away_team_id) ?? {
-      id: match.away_team_id,
-      label: match.away_team_name,
-    },
+    { id: match.home_team_id, label: match.home_team_name },
+    { id: match.away_team_id, label: match.away_team_name },
   ]
 
   const isEdit = mode === 'edit'
@@ -1084,9 +1077,11 @@ export default async function AdminMatchDetailsPage({
           hideLabel
           required
           selectedId={match.home_team_id}
+          initialLabel={match.home_team_name}
           options={teamsWithCurrentMatch.map((team) => ({ id: team.id, label: team.label }))}
+          fetchUrl="/api/admin/teams/search"
           displayKey="label"
-          placeholder="Wpisz, aby filtrować gospodarza..."
+          placeholder="Wpisz nazwę, aby wyszukać gospodarza..."
           addButtonLabel="Dodaj klub"
           addDialogTitle="Nowy klub"
           emptyResultsMessage="Brak wyników - możesz dodać nowy klub poniżej."
@@ -1107,9 +1102,11 @@ export default async function AdminMatchDetailsPage({
           hideLabel
           required
           selectedId={match.away_team_id}
+          initialLabel={match.away_team_name}
           options={teamsWithCurrentMatch.map((team) => ({ id: team.id, label: team.label }))}
+          fetchUrl="/api/admin/teams/search"
           displayKey="label"
-          placeholder="Wpisz, aby filtrować gościa..."
+          placeholder="Wpisz nazwę, aby wyszukać gościa..."
           addButtonLabel="Dodaj klub"
           addDialogTitle="Nowy klub"
           emptyResultsMessage="Brak wyników - możesz dodać nowy klub poniżej."

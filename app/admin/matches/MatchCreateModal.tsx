@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { createClubInline } from '@/app/admin/clubs/actions'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { createStadiumInline } from '@/app/admin/stadiums/actions'
@@ -24,7 +24,8 @@ import type {
 type MatchCreateModalProps = {
   competitions: AdminCompetitionOption[]
   matchLevels: AdminMatchLevelOption[]
-  teams: AdminTeamOption[]
+  /** @deprecated Teams are now loaded on demand via /api/admin/teams/search */
+  teams?: AdminTeamOption[]
   cities: AdminCityOption[]
   countries: AdminCountryOption[]
   federations: AdminFederation[]
@@ -35,7 +36,6 @@ type MatchCreateModalProps = {
 export default function MatchCreateModal({
   competitions,
   matchLevels,
-  teams,
   cities,
   countries,
   federations,
@@ -54,8 +54,13 @@ export default function MatchCreateModal({
   const [resultType, setResultType] = useState('REGULAR_TIME')
   const [walkoverWinnerTeamId, setWalkoverWinnerTeamId] = useState('')
 
-  const handleCityOptionCreated = (option: { id: string; label?: string }) => {
-    setCityOptions((prev) => {
+  const fetchTeamOptions = useCallback(async (q: string): Promise<AdminTeamOption[]> => {
+    const res = await fetch(`/api/admin/teams/search?q=${encodeURIComponent(q)}`)
+    if (!res.ok) return []
+    return res.json()
+  }, [])
+
+  const handleCityOptionCreated = (option: { id: string; label?: string }) => {    setCityOptions((prev) => {
       if (prev.some((city) => city.id === option.id)) return prev
       return [...prev, { id: option.id, name: option.label ?? '—' }]
         .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
@@ -314,9 +319,10 @@ export default function MatchCreateModal({
                 label="Gospodarz"
                 required
                 selectedId={homeTeamId}
-                options={teams.map((team) => ({ id: team.id, label: team.label }))}
+                options={[]}
+                fetchOptions={fetchTeamOptions}
                 displayKey="label"
-                placeholder="Wpisz, aby filtrować gospodarza..."
+                placeholder="Wpisz nazwę, aby wyszukać gospodarza..."
                 addButtonLabel="+ Dodaj klub"
                 addDialogTitle="Nowy klub"
                 emptyResultsMessage="Brak wyników - możesz dodać nowy klub poniżej."
@@ -344,9 +350,10 @@ export default function MatchCreateModal({
                 label="Gość"
                 required
                 selectedId={awayTeamId}
-                options={teams.map((team) => ({ id: team.id, label: team.label }))}
+                options={[]}
+                fetchOptions={fetchTeamOptions}
                 displayKey="label"
-                placeholder="Wpisz, aby filtrować gościa..."
+                placeholder="Wpisz nazwę, aby wyszukać gościa..."
                 addButtonLabel="+ Dodaj klub"
                 addDialogTitle="Nowy klub"
                 emptyResultsMessage="Brak wyników - możesz dodać nowy klub poniżej."

@@ -226,6 +226,7 @@ export default function MatchSquadForm({
                     name={`${namePrefix}player_person_id`}
                     value={row.personId}
                     people={people}
+                    searchUrl="/api/admin/people/search"
                     placeholder={`Podstawowy ${index + 1}`}
                     onChange={(personId) => {
                       const suggestedClubTeamId = latestPlayerClubTeamByPersonId[personId] ?? null
@@ -308,6 +309,7 @@ export default function MatchSquadForm({
                       name={`${namePrefix}player_person_id`}
                       value={row.personId}
                       people={people}
+                      searchUrl="/api/admin/people/search"
                       placeholder={`Rezerwowy ${index + 1}`}
                       onChange={(personId) => {
                         const suggestedClubTeamId = latestPlayerClubTeamByPersonId[personId] ?? null

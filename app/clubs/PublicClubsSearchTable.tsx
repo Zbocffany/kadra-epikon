@@ -1,17 +1,20 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import type { AdminClub } from '@/lib/db/clubs'
 import CountryFlag from '@/components/CountryFlag'
 import SortableStatHeader from '@/components/admin/SortableStatHeader'
+import PlayerSilhouetteIcon from '@/components/icons/PlayerSilhouetteIcon'
+import PitchIcon from '@/components/icons/PitchIcon'
+import { GoalIcon } from '@/components/icons'
 
 type SortKey = 'appearance_count' | 'goal_count' | 'player_count'
 
-const STAT_COLS: { key: SortKey; label: string; tooltip: string }[] = [
-  { key: 'player_count',     label: 'Gr',    tooltip: 'Liczba graczy' },
-  { key: 'appearance_count', label: 'W',     tooltip: 'Liczba występów' },
-  { key: 'goal_count',       label: 'G',     tooltip: 'Liczba goli' },
+const STAT_COLS: { key: SortKey; icon: React.ReactNode; tooltip: string }[] = [
+  { key: 'player_count',     icon: <PlayerSilhouetteIcon className="h-5 w-5" />, tooltip: 'Liczba graczy' },
+  { key: 'appearance_count', icon: <PitchIcon className="h-5 w-5" />,             tooltip: 'Liczba występów' },
+  { key: 'goal_count',       icon: <GoalIcon className="h-5 w-5" />,              tooltip: 'Liczba goli' },
 ]
 
 function StatBadge({ value }: { value: number }) {
@@ -31,12 +34,14 @@ function normalizeText(v: string) {
 export default function PublicClubsSearchTable({ clubs }: { clubs: AdminClub[] }) {
   const [sortKey, setSortKey] = useState<SortKey>('appearance_count')
   const [query, setQuery] = useState('')
+  const [visibleCount, setVisibleCount] = useState(50)
 
   const filtered = useMemo(() => {
     const q = normalizeText(query)
+    const withAppearances = clubs.filter((c) => c.appearance_count >= 1)
     const base = q
-      ? clubs.filter((c) => normalizeText(c.name).includes(q) || normalizeText(c.country_name ?? '').includes(q))
-      : clubs
+      ? withAppearances.filter((c) => normalizeText(c.name).includes(q) || normalizeText(c.country_name ?? '').includes(q))
+      : withAppearances
     return [...base].sort((a, b) => {
       if (a.appearance_count === 0 && b.appearance_count === 0) return a.name.localeCompare(b.name, 'pl')
       if (a.appearance_count === 0) return 1
@@ -44,6 +49,12 @@ export default function PublicClubsSearchTable({ clubs }: { clubs: AdminClub[] }
       return (b[sortKey] as number) - (a[sortKey] as number)
     })
   }, [clubs, query, sortKey])
+
+  useEffect(() => {
+    setVisibleCount(50)
+  }, [query, sortKey])
+
+  const displayed = filtered.slice(0, visibleCount)
 
   return (
     <div className="space-y-3">
@@ -73,7 +84,7 @@ export default function PublicClubsSearchTable({ clubs }: { clubs: AdminClub[] }
                   <SortableStatHeader
                     active={sortKey === c.key}
                     onClick={() => setSortKey(c.key)}
-                    icon={<span className="text-xs font-bold">{c.label}</span>}
+                    icon={c.icon}
                     label={c.tooltip}
                   />
                 </th>
@@ -88,7 +99,7 @@ export default function PublicClubsSearchTable({ clubs }: { clubs: AdminClub[] }
                 </td>
               </tr>
             ) : (
-              filtered.map((club, i) => (
+              displayed.map((club, i) => (
                 <tr key={club.id} className="table-data-row border-b border-neutral-800 last:border-b-0 bg-neutral-950 transition-colors hover:bg-neutral-900/60">
                   <td className="px-4 py-3 text-neutral-500 text-sm">{i + 1}</td>
                   <td className="px-4 py-3">
@@ -113,6 +124,18 @@ export default function PublicClubsSearchTable({ clubs }: { clubs: AdminClub[] }
           </tbody>
         </table>
       </div>
+
+      {filtered.length > visibleCount && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((v) => v + 50)}
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-5 py-2 text-sm text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-neutral-100"
+          >
+            Pokaż kolejne {Math.min(50, filtered.length - visibleCount)}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

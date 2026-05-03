@@ -1392,28 +1392,27 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
 }> {
   const supabase = createServiceRoleClient()
 
-  const [
-    { data: participants, error: participantsError },
-    { data: people, error: peopleError },
-  ] = await Promise.all([
-    supabase
-      .from('tbl_Match_Participants')
-      .select('id, team_id, person_id, role, is_starting, player_position, club_team_id')
-      .eq('match_id', match.id),
-    supabase
-      .from('tbl_People')
-      .select('id, first_name, last_name, nickname')
-      .order('last_name', { ascending: true, nullsFirst: false })
-      .order('first_name', { ascending: true, nullsFirst: false })
-      .order('nickname', { ascending: true, nullsFirst: false }),
-  ])
+  const { data: participants, error: participantsError } = await supabase
+    .from('tbl_Match_Participants')
+    .select('id, team_id, person_id, role, is_starting, player_position, club_team_id')
+    .eq('match_id', match.id)
 
   if (participantsError) throw new Error(`tbl_Match_Participants: ${participantsError.message}`)
-  if (peopleError) throw new Error(`tbl_People: ${peopleError.message}`)
 
   const participantRows = (participants ?? []) as MatchParticipantRow[]
-  const peopleRows = (people ?? []) as MatchParticipantPersonRow[]
+  // Only load people who are ALREADY in this match — full search uses /api/admin/people/search
   const personIds = [...new Set(participantRows.map((participant) => participant.person_id))]
+
+  const { data: people, error: peopleError } = personIds.length
+    ? await supabase
+        .from('tbl_People')
+        .select('id, first_name, last_name, nickname')
+        .in('id', personIds)
+    : { data: [] as MatchParticipantPersonRow[], error: null }
+
+  if (peopleError) throw new Error(`tbl_People: ${peopleError.message}`)
+
+  const peopleRows = (people ?? []) as MatchParticipantPersonRow[]
   const refereePersonIds = [...new Set(
     participantRows
       .filter((participant) => participant.role === 'REFEREE')
@@ -1571,12 +1570,9 @@ export async function getAdminMatchCreateOptions(): Promise<{
   stadiums: AdminStadiumOption[]
 }> {
   const supabase = createServiceRoleClient()
-  type TeamOptionRow = { id: string; country_id: string | null; club_id: string | null }
-  type NamedRow = { id: string; name: string }
 
   const [
     { data: competitions, error: competitionsError },
-    { data: teams, error: teamsError },
     { data: cities, error: citiesError },
     { data: stadiums, error: stadiumsError },
   ] = await Promise.all([
@@ -1587,9 +1583,6 @@ export async function getAdminMatchCreateOptions(): Promise<{
         .order('name', { ascending: true })
     ),
     runSelectWithRetry<any>(async () =>
-      await supabase.from('tbl_Teams').select('id, country_id, club_id').order('id', { ascending: true })
-    ),
-    runSelectWithRetry<any>(async () =>
       await supabase.from('tbl_Cities').select('id, city_name').order('city_name', { ascending: true })
     ),
     runSelectWithRetry<any>(async () =>
@@ -1598,7 +1591,6 @@ export async function getAdminMatchCreateOptions(): Promise<{
   ])
 
   if (competitionsError) throw new Error(`tbl_Competitions: ${competitionsError.message}`)
-  if (teamsError) throw new Error(`tbl_Teams: ${teamsError.message}`)
   if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
   if (stadiumsError) throw new Error(`tbl_Stadiums: ${stadiumsError.message}`)
 
@@ -1619,64 +1611,17 @@ export async function getAdminMatchCreateOptions(): Promise<{
 
   const cityNameMap = new Map((cities ?? []).map((city) => [city.id, city.city_name]))
 
-  const typedTeams = (teams ?? []) as TeamOptionRow[]
-  const countryIds = [...new Set(typedTeams.map((team) => team.country_id).filter(Boolean))]
-  const clubIds = [...new Set(typedTeams.map((team) => team.club_id).filter(Boolean))]
-
-  const countriesByTeam = countryIds.length
-    ? await runSelectWithRetry<NamedRow>(async () =>
-        supabase.from('tbl_Countries').select('id, name').in('id', countryIds)
-      )
-    : { data: [] as NamedRow[], error: null }
-
-  const clubsByTeam = clubIds.length
-    ? await runSelectWithRetry<NamedRow>(async () =>
-        supabase.from('tbl_Clubs').select('id, name').in('id', clubIds)
-      )
-    : { data: [] as NamedRow[], error: null }
-
-  if (countriesByTeam.error) throw new Error(`tbl_Countries: ${countriesByTeam.error.message}`)
-  if (clubsByTeam.error) throw new Error(`tbl_Clubs: ${clubsByTeam.error.message}`)
-
-  const countryNameById = new Map((countriesByTeam.data ?? []).map((country) => [country.id, country.name]))
-  const clubNameById = new Map((clubsByTeam.data ?? []).map((club) => [club.id, club.name]))
-
-  const teamOptions = typedTeams
-    .map((team) => ({
-      id: team.id,
-      label: team.country_id
-        ? (countryNameById.get(team.country_id) ?? '—')
-        : (team.club_id ? (clubNameById.get(team.club_id) ?? '—') : '—'),
-    }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
-
-  const cityOptions = (cities ?? []).map((city) => ({
-    id: city.id,
-    name: city.city_name ?? '—',
-  }))
-
-  const stadiumOptions = (stadiums ?? []).map((stadium) => {
-    const cityName = stadium.stadium_city_id
-      ? cityNameMap.get(stadium.stadium_city_id)
-      : null
-
-    const label = cityName
-      ? `${stadium.name ?? '—'} (${cityName})`
-      : (stadium.name ?? '—')
-
-    return {
-      id: stadium.id,
-      label,
-      stadium_city_id: stadium.stadium_city_id ?? null,
-    }
-  })
-
   return {
     competitions: competitions ?? [],
     matchLevels,
-    teams: teamOptions,
-    cities: cityOptions,
-    stadiums: stadiumOptions,
+    // Teams are no longer loaded here — use /api/admin/teams/search for async lookup
+    teams: [],
+    cities: (cities ?? []).map((city) => ({ id: city.id, name: city.city_name })),
+    stadiums: (stadiums ?? []).map((stadium) => ({
+      id: stadium.id,
+      label: `${stadium.name}${stadium.stadium_city_id ? ` (${cityNameMap.get(stadium.stadium_city_id) ?? ''})` : ''}`,
+      stadium_city_id: stadium.stadium_city_id ?? null,
+    })),
   }
 }
 

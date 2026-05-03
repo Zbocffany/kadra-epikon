@@ -83,6 +83,7 @@ export default function MatchCoachesForm({
           name={`${namePrefix}coach_person_id`}
           value={value}
           people={people}
+          searchUrl="/api/admin/people/search"
           placeholder={`Trener ${index + 1}`}
           onChange={(personId) => updateRow(index, personId)}
           onPeopleUpdate={handlePeopleUpdate}

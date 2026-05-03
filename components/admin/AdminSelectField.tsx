@@ -3,6 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition, ReactNode } from 'react'
 import type { InlineCreateState } from '@/lib/types/admin'
 
+function useDebounce<T>(value: T, delay: number): T {
+  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay)
+    return () => clearTimeout(handler)
+  }, [value, delay])
+  return debouncedValue
+}
+
 export type AdminSelectOption = {
   id: string
   label?: string
@@ -27,6 +36,26 @@ interface AdminSelectFieldProps<T extends AdminSelectOption = AdminSelectOption>
   createAction?: (prevState: InlineCreateState, formData: FormData) => Promise<InlineCreateState>
   onSelectedIdChange?: (selectedId: string) => void
   onOptionCreated?: (option: T, context?: { formData: FormData }) => void
+  /**
+   * When provided, the field fetches options asynchronously by calling this function
+   * with the current search query (debounced 300ms). Replaces client-side filtering.
+   * Pass `options={[]}` when using this — `options` is still used to display the
+   * label for the initially selected item (if known) or for options created inline.
+   * Use this from Client Components. For Server Components, use `fetchUrl` instead.
+   */
+  fetchOptions?: (q: string) => Promise<T[]>
+  /**
+   * URL for async option search (e.g. `/api/admin/teams/search`).
+   * The component appends `?q=<query>` and fetches JSON.
+   * Use this from Server Components where passing function props is not allowed.
+   * Takes precedence over `fetchOptions` when both are set.
+   */
+  fetchUrl?: string
+  /**
+   * Label for the currently selected option when using `fetchOptions` and `options` is empty.
+   * Prevents the input from showing blank when the page loads with a pre-selected value.
+   */
+  initialLabel?: string
   /**
    * Custom form content to render inside the inline create dialog.
    * The dialog handles open/close buttons, so only render the form fields.
@@ -79,6 +108,9 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   createAction,
   onSelectedIdChange,
   onOptionCreated,
+  fetchOptions,
+  fetchUrl,
+  initialLabel,
   inlineForm,
 }: AdminSelectFieldProps<T>) {
   const [allOptions, setAllOptions] = useState<T[]>(options)
@@ -86,9 +118,11 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   const [query, setQuery] = useState(() => {
     if (!selectedId) return ''
     const selected = options.find((opt) => opt.id === selectedId)
-    if (!selected) return ''
-    const lbl = selected[displayKey]
-    return typeof lbl === 'string' ? lbl : String(selected.label ?? selected.short_name ?? '')
+    if (selected) {
+      const lbl = selected[displayKey]
+      return typeof lbl === 'string' ? lbl : String(selected.label ?? selected.short_name ?? '')
+    }
+    return initialLabel ?? ''
   })
   const [dialogOpen, setDialogOpen] = useState(false)
   const [isOpen, setIsOpen] = useState(false)
@@ -98,6 +132,31 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   const [isPending, startTransition] = useTransition()
   const wrapperRef = useRef<HTMLDivElement>(null)
   const inlineFormRef = useRef<HTMLDivElement>(null)
+
+  // Async search support
+  const [asyncResults, setAsyncResults] = useState<T[]>([])
+  const [isFetching, setIsFetching] = useState(false)
+  const debouncedQuery = useDebounce(query, 300)
+
+  const isAsync = Boolean(fetchOptions || fetchUrl)
+
+  useEffect(() => {
+    if (!isAsync || !isOpen) return
+    let cancelled = false
+    setIsFetching(true)
+    const doFetch = fetchUrl
+      ? (q: string) => fetch(`${fetchUrl}?q=${encodeURIComponent(q)}`).then((r) => r.json() as Promise<T[]>)
+      : fetchOptions!
+    doFetch(debouncedQuery).then((results) => {
+      if (!cancelled) {
+        setAsyncResults(results)
+        setIsFetching(false)
+      }
+    }).catch(() => {
+      if (!cancelled) setIsFetching(false)
+    })
+    return () => { cancelled = true }
+  }, [isAsync, fetchOptions, fetchUrl, debouncedQuery, isOpen])
 
   function handleWrapperBlur(e: React.FocusEvent<HTMLDivElement>) {
     if (!wrapperRef.current?.contains(e.relatedTarget as Node)) {
@@ -141,7 +200,12 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
           next.sort((a, b) => getDisplayLabel(a).localeCompare(getDisplayLabel(b), 'pl'))
           return next
         })
-        onOptionCreated?.(nextOpt, { formData })
+        if (fetchOptions) {
+          setAsyncResults((prev) => {
+            if (prev.some((opt) => opt.id === newId)) return prev
+            return [...prev, nextOpt].sort((a, b) => getDisplayLabel(a).localeCompare(getDisplayLabel(b), 'pl'))
+          })
+        }        onOptionCreated?.(nextOpt, { formData })
         setValue(newId)
         onSelectedIdChange?.(newId)
         setQuery(newLabel)
@@ -184,6 +248,9 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
   }, [allOptions, getDisplayLabel, selectedId])
 
   const filteredOptions = useMemo(() => {
+    if (isAsync) {
+      return asyncResults
+    }
     const q = query.trim().toLowerCase()
     if (!q) return allOptions
     const matches = allOptions.filter((opt) => getDisplayLabel(opt).toLowerCase().includes(q))
@@ -195,7 +262,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
       return getDisplayLabel(a).localeCompare(getDisplayLabel(b), 'pl')
     })
     return matches
-  }, [allOptions, getDisplayLabel, query])
+  }, [isAsync, asyncResults, allOptions, getDisplayLabel, query])
 
   useEffect(() => {
     if (disabled) {
@@ -337,6 +404,12 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
             </button>
           )}
 
+          {isFetching && !shouldShowQuickAdd && (
+            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 text-xs animate-pulse">
+              …
+            </span>
+          )}
+
           {isOpen && !disabled && (
             <div className="absolute left-0 top-full z-30 mt-1 max-h-72 min-w-full w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-neutral-700 bg-neutral-900 shadow-xl">
               {filteredOptions.length > 0 ? (
@@ -380,10 +453,12 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
                 </>
               ) : query.trim() !== '' ? (
                 <p className="px-3 py-1.5 text-xs text-neutral-500">
-                  {emptyResultsMessage ?? 'Brak wyników.'}
+                  {isFetching ? 'Szukam…' : (emptyResultsMessage ?? 'Brak wyników.')}
                 </p>
               ) : (
-                <p className="px-3 py-1.5 text-xs text-neutral-500">Wpisz, aby wyszukać...</p>
+                <p className="px-3 py-1.5 text-xs text-neutral-500">
+                  {isAsync ? 'Zacznij pisać, aby wyszukać…' : 'Wpisz, aby wyszukać...'}
+                </p>
               )}
             </div>
           )}

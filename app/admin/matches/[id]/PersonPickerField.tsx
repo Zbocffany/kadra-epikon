@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AdminMatchParticipantPersonOption } from '@/lib/db/matches'
 import type { AdminPersonBirthCityOption } from '@/lib/db/people'
 import type { AdminCountryOption } from '@/lib/db/cities'
@@ -9,9 +9,20 @@ import AddPersonModal from './AddPersonModal'
 
 export const MATCH_PERSON_CREATED_EVENT = 'match:person-created'
 
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState<T>(value)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(t)
+  }, [value, delay])
+  return debounced
+}
+
 type PersonPickerFieldProps = {
   name: string
   value: string
+  /** Initial/known people — used for label display and offline fallback.
+   *  Pass current match participants here; full search is done via `searchUrl`. */
   people: AdminMatchParticipantPersonOption[]
   placeholder: string
   onChange: (personId: string) => void
@@ -22,12 +33,14 @@ type PersonPickerFieldProps = {
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
   federations: AdminFederation[]
+  /** When set, people are fetched from this URL with ?q= instead of filtering `people` client-side. */
+  searchUrl?: string
 }
 
 export default function PersonPickerField({
   name,
   value,
-  people,
+  people: initialPeople,
   placeholder,
   onChange,
   onPeopleUpdate,
@@ -37,34 +50,78 @@ export default function PersonPickerField({
   cities,
   countries,
   federations,
+  searchUrl,
 }: PersonPickerFieldProps) {
+  const [knownPeople, setKnownPeople] = useState<AdminMatchParticipantPersonOption[]>(initialPeople)
+  const [searchResults, setSearchResults] = useState<AdminMatchParticipantPersonOption[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [isFetching, setIsFetching] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const selectedPerson = people.find((person) => person.id === value)
-  const displayLabel = selectedPerson?.label ?? ''
+  const debouncedSearch = useDebounce(searchText, 300)
 
-  const filteredPeople = people
-    .filter((person) => {
-      const query = searchText.trim().toLowerCase()
-      if (!query) return true
-      return (
-        person.firstName.toLowerCase().includes(query)
-        || person.lastName.toLowerCase().includes(query)
-        || person.nickname.toLowerCase().includes(query)
-      )
-    })
-    .sort((a, b) => {
-      const query = searchText.trim().toLowerCase()
-      if (!query) return a.label.localeCompare(b.label, 'pl')
+  // Keep knownPeople in sync if parent updates the prop
+  useEffect(() => {
+    setKnownPeople(initialPeople)
+  }, [initialPeople])
 
-      const aLastNameMatch = a.lastName.toLowerCase().startsWith(query)
-      const bLastNameMatch = b.lastName.toLowerCase().startsWith(query)
-      if (aLastNameMatch !== bLastNameMatch) return aLastNameMatch ? -1 : 1
-      return a.label.localeCompare(b.label, 'pl')
-    })
+  // Async search
+  useEffect(() => {
+    if (!searchUrl || !isOpen) return
+    let cancelled = false
+    setIsFetching(true)
+    const url = `${searchUrl}?q=${encodeURIComponent(debouncedSearch)}`
+    fetch(url)
+      .then((res) => res.json())
+      .then((data: AdminMatchParticipantPersonOption[]) => {
+        if (!cancelled) {
+          // Merge API results with knownPeople, deduplicated
+          const knownIds = new Set(knownPeople.map((p) => p.id))
+          const fresh = data.filter((p) => !knownIds.has(p.id))
+          setSearchResults([...knownPeople, ...fresh])
+          setIsFetching(false)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSearchResults(knownPeople)
+          setIsFetching(false)
+        }
+      })
+    return () => { cancelled = true }
+  }, [searchUrl, debouncedSearch, isOpen, knownPeople])
+
+  const peoplePool = searchUrl ? searchResults : knownPeople
+
+  const selectedPerson = useCallback(
+    () => knownPeople.find((p) => p.id === value) ?? searchResults.find((p) => p.id === value),
+    [knownPeople, searchResults, value]
+  )
+
+  const displayLabel = selectedPerson()?.label ?? ''
+
+  const filteredPeople = searchUrl
+    ? peoplePool
+    : peoplePool
+        .filter((person) => {
+          const q = searchText.trim().toLowerCase()
+          if (!q) return true
+          return (
+            person.firstName.toLowerCase().includes(q)
+            || person.lastName.toLowerCase().includes(q)
+            || person.nickname.toLowerCase().includes(q)
+          )
+        })
+        .sort((a, b) => {
+          const q = searchText.trim().toLowerCase()
+          if (!q) return a.label.localeCompare(b.label, 'pl')
+          const aMatch = a.lastName.toLowerCase().startsWith(q)
+          const bMatch = b.lastName.toLowerCase().startsWith(q)
+          if (aMatch !== bMatch) return aMatch ? -1 : 1
+          return a.label.localeCompare(b.label, 'pl')
+        })
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -72,33 +129,34 @@ export default function PersonPickerField({
         setIsOpen(false)
       }
     }
-
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
   function handleSelect(personId: string) {
     if (usedPersonIds.includes(personId) && personId !== value) {
-      if (duplicateMessage) {
-        alert(duplicateMessage)
-      }
+      if (duplicateMessage) alert(duplicateMessage)
       return
     }
-
+    // Remember the selected person for label display
+    const found = peoplePool.find((p) => p.id === personId)
+    if (found && !knownPeople.some((p) => p.id === personId)) {
+      setKnownPeople((prev) => [...prev, found].sort((a, b) => a.label.localeCompare(b.label, 'pl')))
+    }
     onChange(personId)
     setSearchText('')
     setIsOpen(false)
   }
 
   function handleAddNewSuccess(newPerson: AdminMatchParticipantPersonOption) {
+    setKnownPeople((prev) => {
+      if (prev.some((p) => p.id === newPerson.id)) return prev
+      return [...prev, newPerson].sort((a, b) => a.label.localeCompare(b.label, 'pl'))
+    })
     onPeopleUpdate(newPerson)
-
     window.dispatchEvent(
-      new CustomEvent<AdminMatchParticipantPersonOption>(MATCH_PERSON_CREATED_EVENT, {
-        detail: newPerson,
-      })
+      new CustomEvent<AdminMatchParticipantPersonOption>(MATCH_PERSON_CREATED_EVENT, { detail: newPerson })
     )
-
     handleSelect(newPerson.id)
     setIsModalOpen(false)
   }
@@ -121,9 +179,7 @@ export default function PersonPickerField({
             onChange={(e) => {
               const nextValue = e.target.value
               setSearchText(nextValue)
-              if (value && nextValue.trim() === '') {
-                onChange('')
-              }
+              if (value && nextValue.trim() === '') onChange('')
               setIsOpen(true)
             }}
             onFocus={() => setIsOpen(true)}
@@ -134,17 +190,12 @@ export default function PersonPickerField({
                 setSearchText('')
                 return
               }
-
               if ((e.key === 'Backspace' || e.key === 'Delete') && value && searchText.trim() === '') {
                 e.preventDefault()
                 clearSelection()
                 return
               }
-
-              if (e.key !== 'Enter') {
-                return
-              }
-
+              if (e.key !== 'Enter') return
               if (filteredPeople.length === 0) {
                 if (searchText.trim() !== '') {
                   e.preventDefault()
@@ -153,15 +204,12 @@ export default function PersonPickerField({
                 }
                 return
               }
-
               e.preventDefault()
               handleSelect(filteredPeople[0]?.id ?? '')
             }}
             onBlur={() => {
               setTimeout(() => {
-                if (!selectedPerson) {
-                  setSearchText('')
-                }
+                if (!selectedPerson()) setSearchText('')
                 setIsOpen(false)
               }, 100)
             }}
@@ -174,10 +222,7 @@ export default function PersonPickerField({
           {isOpen && (
             <button
               type="button"
-              onMouseDown={(e) => {
-                e.preventDefault()
-                setIsModalOpen(true)
-              }}
+              onMouseDown={(e) => { e.preventDefault(); setIsModalOpen(true) }}
               className="absolute right-2 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full bg-neutral-700 text-white hover:bg-neutral-600 active:bg-neutral-600"
               title={addButtonTitle}
             >
@@ -199,10 +244,14 @@ export default function PersonPickerField({
                   {person.label}
                 </button>
               ))
+            ) : isFetching ? (
+              <div className="px-3 py-1.5 text-sm text-neutral-500 animate-pulse">Szukam…</div>
             ) : searchText ? (
               <div className="px-3 py-1.5 text-sm text-neutral-400">Brak wyników</div>
             ) : (
-              <div className="px-3 py-1.5 text-sm text-neutral-500">Wpisz, aby wyszukać...</div>
+              <div className="px-3 py-1.5 text-sm text-neutral-500">
+                {searchUrl ? 'Zacznij pisać, aby wyszukać…' : 'Wpisz, aby wyszukać...'}
+              </div>
             )}
           </div>
         )}

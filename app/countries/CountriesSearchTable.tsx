@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import SortableStatHeader from '@/components/admin/SortableStatHeader'
 import CountryFlag from '@/components/CountryFlag'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
@@ -40,6 +40,7 @@ export default function CountriesSearchTable({
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('matches')
   const [query, setQuery] = useState('')
+  const [visibleCount, setVisibleCount] = useState(50)
 
   const filtered = useMemo(() => {
     const q = normalizeText(query)
@@ -53,6 +54,12 @@ export default function CountriesSearchTable({
       return (b[sortKey] as number) - (a[sortKey] as number)
     })
   }, [countries, query, sortKey])
+
+  useEffect(() => {
+    setVisibleCount(50)
+  }, [query, sortKey])
+
+  const displayed = filtered.slice(0, visibleCount)
 
   return (
     <div className="space-y-3">
@@ -135,7 +142,7 @@ export default function CountriesSearchTable({
                 </td>
               </tr>
             ) : (
-              filtered.map((country, i) => (
+              displayed.map((country, i) => (
                 <tr key={country.id} className="table-data-row border-b border-neutral-800 last:border-b-0 bg-neutral-950 transition-colors hover:bg-neutral-900/60">
                   <td className="px-4 py-3 text-neutral-500 text-sm">{i + 1}</td>
                   <td className="px-4 py-3">
@@ -160,6 +167,18 @@ export default function CountriesSearchTable({
           </tbody>
         </table>
       </div>
+
+      {filtered.length > visibleCount && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((v) => v + 50)}
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-5 py-2 text-sm text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-neutral-100"
+          >
+            Pokaż kolejne {Math.min(50, filtered.length - visibleCount)}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

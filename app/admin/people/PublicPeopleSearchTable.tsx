@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import CountryFlag from '@/components/CountryFlag'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
@@ -46,6 +46,7 @@ export default function PublicPeopleSearchTable({
   const [coachSortKey, setCoachSortKey] = useState<CoachSortKey>('coach_match_count')
   const [query, setQuery] = useState('')
   const [countryFilter, setCountryFilter] = useState(defaultCountryFilter ?? '')
+  const [visibleCount, setVisibleCount] = useState(50)
 
   const countryOptions = useMemo(() => {
     const countries = new Set<string>()
@@ -98,6 +99,12 @@ export default function PublicPeopleSearchTable({
     }
     return [...base].sort((a, b) => (b[sortKey] as number) - (a[sortKey] as number))
   }, [people, query, sortKey, coachSortKey, countryFilter, variant])
+
+  useEffect(() => {
+    setVisibleCount(50)
+  }, [query, countryFilter, sortKey, coachSortKey, variant])
+
+  const displayed = filtered.slice(0, visibleCount)
 
   function renderStatBadge(value: number) {
     return value > 0
@@ -233,7 +240,7 @@ export default function PublicPeopleSearchTable({
                 </td>
               </tr>
             ) : (
-              filtered.map((person, i) => (
+              displayed.map((person, i) => (
                 <tr key={person.id} className="table-data-row border-b border-neutral-800 last:border-b-0 bg-neutral-950 transition-colors hover:bg-neutral-900/60">
                   <td className="px-4 py-3 text-neutral-500 text-sm">{i + 1}</td>
                   <td className="px-4 py-3">
@@ -339,6 +346,18 @@ export default function PublicPeopleSearchTable({
           </tbody>
         </table>
       </div>
+
+      {filtered.length > visibleCount && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setVisibleCount((v) => v + 50)}
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-5 py-2 text-sm text-neutral-300 transition-colors hover:bg-neutral-800 hover:text-neutral-100"
+          >
+            Pokaż kolejne {Math.min(50, filtered.length - visibleCount)}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
