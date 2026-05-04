@@ -30,6 +30,8 @@ import {
   getAdminClubTeamOptions,
   getLatestPlayerClubTeamByPersonIds,
   getLatestPlayerPositionByPersonIds,
+  getLatestPlayerClubTeamByPersonIdsWithTopPeople,
+  getLatestPlayerPositionByPersonIdsWithTopPeople,
   getAdminMatchCreateOptions,
   getAdminMatchDetails,
   getAdminMatchEvents,
@@ -947,8 +949,8 @@ export default async function AdminMatchDetailsPage({
 
   const personIds = participants.people.map((person) => person.id)
   const [latestPlayerClubTeamByPersonId, latestPlayerPositionByPersonId] = await Promise.all([
-    getLatestPlayerClubTeamByPersonIds(personIds, { excludeMatchId: match.id, targetMatchDate: match.match_date }),
-    getLatestPlayerPositionByPersonIds(personIds, { excludeMatchId: match.id }),
+    getLatestPlayerClubTeamByPersonIdsWithTopPeople(personIds, { excludeMatchId: match.id, targetMatchDate: match.match_date }),
+    getLatestPlayerPositionByPersonIdsWithTopPeople(personIds, { excludeMatchId: match.id }),
   ])
 
   const eventPeopleById = new Map<string, MatchEventPersonOption>()
