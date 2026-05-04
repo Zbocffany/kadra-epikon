@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     .select('id, first_name, last_name, nickname')
     .order('last_name', { ascending: true, nullsFirst: false })
     .order('first_name', { ascending: true, nullsFirst: false })
-    .limit(20)
+    .limit(50)
 
   const { data, error } = q
     ? await query.or(

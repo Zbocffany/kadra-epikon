@@ -53,8 +53,7 @@ export default function PersonPickerField({
   searchUrl,
 }: PersonPickerFieldProps) {
   const [knownPeople, setKnownPeople] = useState<AdminMatchParticipantPersonOption[]>(initialPeople)
-  // Pre-seed with known participants so the list is never empty on first open
-  const [searchResults, setSearchResults] = useState<AdminMatchParticipantPersonOption[]>(initialPeople)
+  const [searchResults, setSearchResults] = useState<AdminMatchParticipantPersonOption[]>([])
   const [isOpen, setIsOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -63,18 +62,12 @@ export default function PersonPickerField({
 
   const debouncedSearch = useDebounce(searchText, 300)
 
-  // Keep knownPeople in sync if parent updates the prop
+  // Keep knownPeople in sync if parent updates the prop (e.g. new person added via modal)
   useEffect(() => {
     setKnownPeople(initialPeople)
-    // Also update searchResults so newly-added people appear immediately
-    setSearchResults((prev) => {
-      const prevIds = new Set(prev.map((p) => p.id))
-      const added = initialPeople.filter((p) => !prevIds.has(p.id))
-      return added.length > 0 ? [...prev, ...added] : prev
-    })
   }, [initialPeople])
 
-  // Async search
+  // Async search — runs whenever dropdown opens or query changes
   useEffect(() => {
     if (!searchUrl || !isOpen) return
     let cancelled = false
@@ -87,21 +80,20 @@ export default function PersonPickerField({
       })
       .then((data: AdminMatchParticipantPersonOption[]) => {
         if (!cancelled) {
-          // Merge API results with knownPeople, deduplicated
-          const knownIds = new Set(knownPeople.map((p) => p.id))
-          const fresh = data.filter((p) => !knownIds.has(p.id))
-          setSearchResults([...knownPeople, ...fresh])
+          // API results ARE the list — no merging with knownPeople
+          setSearchResults(data)
           setIsFetching(false)
         }
       })
       .catch(() => {
         if (!cancelled) {
+          // Fallback to known participants on error
           setSearchResults(knownPeople)
           setIsFetching(false)
         }
       })
     return () => { cancelled = true }
-  }, [searchUrl, debouncedSearch, isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchUrl, debouncedSearch, isOpen, knownPeople])
 
   const peoplePool = searchUrl ? searchResults : knownPeople
 
