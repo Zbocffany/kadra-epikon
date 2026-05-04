@@ -1883,6 +1883,68 @@ export async function getLatestPlayerPositionByPersonIds(
   )
 }
 
+/**
+ * For a single person: returns position and club from the match closest to targetMatchDate.
+ * Used for on-select auto-fill in squad editor.
+ */
+export async function getPlayerSuggestionsNearDate(
+  personId: string,
+  targetMatchDate: string,
+  options?: { excludeMatchId?: string }
+): Promise<{ position: PlayerPosition | null; clubTeamId: string | null }> {
+  const supabase = createServiceRoleClient()
+
+  let q = supabase
+    .from('tbl_Match_Participants')
+    .select('club_team_id, player_position, match_id')
+    .eq('role', 'PLAYER')
+    .eq('person_id', personId)
+
+  if (options?.excludeMatchId) {
+    q = q.neq('match_id', options.excludeMatchId)
+  }
+
+  const { data, error } = await q
+  if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
+
+  const rows = (data ?? []) as Array<{ club_team_id: string | null; player_position: string | null; match_id: string }>
+  if (!rows.length) {
+    return { position: null, clubTeamId: null }
+  }
+
+  const matchIds = [...new Set(rows.map((r) => r.match_id))]
+  const { data: matchData, error: matchError } = await supabase
+    .from('tbl_Matches')
+    .select('id, match_date')
+    .in('id', matchIds)
+  if (matchError) throw new Error(`tbl_Matches: ${matchError.message}`)
+
+  const matchDateMap = new Map((matchData ?? []).map((m) => [m.id as string, m.match_date as string]))
+  const targetTime = new Date(targetMatchDate).getTime()
+
+  let best: { position: PlayerPosition | null; clubTeamId: string | null; distance: number; matchId: string } | null = null
+
+  for (const row of rows) {
+    const matchDate = matchDateMap.get(row.match_id)
+    if (!matchDate) continue
+    const distance = Math.abs(new Date(matchDate).getTime() - targetTime)
+
+    if (!best || distance < best.distance || (distance === best.distance && row.match_id > best.matchId)) {
+      best = {
+        position: row.player_position as PlayerPosition | null,
+        clubTeamId: row.club_team_id,
+        distance,
+        matchId: row.match_id,
+      }
+    }
+  }
+
+  return {
+    position: best?.position ?? null,
+    clubTeamId: best?.clubTeamId ?? null,
+  }
+}
+
 export async function getMatchesYearStats(
   matchesInput: { id: string; match_date: string }[]
 ): Promise<MatchYearStatsData> {

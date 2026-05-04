@@ -385,6 +385,8 @@ function MatchTeamParticipantsSection({
   latestPlayerClubTeamByPersonId,
   latestPlayerPositionByPersonId,
   isEdit,
+  matchDate,
+  matchId,
   cities,
   countries,
   federations,
@@ -398,6 +400,8 @@ function MatchTeamParticipantsSection({
   latestPlayerClubTeamByPersonId: Record<string, string | null>
   latestPlayerPositionByPersonId: Record<string, PlayerPosition | null>
   isEdit: boolean
+  matchDate: string
+  matchId: string
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
   federations: AdminFederation[]
@@ -419,6 +423,8 @@ function MatchTeamParticipantsSection({
               clubTeams={clubTeams}
               latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
               latestPlayerPositionByPersonId={latestPlayerPositionByPersonId}
+              matchDate={matchDate}
+              matchId={matchId}
               cities={cities}
               countries={countries}
               federations={federations}
@@ -1285,6 +1291,8 @@ export default async function AdminMatchDetailsPage({
               latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
               latestPlayerPositionByPersonId={latestPlayerPositionByPersonId}
               isEdit={true}
+              matchDate={match.match_date}
+              matchId={match.id}
               cities={cities}
               countries={countries}
               federations={federations}
@@ -1299,6 +1307,8 @@ export default async function AdminMatchDetailsPage({
               latestPlayerClubTeamByPersonId={latestPlayerClubTeamByPersonId}
               latestPlayerPositionByPersonId={latestPlayerPositionByPersonId}
               isEdit={true}
+              matchDate={match.match_date}
+              matchId={match.id}
               cities={cities}
               countries={countries}
               federations={federations}

@@ -65,6 +65,8 @@ export default function MatchSquadForm({
   clubTeams: initialClubTeams,
   latestPlayerClubTeamByPersonId,
   latestPlayerPositionByPersonId,
+  matchDate,
+  matchId,
   cities,
   countries,
   federations,
@@ -75,6 +77,8 @@ export default function MatchSquadForm({
   clubTeams: AdminTeamOption[]
   latestPlayerClubTeamByPersonId: Record<string, string | null>
   latestPlayerPositionByPersonId: Record<string, PlayerPosition | null>
+  matchDate: string
+  matchId: string
   cities: AdminPersonBirthCityOption[]
   countries: AdminCountryOption[]
   federations: AdminFederation[]
@@ -193,6 +197,48 @@ export default function MatchSquadForm({
     })
   }
 
+  async function handlePersonSelect(personId: string, index: number, currentRow: SquadRow) {
+    // Immediately set the personId
+    updateRow(index, { personId })
+
+    if (!personId) return
+
+    // If both position and club are already filled, no need to fetch suggestions
+    if (currentRow.position && currentRow.clubTeamId) return
+
+    // Check if suggestion data is already available from preloaded participant data
+    const knownPosition = latestPlayerPositionByPersonId[personId]
+    const knownClub = latestPlayerClubTeamByPersonId[personId]
+
+    if (knownPosition !== undefined || knownClub !== undefined) {
+      // Data is available from preloaded map — apply it
+      updateRow(index, {
+        personId,
+        position: currentRow.position || knownPosition || '',
+        clubTeamId: currentRow.clubTeamId || knownClub || '',
+      })
+      return
+    }
+
+    // Not in preloaded data — fetch from API (person newly selected from full-DB search)
+    try {
+      const params = new URLSearchParams({ matchDate, excludeMatchId: matchId })
+      const res = await fetch(`/api/admin/people/${personId}/suggestions?${params}`)
+      if (!res.ok) return
+      const suggestions = await res.json() as { position: PlayerPosition | null; clubTeamId: string | null }
+      setRows((prev) => prev.map((row, rowIndex) => {
+        if (rowIndex !== index || row.personId !== personId) return row
+        return {
+          ...row,
+          position: row.position || suggestions.position || '',
+          clubTeamId: row.clubTeamId || suggestions.clubTeamId || '',
+        }
+      }))
+    } catch {
+      // Fail silently — auto-fill is best-effort
+    }
+  }
+
   return (
     <div className="space-y-4">
       <input type="hidden" name={`${namePrefix}squad_touched`} value={isTouched ? '1' : '0'} />
@@ -228,15 +274,7 @@ export default function MatchSquadForm({
                     people={people}
                     searchUrl="/api/admin/people/search"
                     placeholder={`Podstawowy ${index + 1}`}
-                    onChange={(personId) => {
-                      const suggestedClubTeamId = latestPlayerClubTeamByPersonId[personId] ?? null
-                      const suggestedPosition = latestPlayerPositionByPersonId[personId] ?? null
-                      updateRow(index, {
-                        personId,
-                        position: row.position || suggestedPosition || '',
-                        clubTeamId: row.clubTeamId || suggestedClubTeamId || '',
-                      })
-                    }}
+                    onChange={(personId) => { void handlePersonSelect(personId, index, row) }}
                     onPeopleUpdate={handlePeopleUpdate}
                     usedPersonIds={rows.map((r, i) => i === index ? '' : r.personId).filter(Boolean)}
                     duplicateMessage="Ten piłkarz jest już przypisany do innego miejsca w składzie."
@@ -311,15 +349,7 @@ export default function MatchSquadForm({
                       people={people}
                       searchUrl="/api/admin/people/search"
                       placeholder={`Rezerwowy ${index + 1}`}
-                      onChange={(personId) => {
-                        const suggestedClubTeamId = latestPlayerClubTeamByPersonId[personId] ?? null
-                        const suggestedPosition = latestPlayerPositionByPersonId[personId] ?? null
-                        updateRow(STARTERS_COUNT + index, {
-                          personId,
-                          position: row.position || suggestedPosition || '',
-                          clubTeamId: row.clubTeamId || suggestedClubTeamId || '',
-                        })
-                      }}
+                      onChange={(personId) => { void handlePersonSelect(personId, STARTERS_COUNT + index, row) }}
                       onPeopleUpdate={handlePeopleUpdate}
                       usedPersonIds={rows.filter((_, i) => i !== STARTERS_COUNT + index).map(r => r.personId).filter(Boolean)}
                       duplicateMessage="Ten piłkarz jest już przypisany do innego miejsca w składzie."
