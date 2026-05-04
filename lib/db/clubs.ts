@@ -251,8 +251,9 @@ function buildClubPlayerDisplayName(person: {
   const nickname = person.nickname?.trim() ?? ''
   const fullName = `${first} ${last}`.trim()
 
-  if (fullName) return fullName
+  if (fullName && nickname) return nickname
   if (nickname) return nickname
+  if (fullName) return fullName
   return '—'
 }
 

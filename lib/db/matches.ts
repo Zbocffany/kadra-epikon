@@ -329,8 +329,10 @@ function buildPersonDisplayName(person: MatchParticipantPersonRow): string {
   const nickname = person.nickname?.trim() ?? ''
   const fullName = `${first} ${last}`.trim()
 
-  if (fullName) return fullName
+  // If both full name and nickname exist, prefer nickname
+  if (fullName && nickname) return nickname
   if (nickname) return nickname
+  if (fullName) return fullName
   return '—'
 }
 

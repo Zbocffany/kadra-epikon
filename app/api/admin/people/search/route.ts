@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
     const last = person.last_name?.trim() ?? ''
     const nickname = person.nickname?.trim() ?? ''
     const fullName = `${first} ${last}`.trim()
-    const label = fullName || nickname || '—'
+    const label = (fullName && nickname) ? nickname : (nickname || fullName || '—')
 
     return {
       id: person.id,

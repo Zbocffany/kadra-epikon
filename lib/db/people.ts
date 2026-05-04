@@ -97,8 +97,10 @@ function buildDisplayName(person: Pick<AdminPersonListItem, 'first_name' | 'last
   const nick = person.nickname?.trim() ?? ''
 
   const fullName = `${first} ${last}`.trim()
-  if (fullName) return fullName
+  // If both full name and nickname exist, prefer nickname
+  if (fullName && nick) return nick
   if (nick) return nick
+  if (fullName) return fullName
   return '—'
 }
 
