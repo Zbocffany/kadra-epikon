@@ -53,7 +53,8 @@ export default function PersonPickerField({
   searchUrl,
 }: PersonPickerFieldProps) {
   const [knownPeople, setKnownPeople] = useState<AdminMatchParticipantPersonOption[]>(initialPeople)
-  const [searchResults, setSearchResults] = useState<AdminMatchParticipantPersonOption[]>([])
+  // Pre-seed with known participants so the list is never empty on first open
+  const [searchResults, setSearchResults] = useState<AdminMatchParticipantPersonOption[]>(initialPeople)
   const [isOpen, setIsOpen] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -65,6 +66,12 @@ export default function PersonPickerField({
   // Keep knownPeople in sync if parent updates the prop
   useEffect(() => {
     setKnownPeople(initialPeople)
+    // Also update searchResults so newly-added people appear immediately
+    setSearchResults((prev) => {
+      const prevIds = new Set(prev.map((p) => p.id))
+      const added = initialPeople.filter((p) => !prevIds.has(p.id))
+      return added.length > 0 ? [...prev, ...added] : prev
+    })
   }, [initialPeople])
 
   // Async search
@@ -74,7 +81,10 @@ export default function PersonPickerField({
     setIsFetching(true)
     const url = `${searchUrl}?q=${encodeURIComponent(debouncedSearch)}`
     fetch(url)
-      .then((res) => res.json())
+      .then((res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        return res.json()
+      })
       .then((data: AdminMatchParticipantPersonOption[]) => {
         if (!cancelled) {
           // Merge API results with knownPeople, deduplicated
@@ -91,7 +101,7 @@ export default function PersonPickerField({
         }
       })
     return () => { cancelled = true }
-  }, [searchUrl, debouncedSearch, isOpen, knownPeople])
+  }, [searchUrl, debouncedSearch, isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const peoplePool = searchUrl ? searchResults : knownPeople
 
