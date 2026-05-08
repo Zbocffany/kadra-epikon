@@ -166,6 +166,7 @@ async function getStadiumVsPolandStats(
       .from('tbl_Matches')
       .select('id, match_stadium_id, home_team_id, away_team_id')
       .eq('match_status', 'FINISHED')
+      .neq('result_type', 'WALKOVER')
       .in('editorial_status', ['COMPLETE', 'VERIFIED'])
       .eq('home_team_id', polandTeamId)
       .not('match_stadium_id', 'is', null),
@@ -173,6 +174,7 @@ async function getStadiumVsPolandStats(
       .from('tbl_Matches')
       .select('id, match_stadium_id, home_team_id, away_team_id')
       .eq('match_status', 'FINISHED')
+      .neq('result_type', 'WALKOVER')
       .in('editorial_status', ['COMPLETE', 'VERIFIED'])
       .eq('away_team_id', polandTeamId)
       .not('match_stadium_id', 'is', null),

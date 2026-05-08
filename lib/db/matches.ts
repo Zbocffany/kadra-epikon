@@ -855,9 +855,29 @@ export async function getAdminPlayerYearStats(personId: string): Promise<Record<
   const matchIds = [...new Set(participations.map((p) => p.match_id as string))]
   const CHUNK_SIZE = 80
 
-  const matchYearById = new Map<string, string>()
+  const nonWalkoverMatchIds = new Set<string>()
   for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
     const batch = matchIds.slice(i, i + CHUNK_SIZE)
+    const { data: matchRows, error: matchRowsError } = await supabase
+      .from('tbl_Matches')
+      .select('id, result_type')
+      .in('id', batch)
+
+    if (matchRowsError) throw new Error(`tbl_Matches (year stats walkover filter): ${matchRowsError.message}`)
+    for (const row of (matchRows ?? []) as Array<{ id: string; result_type: string | null }>) {
+      if (row.result_type !== 'WALKOVER') {
+        nonWalkoverMatchIds.add(row.id)
+      }
+    }
+  }
+
+  const filteredParticipations = participations.filter((p) => nonWalkoverMatchIds.has(p.match_id as string))
+  if (!filteredParticipations.length) return {}
+  const filteredMatchIds = [...new Set(filteredParticipations.map((p) => p.match_id as string))]
+
+  const matchYearById = new Map<string, string>()
+  for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
+    const batch = filteredMatchIds.slice(i, i + CHUNK_SIZE)
     const { data: matches, error: matchesError } = await supabase
       .from('tbl_Matches')
       .select('id, match_date')
@@ -874,25 +894,25 @@ export async function getAdminPlayerYearStats(personId: string): Promise<Record<
       .select('match_id')
       .eq('event_type', 'SUBSTITUTION')
       .eq('secondary_person_id', personId)
-      .in('match_id', matchIds),
+      .in('match_id', filteredMatchIds),
     supabase
       .from('tbl_Match_Events')
       .select('match_id')
       .eq('event_type', 'SUBSTITUTION')
       .eq('primary_person_id', personId)
-      .in('match_id', matchIds),
+      .in('match_id', filteredMatchIds),
     supabase
       .from('tbl_Match_Events')
       .select('match_id')
       .in('event_type', ['GOAL', 'PENALTY_GOAL'])
       .eq('primary_person_id', personId)
-      .in('match_id', matchIds),
+      .in('match_id', filteredMatchIds),
     supabase
       .from('tbl_Match_Events')
       .select('match_id')
       .in('event_type', ['GOAL', 'OWN_GOAL'])
       .eq('secondary_person_id', personId)
-      .in('match_id', matchIds),
+      .in('match_id', filteredMatchIds),
   ])
 
   if (subOnRes.error) throw new Error(`tbl_Match_Events (year stats sub on): ${subOnRes.error.message}`)
@@ -918,7 +938,7 @@ export async function getAdminPlayerYearStats(personId: string): Promise<Record<
     return result[year]
   }
 
-  for (const participation of participations) {
+  for (const participation of filteredParticipations) {
     const matchId = participation.match_id as string
     const year = matchYearById.get(matchId)
     if (!year) continue
@@ -1957,8 +1977,31 @@ export async function getMatchesYearStats(
   const supabase = createServiceRoleClient()
   const CHUNK_SIZE = 80
   const PAGE_SIZE = 1000
-  const matchIds = matchesInput.map((m) => m.id)
-  const yearByMatchId = new Map(matchesInput.map((m) => [m.id, m.match_date.slice(0, 4)]))
+  const inputMatchIds = matchesInput.map((m) => m.id)
+
+  const nonWalkoverMatchIds = new Set<string>()
+  for (let i = 0; i < inputMatchIds.length; i += CHUNK_SIZE) {
+    const batch = inputMatchIds.slice(i, i + CHUNK_SIZE)
+    const { data, error } = await supabase
+      .from('tbl_Matches')
+      .select('id, result_type')
+      .in('id', batch)
+
+    if (error) return empty
+    for (const row of (data ?? []) as Array<{ id: string; result_type: string | null }>) {
+      if (row.result_type !== 'WALKOVER') {
+        nonWalkoverMatchIds.add(row.id)
+      }
+    }
+  }
+
+  const matchIds = [...nonWalkoverMatchIds]
+  if (!matchIds.length) return empty
+  const yearByMatchId = new Map(
+    matchesInput
+      .filter((m) => nonWalkoverMatchIds.has(m.id))
+      .map((m) => [m.id, m.match_date.slice(0, 4)])
+  )
 
   // 1. Find Poland country in a deterministic way
   const { data: polandCountryByCode } = await supabase

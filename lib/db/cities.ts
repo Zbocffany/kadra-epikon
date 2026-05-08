@@ -141,16 +141,31 @@ async function getCityStats(
   if (!allParticipants.length) return new Map()
 
   const allMatchIds = [...new Set(allParticipants.map((p) => p.match_id))]
+  const nonWalkoverMatchIds = new Set<string>()
+  for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Matches')
+      .select('id, result_type')
+      .in('id', allMatchIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Matches (walkover filter): ${error.message}`)
+    for (const row of (data ?? []) as Array<{ id: string; result_type: string | null }>) {
+      if (row.result_type !== 'WALKOVER') nonWalkoverMatchIds.add(row.id)
+    }
+  }
+
+  const filteredParticipants = allParticipants.filter((p) => nonWalkoverMatchIds.has(p.match_id))
+  if (!filteredParticipants.length) return new Map()
+  const filteredMatchIds = [...new Set(filteredParticipants.map((p) => p.match_id))]
 
   const allSubEvents: Array<{ match_id: string; secondary_person_id: string }> = []
-  for (let i = 0; i < allMatchIds.length; i += CHUNK_SIZE) {
+  for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
     let from = 0
     while (true) {
       const { data, error } = await supabase
         .from('tbl_Match_Events')
         .select('match_id, secondary_person_id')
         .eq('event_type', 'SUBSTITUTION')
-        .in('match_id', allMatchIds.slice(i, i + CHUNK_SIZE))
+        .in('match_id', filteredMatchIds.slice(i, i + CHUNK_SIZE))
         .not('secondary_person_id', 'is', null)
         .order('id', { ascending: true })
         .range(from, from + PAGE_SIZE - 1)
@@ -163,7 +178,7 @@ async function getCityStats(
   }
 
   const subEnteredSet = new Set(allSubEvents.map((e) => `${e.match_id}:${e.secondary_person_id}`))
-  const playedParticipants = allParticipants.filter(
+  const playedParticipants = filteredParticipants.filter(
     (p) => p.is_starting || subEnteredSet.has(`${p.match_id}:${p.person_id}`)
   )
 
