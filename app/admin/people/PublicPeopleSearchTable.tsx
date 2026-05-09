@@ -13,6 +13,7 @@ import BenchIcon from '@/components/icons/BenchIcon'
 import SortableStatHeader from '@/components/admin/SortableStatHeader'
 
 export type PeopleCardVariant = 'players' | 'coaches' | 'referees'
+type PublicPlayerMode = 'poland' | 'rivals'
 
 function getAgeDisplay(person: AdminPersonListItem): string | null {
   if (!person.birth_date) return null
@@ -32,11 +33,13 @@ export default function PublicPeopleSearchTable({
   people,
   basePath = '/people',
   variant = 'players',
+  publicPlayerMode,
   defaultCountryFilter,
 }: {
   people: AdminPersonListItem[]
   basePath?: string
   variant?: PeopleCardVariant
+  publicPlayerMode?: PublicPlayerMode
   defaultCountryFilter?: string
 }) {
   type PlayerSortKey = 'appearance_count' | 'goal_count' | 'assist_count' | 'yellow_card_count' | 'red_card_count' | 'minute_count' | 'bench_count'
@@ -46,9 +49,19 @@ export default function PublicPeopleSearchTable({
   const [coachSortKey, setCoachSortKey] = useState<CoachSortKey>('coach_match_count')
   const [query, setQuery] = useState('')
   const [countryFilter, setCountryFilter] = useState(defaultCountryFilter ?? '')
+  const [playerMode, setPlayerMode] = useState<PublicPlayerMode>(publicPlayerMode ?? 'poland')
   const [visibleCount, setVisibleCount] = useState(50)
+  const isPublicPlayersView = variant === 'players' && Boolean(publicPlayerMode)
+
+  useEffect(() => {
+    if (publicPlayerMode) {
+      setPlayerMode(publicPlayerMode)
+    }
+  }, [publicPlayerMode])
 
   const countryOptions = useMemo(() => {
+    if (isPublicPlayersView) return []
+
     const countries = new Set<string>()
     for (const person of people) {
       if (variant === 'coaches') {
@@ -58,14 +71,24 @@ export default function PublicPeopleSearchTable({
       }
     }
     return [...countries].sort((a, b) => a.localeCompare(b, 'pl'))
-  }, [people, variant])
+  }, [people, variant, isPublicPlayersView])
+
+  const basePeople = useMemo(() => {
+    if (!isPublicPlayersView) return people
+
+    if (playerMode === 'rivals') {
+      return people.filter((person) => person.roles.includes('PLAYER') && Boolean(person.has_played_against_poland))
+    }
+
+    return people.filter((person) => person.roles.includes('PLAYER') && Boolean(person.has_represented_poland))
+  }, [isPublicPlayersView, people, playerMode])
 
   const filtered = useMemo(() => {
     const q = normalizeText(query)
-    let base = people
+    let base = basePeople
     
     // Apply country filter
-    if (countryFilter) {
+    if (!isPublicPlayersView && countryFilter) {
       base = base.filter(p => {
         if (variant === 'coaches') {
           return p.coached_country_names.includes(countryFilter)
@@ -98,11 +121,11 @@ export default function PublicPeopleSearchTable({
       })
     }
     return [...base].sort((a, b) => (b[sortKey] as number) - (a[sortKey] as number))
-  }, [people, query, sortKey, coachSortKey, countryFilter, variant])
+  }, [basePeople, query, sortKey, coachSortKey, countryFilter, variant, isPublicPlayersView])
 
   useEffect(() => {
     setVisibleCount(50)
-  }, [query, countryFilter, sortKey, coachSortKey, variant])
+  }, [query, countryFilter, sortKey, coachSortKey, variant, playerMode])
 
   const displayed = filtered.slice(0, visibleCount)
 
@@ -129,20 +152,47 @@ export default function PublicPeopleSearchTable({
             className="w-full rounded-lg border border-emerald-700/60 bg-emerald-950/50 px-3 py-2 text-sm text-emerald-50 placeholder:text-emerald-300/40 focus:border-emerald-400/70 focus:outline-none focus:ring-1 focus:ring-emerald-400/50"
           />
         </div>
-        <div className="w-full sm:w-52">
-          <select
-            value={countryFilter}
-            onChange={(e) => setCountryFilter(e.target.value)}
-            className="w-full rounded-lg border border-emerald-700/60 bg-emerald-950/50 px-3 py-2 text-sm text-emerald-50 focus:border-emerald-400/70 focus:outline-none focus:ring-1 focus:ring-emerald-400/50"
-          >
-            <option value="">Wszystkie kraje</option>
-            {countryOptions.map((country) => (
-              <option key={country} value={country}>
-                {country}
-              </option>
-            ))}
-          </select>
-        </div>
+        {isPublicPlayersView ? (
+          <div className="grid w-full grid-cols-2 gap-2 sm:w-72">
+            <button
+              type="button"
+              onClick={() => setPlayerMode('poland')}
+              aria-pressed={playerMode === 'poland'}
+              className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${playerMode === 'poland'
+                ? 'border-emerald-300/80 bg-emerald-700/55 text-emerald-50 shadow-[0_0_0_1px_rgba(110,231,183,0.2)]'
+                : 'border-emerald-700/60 bg-emerald-950/50 text-emerald-200/70 hover:border-emerald-400/70 hover:text-emerald-50'
+              }`}
+            >
+              Polska
+            </button>
+            <button
+              type="button"
+              onClick={() => setPlayerMode('rivals')}
+              aria-pressed={playerMode === 'rivals'}
+              className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${playerMode === 'rivals'
+                ? 'border-emerald-300/80 bg-emerald-700/55 text-emerald-50 shadow-[0_0_0_1px_rgba(110,231,183,0.2)]'
+                : 'border-emerald-700/60 bg-emerald-950/50 text-emerald-200/70 hover:border-emerald-400/70 hover:text-emerald-50'
+              }`}
+            >
+              Rywale
+            </button>
+          </div>
+        ) : (
+          <div className="w-full sm:w-52">
+            <select
+              value={countryFilter}
+              onChange={(e) => setCountryFilter(e.target.value)}
+              className="w-full rounded-lg border border-emerald-700/60 bg-emerald-950/50 px-3 py-2 text-sm text-emerald-50 focus:border-emerald-400/70 focus:outline-none focus:ring-1 focus:ring-emerald-400/50"
+            >
+              <option value="">Wszystkie kraje</option>
+              {countryOptions.map((country) => (
+                <option key={country} value={country}>
+                  {country}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* People table */}

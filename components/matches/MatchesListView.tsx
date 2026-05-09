@@ -261,7 +261,11 @@ function getPolandGoals(match: AdminMatch): { scored: number; conceded: number }
 }
 
 function getYearPolandResultStats(yearMatches: AdminMatch[]): YearPolandResultStats {
-  const nonWalkoverMatches = yearMatches.filter((match) => match.result_type !== 'WALKOVER')
+  return getPolandResultStats(yearMatches)
+}
+
+function getPolandResultStats(matches: AdminMatch[]): YearPolandResultStats {
+  const nonWalkoverMatches = matches.filter((match) => match.result_type !== 'WALKOVER')
   let wins = 0
   let draws = 0
   let losses = 0
@@ -300,6 +304,26 @@ function GlossyYearStatsBadge({ stats }: { stats: YearPolandResultStats }) {
       <span className="relative z-10 text-[13px] font-black text-white" title="Liczba meczów">{stats.totalMatches}</span>
       <span className="relative z-10 text-[13px] font-black text-white" title="Zwycięstwa-Remisy-Porażki">{stats.wins}-{stats.draws}-{stats.losses}</span>
       <span className="relative z-10 text-[13px] font-black text-neutral-400">({stats.goalsScored}-{stats.goalsConceded})</span>
+    </span>
+  )
+}
+
+function GlossyGlobalStatsBadge({ stats }: { stats: YearPolandResultStats }) {
+  return (
+    <span className="relative inline-flex min-h-[2.75rem] min-w-[15rem] items-center overflow-hidden rounded-md border border-white/12 bg-transparent px-4 py-1 text-[18px] font-bold text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)] [font-variant-numeric:tabular-nums]">
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.03)_30%,rgba(0,0,0,0.12)_100%)]"
+      />
+      <span className="relative z-10 text-[16px] font-black leading-none text-emerald-50" title="Liczba meczów">
+        {stats.totalMatches}
+      </span>
+      <span className="relative z-10 ml-5 text-[16px] font-black leading-none text-emerald-50" title="Zwycięstwa-Remisy-Porażki">
+        {stats.wins}-{stats.draws}-{stats.losses}
+      </span>
+      <span className="relative z-10 ml-4 text-[16px] font-black leading-none text-emerald-200/80">
+        ({stats.goalsScored}-{stats.goalsConceded})
+      </span>
     </span>
   )
 }
@@ -352,6 +376,7 @@ export default function MatchesListView({
     return acc
   }, {})
   const years = Object.keys(matchesByYear).sort((a, b) => Number(b) - Number(a))
+  const globalPolandStats = getPolandResultStats(completedAndOtherMatches)
   const showUpcomingSection = displayMode !== 'history'
   const showHistorySection = displayMode !== 'upcoming'
 
@@ -385,6 +410,9 @@ export default function MatchesListView({
                 )}
               </div>
               <div className="flex items-center gap-2">
+                {publicUnifiedSection && globalPolandStats.totalMatches > 0 ? (
+                  <GlossyGlobalStatsBadge stats={globalPolandStats} />
+                ) : null}
                 {headerActions}
               </div>
             </div>

@@ -18,7 +18,7 @@ export default async function PublicPlayersPage() {
 								people={players}
 								basePath="/people"
 								variant="players"
-								defaultCountryFilter="Polska"
+								publicPlayerMode="poland"
 							/>
 						</div>
 					</section>

@@ -38,6 +38,8 @@ export type AdminPersonListItem = {
   birth_country_fifa_code: string | null
   represented_country_names: string[]
   represented_country_fifa_codes: (string | null)[]
+  has_represented_poland?: boolean
+  has_played_against_poland?: boolean
   coached_country_names: string[]
   coached_country_fifa_codes: (string | null)[]
   roles: AdminPersonRole[]
@@ -232,6 +234,279 @@ async function getExplicitRepresentedCountryIdsByPersonId(
   }
 
   return map
+}
+
+async function getPolandCountryId(supabase: ReturnType<typeof createServiceRoleClient>): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('tbl_Countries')
+    .select('id')
+    .ilike('name', 'Polska')
+    .maybeSingle()
+
+  if (error) throw new Error(`tbl_Countries (Polska): ${error.message}`)
+  return data?.id ?? null
+}
+
+async function getRepresentedPolandByPersonId(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  personIds: string[]
+): Promise<Map<string, boolean>> {
+  if (!personIds.length) {
+    return new Map()
+  }
+
+  const polandCountryId = await getPolandCountryId(supabase)
+  if (!polandCountryId) {
+    return new Map()
+  }
+
+  const CHUNK_SIZE = 80
+  const PAGE_SIZE = 1000
+  type ParticipantRow = { person_id: string; match_id: string; team_id: string | null }
+  const allParticipants: ParticipantRow[] = []
+
+  // Get all PLAYER participations with team_id (any cadre - starting, subbed on, or bench)
+  for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Participants')
+        .select('person_id, match_id, team_id')
+        .eq('role', 'PLAYER')
+        .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) throw new Error(`tbl_Match_Participants (represented Poland): ${error.message}`)
+
+      const rows = (data ?? []) as ParticipantRow[]
+      allParticipants.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+
+  if (!allParticipants.length) {
+    return new Map()
+  }
+
+  const allMatchIds = [...new Set(allParticipants.map((p) => p.match_id))]
+  const nonWalkoverMatchIds = await getNonWalkoverMatchIdSet(supabase, allMatchIds)
+  const filteredParticipants = allParticipants.filter((p) => nonWalkoverMatchIds.has(p.match_id))
+  if (!filteredParticipants.length) {
+    return new Map()
+  }
+
+  // Get match data and identify Poland teams
+  const filteredMatchIds = [...new Set(filteredParticipants.map((p) => p.match_id))]
+  const matchPolandTeamIdMap = new Map<string, string>() // match_id -> poland_team_id
+  
+  for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Matches')
+      .select('id, home_team_id, away_team_id')
+      .in('id', filteredMatchIds.slice(i, i + CHUNK_SIZE))
+
+    if (error) throw new Error(`tbl_Matches (represented Poland): ${error.message}`)
+
+    const matchIds = (data ?? []) as Array<{ id: string; home_team_id: string; away_team_id: string }>
+    const teamIds = new Set<string>()
+    for (const m of matchIds ?? []) {
+      teamIds.add(m.home_team_id)
+      teamIds.add(m.away_team_id)
+    }
+    
+    if (!teamIds.size) continue
+
+    const teamCountryMap = new Map<string, string | null>()
+    const teamIdArray = [...teamIds]
+    for (let j = 0; j < teamIdArray.length; j += CHUNK_SIZE) {
+      const { data: teamData, error: teamError } = await supabase
+        .from('tbl_Teams')
+        .select('id, country_id')
+        .in('id', teamIdArray.slice(j, j + CHUNK_SIZE))
+
+      if (teamError) throw new Error(`tbl_Teams (represented Poland): ${teamError.message}`)
+
+      for (const team of (teamData ?? []) as Array<{ id: string; country_id: string | null }>) {
+        teamCountryMap.set(team.id, team.country_id)
+      }
+    }
+
+    // For each match, find which team is Poland
+    for (const match of matchIds ?? []) {
+      const homeCountryId = teamCountryMap.get(match.home_team_id) ?? null
+      const awayCountryId = teamCountryMap.get(match.away_team_id) ?? null
+      if (homeCountryId === polandCountryId) {
+        matchPolandTeamIdMap.set(match.id, match.home_team_id)
+      } else if (awayCountryId === polandCountryId) {
+        matchPolandTeamIdMap.set(match.id, match.away_team_id)
+      }
+    }
+  }
+
+  const playedAgainstPolandMatchIds = new Set(matchPolandTeamIdMap.keys())
+  const result = new Map<string, boolean>()
+  // Mark only participants whose team_id matches Poland's team on that match
+  for (const participant of filteredParticipants) {
+    const polandTeamId = matchPolandTeamIdMap.get(participant.match_id)
+    if (polandTeamId && participant.team_id === polandTeamId) {
+      result.set(participant.person_id, true)
+    }
+  }
+
+  return result
+}
+
+async function getPlayedAgainstPolandByPersonId(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  personIds: string[]
+): Promise<Map<string, boolean>> {
+  if (!personIds.length) {
+    return new Map()
+  }
+
+  const CHUNK_SIZE = 80
+  const PAGE_SIZE = 1000
+  type ParticipantRow = { person_id: string; match_id: string; is_starting: boolean | null; team_id: string | null }
+  const allParticipants: ParticipantRow[] = []
+
+  for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Participants')
+        .select('person_id, match_id, is_starting, team_id')
+        .eq('role', 'PLAYER')
+        .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) throw new Error(`tbl_Match_Participants (rivals): ${error.message}`)
+
+      const rows = (data ?? []) as ParticipantRow[]
+      allParticipants.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+
+  if (!allParticipants.length) {
+    return new Map()
+  }
+
+  const allMatchIds = [...new Set(allParticipants.map((p) => p.match_id))]
+  const nonWalkoverMatchIds = await getNonWalkoverMatchIdSet(supabase, allMatchIds)
+  const filteredParticipants = allParticipants.filter((p) => nonWalkoverMatchIds.has(p.match_id))
+  if (!filteredParticipants.length) {
+    return new Map()
+  }
+
+  const filteredMatchIds = [...new Set(filteredParticipants.map((p) => p.match_id))]
+  type SubEvent = { match_id: string; primary_person_id: string | null; secondary_person_id: string | null }
+  const allSubEvents: SubEvent[] = []
+  for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, primary_person_id, secondary_person_id')
+        .eq('event_type', 'SUBSTITUTION')
+        .in('match_id', filteredMatchIds.slice(i, i + CHUNK_SIZE))
+        .not('secondary_person_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) throw new Error(`tbl_Match_Events (rivals substitutions): ${error.message}`)
+
+      const rows = (data ?? []) as SubEvent[]
+      allSubEvents.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+
+  const subEnteredSet = new Set(
+    allSubEvents
+      .filter((event) => event.secondary_person_id)
+      .map((event) => `${event.match_id}:${event.secondary_person_id as string}`)
+  )
+  const playedParticipants = filteredParticipants.filter(
+    (participant) => participant.is_starting || subEnteredSet.has(`${participant.match_id}:${participant.person_id}`)
+  )
+  if (!playedParticipants.length) {
+    return new Map()
+  }
+
+  const playedMatchIds = [...new Set(playedParticipants.map((participant) => participant.match_id))]
+  const playedMatchMap = new Map<string, { home_team_id: string; away_team_id: string }>()
+  for (let i = 0; i < playedMatchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Matches')
+      .select('id, home_team_id, away_team_id')
+      .in('id', playedMatchIds.slice(i, i + CHUNK_SIZE))
+
+    if (error) throw new Error(`tbl_Matches (rivals): ${error.message}`)
+
+    for (const row of (data ?? []) as Array<{ id: string; home_team_id: string; away_team_id: string }>) {
+      playedMatchMap.set(row.id, { home_team_id: row.home_team_id, away_team_id: row.away_team_id })
+    }
+  }
+
+  const teamIds = [...new Set([...playedMatchMap.values()].flatMap((match) => [match.home_team_id, match.away_team_id]))]
+  if (!teamIds.length) {
+    return new Map()
+  }
+
+  const teamCountryMap = new Map<string, string | null>()
+  for (let i = 0; i < teamIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Teams')
+      .select('id, country_id')
+      .in('id', teamIds.slice(i, i + CHUNK_SIZE))
+
+    if (error) throw new Error(`tbl_Teams (rivals): ${error.message}`)
+
+    for (const row of (data ?? []) as Array<{ id: string; country_id: string | null }>) {
+      teamCountryMap.set(row.id, row.country_id)
+    }
+  }
+
+  const polandCountryId = await getPolandCountryId(supabase)
+  if (!polandCountryId) {
+    return new Map()
+  }
+
+  // Build map: match_id -> poland_team_id (the team that represents Poland in that match)
+  const matchPolandTeamIdMap = new Map<string, string>()
+  for (const [matchId, match] of playedMatchMap) {
+    const homeCountryId = teamCountryMap.get(match.home_team_id) ?? null
+    const awayCountryId = teamCountryMap.get(match.away_team_id) ?? null
+    if (homeCountryId === polandCountryId) {
+      matchPolandTeamIdMap.set(matchId, match.home_team_id)
+    } else if (awayCountryId === polandCountryId) {
+      matchPolandTeamIdMap.set(matchId, match.away_team_id)
+    }
+  }
+
+  const playedAgainstPolandMatchIds = new Set(matchPolandTeamIdMap.keys())
+  const result = new Map<string, boolean>()
+  // Only mark participants who:
+  // 1. Played in a match where Poland was involved
+  // 2. Were on the OPPOSING team (not Poland's team)
+  for (const participant of playedParticipants) {
+    if (!playedAgainstPolandMatchIds.has(participant.match_id)) continue
+    
+    const polandTeamId = matchPolandTeamIdMap.get(participant.match_id)
+    if (!polandTeamId) continue
+    
+    // Only include if participant was on a different team than Poland
+    if (participant.team_id && participant.team_id !== polandTeamId) {
+      result.set(participant.person_id, true)
+    }
+  }
+
+  return result
 }
 
 async function getCoachedCountryNamesByPersonId(
@@ -1207,6 +1482,10 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
     supabase,
     people.map((person) => person.id)
   )
+  const representedCountryIdsByPersonId = await getExplicitRepresentedCountryIdsByPersonId(
+    supabase,
+    people.map((person) => person.id)
+  )
   const coachedCountryDataByPersonId = await getCoachedCountryDataByPersonId(
     supabase,
     people.map((person) => person.id)
@@ -1229,10 +1508,15 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
     getPersonStats(supabase, playerIds),
     getCoachResultStatsByPersonId(supabase, coachIds),
   ])
+  const [hasPlayedAgainstPolandByPersonId, hasRepresentedPolandByPersonId] = await Promise.all([
+    getPlayedAgainstPolandByPersonId(supabase, playerIds),
+    getRepresentedPolandByPersonId(supabase, playerIds),
+  ])
 
   return people
     .map((person) => {
       const representedData = representedCountryDataByPersonId.get(person.id) ?? []
+      const representedIds = representedCountryIdsByPersonId.get(person.id) ?? []
       const fallbackName = person.birth_country_id ? (countryMap.get(person.birth_country_id) ?? null) : null
       const fallbackFifaCode = person.birth_country_id ? (countryFifaCodeMap.get(person.birth_country_id) ?? null) : null
       const representedNames = representedData.length ? representedData.map((d) => d.name) : (fallbackName ? [fallbackName] : [])
@@ -1264,6 +1548,8 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
           : null,
         represented_country_names: representedNames,
         represented_country_fifa_codes: representedFifaCodes,
+        has_represented_poland: hasRepresentedPolandByPersonId.get(person.id) ?? false,
+        has_played_against_poland: hasPlayedAgainstPolandByPersonId.get(person.id) ?? false,
         coached_country_names: coachedData.names,
         coached_country_fifa_codes: coachedData.fifaCodes,
         roles: rolesByPersonId.get(person.id) ?? [],
@@ -1544,3 +1830,4 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     }),
   }
 }
+
