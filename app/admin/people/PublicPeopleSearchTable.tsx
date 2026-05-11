@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import CountryFlag from '@/components/CountryFlag'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
-import type { AdminPersonListItem } from '@/lib/db/people'
+import type { AdminPersonListItem, CoachCompetitionFilterKey, CoachStageFilterKey } from '@/lib/db/people'
 import { getPersonDisplayName } from '@/lib/db/people'
 import PitchIcon from '@/components/icons/PitchIcon'
 import ClockIcon from '@/components/icons/ClockIcon'
@@ -15,6 +15,17 @@ import SortableStatHeader from '@/components/admin/SortableStatHeader'
 export type PeopleCardVariant = 'players' | 'coaches' | 'referees'
 type PublicPlayerMode = 'poland' | 'rivals'
 type PublicCoachMode = 'poland' | 'rivals'
+type CoachDisplayMode = 'tenure' | 'stats'
+type VisibleCoachCompetitionFilter = Exclude<CoachCompetitionFilterKey, 'OTHER'>
+type CoachComputedStats = {
+  coach_match_count: number
+  coach_wins: number
+  coach_draws: number
+  coach_losses: number
+  coach_goals_scored: number
+  coach_goals_conceded: number
+  coach_points_per_match: number
+}
 
 function getAgeDisplay(person: AdminPersonListItem): string | null {
   if (!person.birth_date) return null
@@ -28,6 +39,21 @@ function getAgeDisplay(person: AdminPersonListItem): string | null {
 
 function normalizeText(v: string) {
   return v.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase().trim()
+}
+
+function formatMonthYear(dateStr: string | null | undefined): string {
+  if (!dateStr) return '—'
+  const [year, month] = dateStr.split('-')
+  if (!year || !month) return '—'
+  return `${month}.${year}`
+}
+
+function getCoachTenureLabel(person: AdminPersonListItem): string {
+  const from = formatMonthYear(person.coach_poland_first_match_date)
+  const to = formatMonthYear(person.coach_poland_last_match_date)
+  if (from === '—' && to === '—') return '—'
+  if (from === to) return from
+  return `${from} - ${to}`
 }
 
 export default function PublicPeopleSearchTable({
@@ -56,9 +82,18 @@ export default function PublicPeopleSearchTable({
   const [countryFilter, setCountryFilter] = useState(defaultCountryFilter ?? '')
   const [playerMode, setPlayerMode] = useState<PublicPlayerMode>(publicPlayerMode ?? 'poland')
   const [coachMode, setCoachMode] = useState<PublicCoachMode>(publicCoachMode ?? 'poland')
+  const [coachDisplayMode, setCoachDisplayMode] = useState<CoachDisplayMode>(
+    variant === 'coaches' && publicCoachMode === 'poland' ? 'tenure' : 'stats'
+  )
+  const [competitionFilters, setCompetitionFilters] = useState<VisibleCoachCompetitionFilter[]>([])
+  const [stageFilters, setStageFilters] = useState<CoachStageFilterKey[]>([])
   const [visibleCount, setVisibleCount] = useState(50)
   const isPublicPlayersView = variant === 'players' && Boolean(publicPlayerMode)
   const isPublicCoachesView = variant === 'coaches' && Boolean(publicCoachMode)
+  const isPolandCoachView = isPublicCoachesView && coachMode === 'poland'
+  const showCoachStats = !(isPolandCoachView && coachDisplayMode === 'tenure')
+  const allCompetitionsActive = competitionFilters.length === 0
+  const allStagesActive = stageFilters.length === 0
 
   useEffect(() => {
     if (publicPlayerMode) {
@@ -71,6 +106,17 @@ export default function PublicPeopleSearchTable({
       setCoachMode(publicCoachMode)
     }
   }, [publicCoachMode])
+
+  useEffect(() => {
+    if (!isPublicCoachesView) return
+    setCoachDisplayMode(coachMode === 'poland' ? 'tenure' : 'stats')
+  }, [coachMode, isPublicCoachesView])
+
+  useEffect(() => {
+    if (!isPolandCoachView) return
+    setCompetitionFilters([])
+    setStageFilters([])
+  }, [isPolandCoachView])
 
   const countryOptions = useMemo(() => {
     if (isPublicPlayersView || isPublicCoachesView) return []
@@ -106,6 +152,62 @@ export default function PublicPeopleSearchTable({
     return people
   }, [isPublicPlayersView, isPublicCoachesView, people, playerMode, coachMode])
 
+  const filteredPolandCoachStatsByPersonId = useMemo(() => {
+    const map = new Map<string, CoachComputedStats>()
+    if (!isPolandCoachView || !showCoachStats) return map
+
+    const activeCompetitionSet = new Set<VisibleCoachCompetitionFilter>(competitionFilters)
+    const activeStageSet = new Set<CoachStageFilterKey>(stageFilters)
+
+    for (const person of basePeople) {
+      const rows = person.coach_poland_filter_matches ?? []
+      const filteredRows = rows.filter((row) => {
+        const competitionAllowed = allCompetitionsActive
+          ? true
+          : (row.competition_key !== 'OTHER' && activeCompetitionSet.has(row.competition_key))
+        const stageIndependentCompetition = row.competition_key === 'FRIENDLY' || row.competition_key === 'NATIONS_LEAGUE'
+        const stageAllowed = stageIndependentCompetition ? true : (allStagesActive || activeStageSet.has(row.stage_key))
+        return competitionAllowed && stageAllowed
+      })
+
+      let wins = 0
+      let draws = 0
+      let losses = 0
+      let goalsScored = 0
+      let goalsConceded = 0
+      for (const row of filteredRows) {
+        goalsScored += row.goals_for
+        goalsConceded += row.goals_against
+        if (row.outcome === 'W') wins += 1
+        else if (row.outcome === 'D') draws += 1
+        else if (row.outcome === 'L') losses += 1
+      }
+
+      const matchCount = filteredRows.length
+      const pointsPerMatch = matchCount > 0 ? Number((((wins * 3) + draws) / matchCount).toFixed(2)) : 0
+      map.set(person.id, {
+        coach_match_count: matchCount,
+        coach_wins: wins,
+        coach_draws: draws,
+        coach_losses: losses,
+        coach_goals_scored: goalsScored,
+        coach_goals_conceded: goalsConceded,
+        coach_points_per_match: pointsPerMatch,
+      })
+    }
+
+    return map
+  }, [basePeople, competitionFilters, stageFilters, allCompetitionsActive, allStagesActive, isPolandCoachView, showCoachStats])
+
+  const getDisplayedCoachStatValue = (person: AdminPersonListItem, key: CoachSortKey): number => {
+    if (isPolandCoachView && showCoachStats) {
+      const stats = filteredPolandCoachStatsByPersonId.get(person.id)
+      if (!stats) return 0
+      return stats[key]
+    }
+    return getCoachStatValue(person, key)
+  }
+
   const filtered = useMemo(() => {
     const q = normalizeText(query)
     let base = basePeople
@@ -134,7 +236,18 @@ export default function PublicPeopleSearchTable({
     }
 
     if (variant === 'coaches') {
-      return [...base].sort((a, b) => getCoachStatValue(b, coachSortKey) - getCoachStatValue(a, coachSortKey))
+      if (isPolandCoachView && coachDisplayMode === 'tenure') {
+        return [...base].sort((a, b) => {
+          const aDate = a.coach_poland_first_match_date ?? '9999-12-31'
+          const bDate = b.coach_poland_first_match_date ?? '9999-12-31'
+          if (aDate !== bDate) return bDate.localeCompare(aDate)
+          const aEnd = a.coach_poland_last_match_date ?? '9999-12-31'
+          const bEnd = b.coach_poland_last_match_date ?? '9999-12-31'
+          if (aEnd !== bEnd) return bEnd.localeCompare(aEnd)
+          return getPersonDisplayName(a).localeCompare(getPersonDisplayName(b), 'pl')
+        })
+      }
+      return [...base].sort((a, b) => getDisplayedCoachStatValue(b, coachSortKey) - getDisplayedCoachStatValue(a, coachSortKey))
     }
     if (variant === 'referees') {
       return [...base].sort((a, b) => (b[refereeSortKey] as number) - (a[refereeSortKey] as number))
@@ -147,11 +260,57 @@ export default function PublicPeopleSearchTable({
       })
     }
     return [...base].sort((a, b) => (b[sortKey] as number) - (a[sortKey] as number))
-  }, [basePeople, query, sortKey, coachSortKey, refereeSortKey, countryFilter, variant, isPublicPlayersView, isPublicCoachesView])
+  }, [basePeople, query, sortKey, coachSortKey, refereeSortKey, countryFilter, variant, isPublicPlayersView, isPublicCoachesView, coachDisplayMode, isPolandCoachView, filteredPolandCoachStatsByPersonId])
 
   useEffect(() => {
     setVisibleCount(50)
-  }, [query, countryFilter, sortKey, coachSortKey, refereeSortKey, variant, playerMode, coachMode])
+  }, [query, countryFilter, sortKey, coachSortKey, refereeSortKey, variant, playerMode, coachMode, coachDisplayMode, competitionFilters, stageFilters])
+
+  function StatsBarsIcon({ className }: { className?: string }) {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+        <rect x="4" y="12" width="3" height="8" rx="1" className="fill-current" />
+        <rect x="10" y="8" width="3" height="12" rx="1" className="fill-current" />
+        <rect x="16" y="4" width="3" height="16" rx="1" className="fill-current" />
+      </svg>
+    )
+  }
+
+  function ListIcon({ className }: { className?: string }) {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+        <rect x="4" y="6" width="16" height="2" rx="1" className="fill-current" />
+        <rect x="4" y="11" width="16" height="2" rx="1" className="fill-current" />
+        <rect x="4" y="16" width="16" height="2" rx="1" className="fill-current" />
+      </svg>
+    )
+  }
+
+  function FilterIcon({ className }: { className?: string }) {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" className={className}>
+        <path d="M4 6h16l-6.2 7.2v4.6l-3.6 1.8v-6.4L4 6z" className="fill-current" />
+      </svg>
+    )
+  }
+
+  function toggleCompetitionFilter(key: VisibleCoachCompetitionFilter) {
+    setCompetitionFilters((current) => {
+      if (current.includes(key)) {
+        return current.filter((item) => item !== key)
+      }
+      return [...current, key]
+    })
+  }
+
+  function toggleStageFilter(key: CoachStageFilterKey) {
+    setStageFilters((current) => {
+      if (current.includes(key)) {
+        return current.filter((item) => item !== key)
+      }
+      return [...current, key]
+    })
+  }
 
   const displayed = filtered.slice(0, visibleCount)
 
@@ -193,6 +352,21 @@ export default function PublicPeopleSearchTable({
     <div className="space-y-3">
       {/* Search bar and filter — blends with green card */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        {isPublicCoachesView && isPolandCoachView ? (
+          <button
+            type="button"
+            onClick={() => setCoachDisplayMode((current) => (current === 'stats' ? 'tenure' : 'stats'))}
+            title={coachDisplayMode === 'stats' ? 'Pokaż listę kadencji' : 'Pokaż widok statystyk'}
+            aria-label={coachDisplayMode === 'stats' ? 'Pokaż listę kadencji' : 'Pokaż widok statystyk'}
+            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center self-start rounded-lg border transition-colors ${coachDisplayMode === 'stats'
+              ? 'border-emerald-300/80 bg-emerald-700/55 text-emerald-50 shadow-[0_0_0_1px_rgba(110,231,183,0.2)]'
+              : 'border-emerald-700/60 bg-emerald-950/50 text-emerald-200/80 hover:border-emerald-400/70 hover:text-emerald-50'
+            }`}
+          >
+            {coachDisplayMode === 'stats' ? <ListIcon className="h-4 w-4" /> : <StatsBarsIcon className="h-4 w-4" />}
+          </button>
+        ) : null}
+
         <div className="flex-1">
           <input
             type="text"
@@ -228,7 +402,8 @@ export default function PublicPeopleSearchTable({
             </button>
           </div>
         ) : isPublicCoachesView ? (
-          <div className="grid w-full grid-cols-2 gap-2 sm:w-72">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:flex-nowrap">
+            <div className="grid w-full grid-cols-2 gap-2 sm:w-72">
             <button
               type="button"
               onClick={() => setCoachMode('poland')}
@@ -251,6 +426,7 @@ export default function PublicPeopleSearchTable({
             >
               Rywale
             </button>
+            </div>
           </div>
         ) : (
           <div className="w-full sm:w-52">
@@ -270,6 +446,100 @@ export default function PublicPeopleSearchTable({
         )}
       </div>
 
+      {isPolandCoachView && showCoachStats ? (
+        <div className="flex items-center gap-2.5 rounded-lg border border-neutral-700/70 bg-neutral-900/35 p-2.5">
+          <button
+            type="button"
+            onClick={() => { setCompetitionFilters([]); setStageFilters([]) }}
+            aria-pressed={allCompetitionsActive && allStagesActive}
+            title="Wyczyść wszystkie filtry"
+            aria-label="Wyczyść wszystkie filtry"
+            className={`inline-flex h-[2.1rem] w-[2.1rem] shrink-0 items-center justify-center rounded border px-0 py-0 transition-colors ${allCompetitionsActive && allStagesActive
+              ? 'border-emerald-900/80 bg-emerald-800 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.35),0_1px_2px_rgba(0,0,0,0.35)]'
+              : 'border-emerald-300/45 bg-emerald-600/60 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.2)] hover:bg-emerald-600/70'
+            }`}
+          >
+            <FilterIcon className="h-[1.5rem] w-[1.5rem] shrink-0" />
+          </button>
+          <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setCompetitionFilters([])}
+              aria-pressed={allCompetitionsActive}
+              title="Wszystkie mecze"
+              aria-label="Wszystkie mecze"
+              className={`inline-flex h-[1.05rem] w-[1.05rem] items-center justify-center rounded border px-0 py-0 text-[10px] leading-none transition-colors ${allCompetitionsActive
+                ? 'border-emerald-900/80 bg-emerald-800 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.35),0_1px_2px_rgba(0,0,0,0.35)]'
+                : 'border-emerald-300/45 bg-emerald-600/60 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.2)] hover:bg-emerald-600/70'
+              }`}
+            >
+              <FilterIcon className="h-3.5 w-3.5 shrink-0" />
+            </button>
+            {([
+              ['WORLD_CUP', 'MŚ'],
+              ['EURO', 'ME'],
+              ['FRIENDLY', 'T'],
+              ['NATIONS_LEAGUE', 'LN'],
+            ] as Array<[VisibleCoachCompetitionFilter, string]>).map(([key, label]) => {
+              const active = competitionFilters.includes(key)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleCompetitionFilter(key)}
+                  aria-pressed={active}
+                  className={`inline-flex h-[1.05rem] items-center justify-center rounded border px-1 py-0 text-[10px] leading-none transition-colors ${active
+                    ? 'border-emerald-900/80 bg-emerald-800 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.35),0_1px_2px_rgba(0,0,0,0.35)]'
+                    : 'border-emerald-300/45 bg-emerald-600/60 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.2)] hover:bg-emerald-600/70'
+                  }`}
+                >
+                  <span className="inline-block scale-75 leading-none">{label}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setStageFilters([])}
+              aria-pressed={allStagesActive}
+              title="Wszystkie fazy"
+              aria-label="Wszystkie fazy"
+              className={`inline-flex h-[1.05rem] w-[1.05rem] items-center justify-center rounded border px-0 py-0 text-[10px] leading-none transition-colors ${allStagesActive
+                ? 'border-emerald-900/80 bg-emerald-800 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.35),0_1px_2px_rgba(0,0,0,0.35)]'
+                : 'border-emerald-300/45 bg-emerald-600/60 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.2)] hover:bg-emerald-600/70'
+              }`}
+            >
+              <FilterIcon className="h-3.5 w-3.5 shrink-0" />
+            </button>
+            {([
+              ['TOURNAMENT', 'Turniej'],
+                ['QUALIFIERS', 'El.'],
+              ['PLAYOFFS', 'Baraże'],
+            ] as Array<[CoachStageFilterKey, string]>).map(([key, label]) => {
+              const active = stageFilters.includes(key)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleStageFilter(key)}
+                  aria-pressed={active}
+                  className={`inline-flex h-[1.05rem] items-center justify-center rounded border px-1 py-0 text-[10px] leading-none transition-colors ${active
+                    ? 'border-emerald-900/80 bg-emerald-800 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.35),0_1px_2px_rgba(0,0,0,0.35)]'
+                    : 'border-emerald-300/45 bg-emerald-600/60 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.2)] hover:bg-emerald-600/70'
+                  }`}
+                >
+                  <span className="inline-block scale-75 leading-none">{label}</span>
+                </button>
+              )
+            })}
+          </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* People table */}
       <div className="overflow-hidden rounded-xl border border-neutral-800">
         <table className="w-full border-collapse text-sm table-auto">
@@ -277,15 +547,17 @@ export default function PublicPeopleSearchTable({
             <col className="w-8" />
             <col className="min-w-[440px]" />
             {variant === 'coaches' ? (
-              <>
-                <col className="w-[4.5rem]" />
-                <col className="w-[4.5rem]" />
-                <col className="w-[4.5rem]" />
-                <col className="w-[4.5rem]" />
-                <col className="w-[4.5rem]" />
-                <col className="w-[4.5rem]" />
-                <col className="w-[5rem]" />
-              </>
+              showCoachStats ? (
+                <>
+                  <col className="w-[4.5rem]" />
+                  <col className="w-[4.5rem]" />
+                  <col className="w-[4.5rem]" />
+                  <col className="w-[4.5rem]" />
+                  <col className="w-[4.5rem]" />
+                  <col className="w-[4.5rem]" />
+                  <col className="w-[5rem]" />
+                </>
+              ) : null
             ) : variant === 'referees' ? (
               <>
                 <col className="w-[4.5rem]" />
@@ -310,10 +582,11 @@ export default function PublicPeopleSearchTable({
 
           {/* Header row */}
           <thead>
-            <tr className="border-b border-neutral-800 bg-neutral-900 text-left">
+            <tr className="h-[52px] border-b border-neutral-800 bg-neutral-900 text-left">
               <th className="px-4 py-3 font-medium text-neutral-400" />
               <th className="px-4 py-3 font-medium text-neutral-400" />
               {variant === 'coaches' ? (
+                showCoachStats ? (
                 <>
                   <th className="px-1 py-3 text-center font-medium text-neutral-400">
                     <SortableStatHeader active={coachSortKey === 'coach_match_count'} onClick={() => setCoachSortKey('coach_match_count')} icon={<span className="text-xs font-bold">M</span>} label={coachMode === 'rivals' ? 'Mecze przeciwko Polsce' : 'Mecze'} />
@@ -337,6 +610,7 @@ export default function PublicPeopleSearchTable({
                     <SortableStatHeader active={coachSortKey === 'coach_points_per_match'} onClick={() => setCoachSortKey('coach_points_per_match')} icon={<span className="text-xs font-bold">ŚR.P.</span>} label="Średnia liczba punktów na mecz" />
                   </th>
                 </>
+                ) : null
               ) : variant === 'referees' ? (
                 <>
                   <th className="px-1 py-3 text-center font-medium text-neutral-400">
@@ -388,7 +662,7 @@ export default function PublicPeopleSearchTable({
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={variant === 'coaches' ? 9 : variant === 'referees' ? 8 : 9} className="px-4 py-8 text-center text-sm text-neutral-500">
+                <td colSpan={variant === 'coaches' ? (showCoachStats ? 9 : 2) : variant === 'referees' ? 8 : 9} className="px-4 py-8 text-center text-sm text-neutral-500">
                   {query ? 'Brak osób pasujących do wyszukiwanej frazy.' : 'Brak osób w bazie danych.'}
                 </td>
               </tr>
@@ -397,54 +671,98 @@ export default function PublicPeopleSearchTable({
                 <tr key={person.id} className="table-data-row border-b border-neutral-800 last:border-b-0 bg-neutral-950 transition-colors hover:bg-neutral-900/60">
                   <td className="pl-4 pr-1 py-3 text-neutral-500 text-sm">{i + 1}</td>
                   <td className="pl-1 pr-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <SmartPrefetchLink
-                        href={`${basePath}/${person.id}`}
-                        className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-                      >
-                        {getPersonDisplayName(person)}
-                        {person.death_date && (
-                          <span className="font-black text-neutral-500">&#x2020;</span>
-                        )}
-                        {getAgeDisplay(person) && (
-                          <span className="text-neutral-500 font-normal">{getAgeDisplay(person)}</span>
-                        )}
-                      </SmartPrefetchLink>
-                      {variant === 'coaches' ? (
-                        isPublicCoachesView && coachMode === 'poland' ? (
-                          person.birth_country_name ? (
+                    {isPolandCoachView && coachDisplayMode === 'tenure' ? (
+                      <div className="grid w-full grid-cols-[minmax(0,1fr)_11.5rem_minmax(0,1fr)] items-center gap-2.5">
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <SmartPrefetchLink
+                            href={`${basePath}/${person.id}`}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+                          >
+                            {getPersonDisplayName(person)}
+                            {person.death_date && (
+                              <span className="font-black text-neutral-500">&#x2020;</span>
+                            )}
+                            {getAgeDisplay(person) && (
+                              <span className="text-neutral-500 font-normal">{getAgeDisplay(person)}</span>
+                            )}
+                          </SmartPrefetchLink>
+                          {person.birth_country_name ? (
                             <CountryFlag
                               fifaCode={person.birth_country_fifa_code ?? null}
                               countryName={person.birth_country_name}
                               className="h-3.5 w-[21px] shrink-0"
                             />
+                          ) : null}
+                        </div>
+
+                        <div className="flex justify-center">
+                          <span className="stat-badge inline-flex w-[11.5rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-2 py-0.5 text-center shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.96rem] leading-none font-semibold text-neutral-200 light:text-neutral-900">
+                            {getCoachTenureLabel(person)}
+                          </span>
+                        </div>
+
+                        <div className="flex justify-end">
+                          <span
+                            title="Mecze | Z-R-P | Gole"
+                            className="stat-badge inline-flex w-[16.5rem] shrink-0 items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-2 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.88rem] font-semibold tabular-nums text-neutral-200 light:text-neutral-900"
+                          >
+                            <span className="w-[2.4rem] text-center">{person.coach_poland_match_count}</span>
+                            <span className="w-4 text-center text-neutral-500 light:text-neutral-400">|</span>
+                            <span className="w-[5.4rem] text-center">{person.coach_poland_wins}<span className="mx-[2px] font-normal text-neutral-500 light:text-neutral-400">-</span>{person.coach_poland_draws}<span className="mx-[2px] font-normal text-neutral-500 light:text-neutral-400">-</span>{person.coach_poland_losses}</span>
+                            <span className="w-4 text-center text-neutral-500 light:text-neutral-400">|</span>
+                            <span className="w-[5.4rem] text-center">{person.coach_poland_goals_scored}<span className="mx-[2px] font-normal text-neutral-500 light:text-neutral-400">-</span>{person.coach_poland_goals_conceded}</span>
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex w-full items-center gap-2.5">
+                        <SmartPrefetchLink
+                          href={`${basePath}/${person.id}`}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+                        >
+                          {getPersonDisplayName(person)}
+                          {person.death_date && (
+                            <span className="font-black text-neutral-500">&#x2020;</span>
+                          )}
+                          {getAgeDisplay(person) && (
+                            <span className="text-neutral-500 font-normal">{getAgeDisplay(person)}</span>
+                          )}
+                        </SmartPrefetchLink>
+                        {variant === 'coaches' ? (
+                          isPublicCoachesView && coachMode === 'poland' ? (
+                            person.birth_country_name ? (
+                              <CountryFlag
+                                fifaCode={person.birth_country_fifa_code ?? null}
+                                countryName={person.birth_country_name}
+                                className="h-3.5 w-[21px] shrink-0"
+                              />
+                            ) : null
+                          ) : person.coached_country_names.length > 0 ? (
+                            <div className="flex items-center gap-0.5">
+                              {person.coached_country_names
+                                .map((name, idx) => ({ name, fifaCode: person.coached_country_fifa_codes?.[idx] ?? null }))
+                                .filter((country) => country.name !== 'Polska')
+                                .map((country, idx) => (
+                                  <CountryFlag
+                                    key={`${country.name}-${idx}`}
+                                    fifaCode={country.fifaCode}
+                                    countryName={country.name}
+                                    className="h-3.5 w-[21px] shrink-0"
+                                  />
+                                ))}
+                            </div>
                           ) : null
-                        ) : person.coached_country_names.length > 0 ? (
-                          <div className="flex items-center gap-0.5">
-                            {person.coached_country_names
-                              .map((name, idx) => ({ name, fifaCode: person.coached_country_fifa_codes?.[idx] ?? null }))
-                              .filter((country) => country.name !== 'Polska')
-                              .map((country, idx) => (
+                        ) : (
+                          person.represented_country_fifa_codes.length > 0 ? (
+                            <div className="flex items-center gap-0.5">
+                              {person.represented_country_names.map((name, idx) => (
                                 <CountryFlag
-                                  key={`${country.name}-${idx}`}
-                                  fifaCode={country.fifaCode}
-                                  countryName={country.name}
+                                  key={`${name}-${idx}`}
+                                  fifaCode={person.represented_country_fifa_codes[idx] ?? null}
+                                  countryName={name}
                                   className="h-3.5 w-[21px] shrink-0"
                                 />
                               ))}
-                          </div>
-                        ) : null
-                      ) : (
-                        person.represented_country_fifa_codes.length > 0 ? (
-                          <div className="flex items-center gap-0.5">
-                            {person.represented_country_names.map((name, idx) => (
-                              <CountryFlag
-                                key={`${name}-${idx}`}
-                                fifaCode={person.represented_country_fifa_codes[idx] ?? null}
-                                countryName={name}
-                                className="h-3.5 w-[21px] shrink-0"
-                              />
-                            ))}
                               {isPublicPlayersView && playerMode === 'poland' && person.birth_country_name && person.birth_country_name !== 'Polska' && (
                                 <>
                                   <span className="mx-0.5 text-neutral-600 text-[10px]">·</span>
@@ -456,34 +774,37 @@ export default function PublicPeopleSearchTable({
                                 </>
                               )}
                             </div>
-                        ) : null
-                      )}
-                    </div>
+                          ) : null
+                        )}
+                      </div>
+                    )}
                   </td>
                   {variant === 'coaches' ? (
+                    showCoachStats ? (
                     <>
                       <td className="px-1 py-3 text-center">
-                        {renderStatBadge(getCoachStatValue(person, 'coach_match_count'))}
+                        {renderStatBadge(getDisplayedCoachStatValue(person, 'coach_match_count'))}
                       </td>
                       <td className="px-1 py-3 text-center">
-                        {renderStatBadge(getCoachStatValue(person, 'coach_wins'))}
+                        {renderStatBadge(getDisplayedCoachStatValue(person, 'coach_wins'))}
                       </td>
                       <td className="px-1 py-3 text-center">
-                        {renderStatBadge(getCoachStatValue(person, 'coach_draws'))}
+                        {renderStatBadge(getDisplayedCoachStatValue(person, 'coach_draws'))}
                       </td>
                       <td className="px-1 py-3 text-center">
-                        {renderStatBadge(getCoachStatValue(person, 'coach_losses'))}
+                        {renderStatBadge(getDisplayedCoachStatValue(person, 'coach_losses'))}
                       </td>
                       <td className="px-1 py-3 text-center">
-                        {renderStatBadge(getCoachStatValue(person, 'coach_goals_scored'))}
+                        {renderStatBadge(getDisplayedCoachStatValue(person, 'coach_goals_scored'))}
                       </td>
                       <td className="px-1 py-3 text-center">
-                        {renderStatBadge(getCoachStatValue(person, 'coach_goals_conceded'))}
+                        {renderStatBadge(getDisplayedCoachStatValue(person, 'coach_goals_conceded'))}
                       </td>
                       <td className="px-1 py-3 text-center">
-                        {renderCoachPointsPerMatchBadge(getCoachStatValue(person, 'coach_points_per_match'))}
+                        {renderCoachPointsPerMatchBadge(getDisplayedCoachStatValue(person, 'coach_points_per_match'))}
                       </td>
                     </>
+                    ) : null
                   ) : variant === 'referees' ? (
                     <>
                       <td className="px-1 py-3 text-center">

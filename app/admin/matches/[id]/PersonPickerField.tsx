@@ -58,7 +58,9 @@ export default function PersonPickerField({
   const [searchText, setSearchText] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isFetching, setIsFetching] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
   const containerRef = useRef<HTMLDivElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   const debouncedSearch = useDebounce(searchText, 300)
 
@@ -181,6 +183,7 @@ export default function PersonPickerField({
             onChange={(e) => {
               const nextValue = e.target.value
               setSearchText(nextValue)
+              setActiveIndex(-1)
               if (value && nextValue.trim() === '') onChange('')
               setIsOpen(true)
             }}
@@ -190,11 +193,35 @@ export default function PersonPickerField({
                 e.preventDefault()
                 setIsOpen(false)
                 setSearchText('')
+                setActiveIndex(-1)
                 return
               }
               if ((e.key === 'Backspace' || e.key === 'Delete') && value && searchText.trim() === '') {
                 e.preventDefault()
                 clearSelection()
+                return
+              }
+              if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                if (!isOpen) { setIsOpen(true); return }
+                setActiveIndex((prev) => {
+                  const next = prev < filteredPeople.length - 1 ? prev + 1 : prev
+                  setTimeout(() => {
+                    listRef.current?.children[next]?.scrollIntoView({ block: 'nearest' })
+                  }, 0)
+                  return next
+                })
+                return
+              }
+              if (e.key === 'ArrowUp') {
+                e.preventDefault()
+                setActiveIndex((prev) => {
+                  const next = prev > 0 ? prev - 1 : 0
+                  setTimeout(() => {
+                    listRef.current?.children[next]?.scrollIntoView({ block: 'nearest' })
+                  }, 0)
+                  return next
+                })
                 return
               }
               if (e.key !== 'Enter') return
@@ -207,13 +234,16 @@ export default function PersonPickerField({
                 return
               }
               e.preventDefault()
-              handleSelect(filteredPeople[0]?.id ?? '')
+              const target = activeIndex >= 0 ? filteredPeople[activeIndex] : filteredPeople[0]
+              handleSelect(target?.id ?? '')
+              setActiveIndex(-1)
             }}
             onBlur={() => {
               setTimeout(() => {
                 if (!selectedPerson()) setSearchText('')
                 setIsOpen(false)
-              }, 100)
+                setActiveIndex(-1)
+              }, 150)
             }}
             placeholder={placeholder}
             className={`w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm ${
@@ -234,14 +264,16 @@ export default function PersonPickerField({
         </div>
 
         {isOpen && (
-          <div className="absolute left-0 top-full z-10 mt-1 max-h-80 min-w-full w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-neutral-700 bg-neutral-900 shadow-lg">
+          <div ref={listRef} className="absolute left-0 top-full z-10 mt-1 max-h-80 min-w-full w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-neutral-700 bg-neutral-900 shadow-lg">
             {filteredPeople.length > 0 ? (
-              filteredPeople.map((person) => (
+              filteredPeople.map((person, idx) => (
                 <button
                   key={person.id}
                   type="button"
-                  onClick={() => handleSelect(person.id)}
-                  className="w-full border-b border-neutral-800 px-3 py-1.5 text-left text-sm text-neutral-100 hover:bg-neutral-800 last:border-b-0"
+                  onMouseDown={(e) => { e.preventDefault(); handleSelect(person.id); setActiveIndex(-1) }}
+                  className={`w-full border-b border-neutral-800 px-3 py-1.5 text-left text-sm text-neutral-100 last:border-b-0 ${
+                    idx === activeIndex ? 'bg-neutral-700' : 'hover:bg-neutral-800'
+                  }`}
                 >
                   {person.label}
                 </button>
