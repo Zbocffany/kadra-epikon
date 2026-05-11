@@ -2168,15 +2168,14 @@ async function getPersonStats(
     const subOff = subOffByMatchPerson.get(`${p.match_id}:${p.person_id}`) ?? null
 
     const entryMin = isStarter ? 0 : subOn!.minute
-    const entryExtra = isStarter ? 0 : subOn!.extra
     const exitMin = subOff ? subOff.minute : matchRegularEnd
     const exitExtra = subOff ? subOff.extra : 0
 
-    // If entering during any period (minute > 0), shift effectiveEntry back by 1
-    // to properly count minutes from entry point to exit.
+    // Count full minute blocks from entry minute onward.
     const effectiveEntry = entryMin > 0 ? entryMin - 1 : entryMin
-    // If exiting during injury time, cap to the period's regular end.
-    const effectiveExit = Math.min(exitExtra > 0 ? exitMin : exitMin, matchRegularEnd)
+    // Exiting in a regular minute (e.g. 46) means last played minute is previous one (45).
+    const effectiveExitBase = subOff ? (exitExtra > 0 ? exitMin : exitMin - 1) : matchRegularEnd
+    const effectiveExit = Math.min(Math.max(0, effectiveExitBase), matchRegularEnd)
 
     stats.minute_count += Math.max(0, effectiveExit - effectiveEntry)
   }
@@ -2283,15 +2282,14 @@ async function getPlayerMinutes(
     const subOff = subOffByMatch.get(p.match_id) ?? null
 
     const entryMin = isStarter ? 0 : subOn!.minute
-    const entryExtra = isStarter ? 0 : subOn!.extra
     const exitMin = subOff ? subOff.minute : matchRegularEnd
     const exitExtra = subOff ? subOff.extra : 0
 
-    // If entering during any period (minute > 0), shift effectiveEntry back by 1
-    // to properly count minutes from entry point to exit.
+    // Count full minute blocks from entry minute onward.
     const effectiveEntry = entryMin > 0 ? entryMin - 1 : entryMin
-    // If exiting during injury time, cap to the period's regular end.
-    const effectiveExit = Math.min(exitExtra > 0 ? exitMin : exitMin, matchRegularEnd)
+    // Exiting in a regular minute (e.g. 46) means last played minute is previous one (45).
+    const effectiveExitBase = subOff ? (exitExtra > 0 ? exitMin : exitMin - 1) : matchRegularEnd
+    const effectiveExit = Math.min(Math.max(0, effectiveExitBase), matchRegularEnd)
 
     totalMinutes += Math.max(0, effectiveExit - effectiveEntry)
   }

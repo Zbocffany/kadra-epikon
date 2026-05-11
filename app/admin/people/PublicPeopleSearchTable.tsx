@@ -1,6 +1,6 @@
 'use client'
 
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import CountryFlag from '@/components/CountryFlag'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
@@ -170,6 +170,10 @@ export default function PublicPeopleSearchTable({
   )
   const [competitionFilters, setCompetitionFilters] = useState<VisibleCoachCompetitionFilter[]>([])
   const [stageFilters, setStageFilters] = useState<CoachStageFilterKey[]>([])
+  const [isCoachFilterPanelOpen, setIsCoachFilterPanelOpen] = useState(false)
+  const [coachFilterPanelPos, setCoachFilterPanelPos] = useState({ x: 24, y: 196 })
+  const [isDraggingCoachFilterPanel, setIsDraggingCoachFilterPanel] = useState(false)
+  const coachFilterPanelDragOffsetRef = useRef({ x: 0, y: 0 })
   const [visibleCount, setVisibleCount] = useState(50)
   const isPublicPlayersView = variant === 'players' && Boolean(publicPlayerMode)
   const isPublicCoachesView = variant === 'coaches' && Boolean(publicCoachMode)
@@ -200,6 +204,32 @@ export default function PublicPeopleSearchTable({
     setCompetitionFilters([])
     setStageFilters([])
   }, [isPolandCoachView])
+
+  useEffect(() => {
+    if (!isPolandCoachView || !showCoachStats) {
+      setIsCoachFilterPanelOpen(false)
+    }
+  }, [isPolandCoachView, showCoachStats])
+
+  useEffect(() => {
+    if (!isDraggingCoachFilterPanel) return
+
+    const onMouseMove = (event: MouseEvent) => {
+      const panelWidth = 360
+      const nextX = Math.max(16, Math.min(event.clientX - coachFilterPanelDragOffsetRef.current.x, window.innerWidth - panelWidth - 16))
+      const nextY = Math.max(84, Math.min(event.clientY - coachFilterPanelDragOffsetRef.current.y, window.innerHeight - 220))
+      setCoachFilterPanelPos({ x: nextX, y: nextY })
+    }
+
+    const onMouseUp = () => setIsDraggingCoachFilterPanel(false)
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [isDraggingCoachFilterPanel])
 
   const countryOptions = useMemo(() => {
     if (isPublicPlayersView || isPublicCoachesView) return []
@@ -398,6 +428,106 @@ export default function PublicPeopleSearchTable({
     })
   }
 
+  function startCoachFilterPanelDrag(event: React.MouseEvent<HTMLDivElement>) {
+    if (window.innerWidth < 1024) return
+    const target = event.target as HTMLElement
+    if (target.closest('button, input, select, a, label')) return
+
+    const rect = event.currentTarget.getBoundingClientRect()
+    coachFilterPanelDragOffsetRef.current = {
+      x: event.clientX - rect.left,
+      y: event.clientY - rect.top,
+    }
+    setIsDraggingCoachFilterPanel(true)
+  }
+
+  const activeCoachFilterCount = competitionFilters.length + stageFilters.length
+
+  const coachFilterControls = (
+    <div className="space-y-2">
+      <div className="rounded-md border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-2">
+        <div className="mb-2 inline-flex rounded border border-emerald-200/30 bg-emerald-900/28 px-1.5 py-[1px] text-[10px] uppercase tracking-[0.14em] text-emerald-100/80">
+          Rozgrywki
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => setCompetitionFilters([])}
+            aria-pressed={allCompetitionsActive}
+            className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${allCompetitionsActive
+              ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
+              : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
+            }`}
+          >
+            Wszystkie
+          </button>
+          {([
+            ['WORLD_CUP', 'MŚ'],
+            ['EURO', 'ME'],
+            ['FRIENDLY', 'T'],
+            ['NATIONS_LEAGUE', 'LN'],
+          ] as Array<[VisibleCoachCompetitionFilter, string]>).map(([key, label]) => {
+            const active = competitionFilters.includes(key)
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggleCompetitionFilter(key)}
+                aria-pressed={active}
+                className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${active
+                  ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
+                  : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="rounded-md border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-2">
+        <div className="mb-2 inline-flex rounded border border-emerald-200/30 bg-emerald-900/28 px-1.5 py-[1px] text-[10px] uppercase tracking-[0.14em] text-emerald-100/80">
+          Etap
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            onClick={() => setStageFilters([])}
+            aria-pressed={allStagesActive}
+            className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${allStagesActive
+              ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
+              : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
+            }`}
+          >
+            Wszystkie
+          </button>
+          {([
+            ['TOURNAMENT', 'Turniej'],
+            ['QUALIFIERS', 'El.'],
+            ['PLAYOFFS', 'Baraże'],
+          ] as Array<[CoachStageFilterKey, string]>).map(([key, label]) => {
+            const active = stageFilters.includes(key)
+            return (
+              <button
+                key={key}
+                type="button"
+                onClick={() => toggleStageFilter(key)}
+                aria-pressed={active}
+                className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${active
+                  ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
+                  : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+
   const displayed = filtered.slice(0, visibleCount)
 
   const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null)
@@ -529,96 +659,24 @@ export default function PublicPeopleSearchTable({
         ) : null}
 
         {isPolandCoachView && showCoachStats ? (
-          <div className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border border-neutral-700/70 bg-neutral-900/35 px-2">
-            <button
-              type="button"
-              onClick={() => { setCompetitionFilters([]); setStageFilters([]) }}
-              aria-pressed={allCompetitionsActive && allStagesActive}
-              title="Wyczyść wszystkie filtry"
-              aria-label="Wyczyść wszystkie filtry"
-              className={`inline-flex h-[2.1rem] w-[2.1rem] shrink-0 items-center justify-center rounded border px-0 py-0 transition-colors ${allCompetitionsActive && allStagesActive
-                ? 'border-emerald-950/80 bg-emerald-900/80 text-emerald-100 shadow-[inset_0_3px_6px_rgba(0,0,0,0.55),inset_0_1px_3px_rgba(0,0,0,0.4),inset_0_-1px_0_rgba(255,255,255,0.08)]'
-                : 'border-emerald-500/55 bg-emerald-600/65 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.38),inset_0_-2px_0_rgba(0,0,0,0.3),0_3px_5px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.25)] hover:bg-emerald-600/80'
-              }`}
-            >
-              <FilterIcon className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            </button>
-            <div className="flex flex-col gap-[3px]">
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setCompetitionFilters([])}
-                  aria-pressed={allCompetitionsActive}
-                  title="Wszystkie mecze"
-                  aria-label="Wszystkie mecze"
-                  className={`inline-flex h-[1.05rem] w-[1.05rem] items-center justify-center rounded border px-0 py-0 text-[10px] leading-none transition-colors ${allCompetitionsActive
-                    ? 'border-emerald-950/80 bg-emerald-900/80 text-emerald-100 shadow-[inset_0_3px_6px_rgba(0,0,0,0.55),inset_0_1px_3px_rgba(0,0,0,0.4),inset_0_-1px_0_rgba(255,255,255,0.08)]'
-                    : 'border-emerald-500/55 bg-emerald-600/65 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.38),inset_0_-2px_0_rgba(0,0,0,0.3),0_3px_5px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.25)] hover:bg-emerald-600/80'
-                  }`}
-                >
-                  <FilterIcon className="h-3.5 w-3.5 shrink-0" />
-                </button>
-                {([
-                  ['WORLD_CUP', 'MŚ'],
-                  ['EURO', 'ME'],
-                  ['FRIENDLY', 'T'],
-                  ['NATIONS_LEAGUE', 'LN'],
-                ] as Array<[VisibleCoachCompetitionFilter, string]>).map(([key, label]) => {
-                  const active = competitionFilters.includes(key)
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => toggleCompetitionFilter(key)}
-                      aria-pressed={active}
-                      className={`inline-flex h-[1.05rem] items-center justify-center rounded border px-1 py-0 text-[10px] leading-none transition-colors ${active
-                        ? 'border-emerald-950/80 bg-emerald-900/80 text-emerald-100 shadow-[inset_0_3px_6px_rgba(0,0,0,0.55),inset_0_1px_3px_rgba(0,0,0,0.4),inset_0_-1px_0_rgba(255,255,255,0.08)]'
-                        : 'border-emerald-500/55 bg-emerald-600/65 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.38),inset_0_-2px_0_rgba(0,0,0,0.3),0_3px_5px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.25)] hover:bg-emerald-600/80'
-                      }`}
-                    >
-                      <span className="inline-block scale-75 leading-none">{label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setStageFilters([])}
-                  aria-pressed={allStagesActive}
-                  title="Wszystkie fazy"
-                  aria-label="Wszystkie fazy"
-                  className={`inline-flex h-[1.05rem] w-[1.05rem] items-center justify-center rounded border px-0 py-0 text-[10px] leading-none transition-colors ${allStagesActive
-                    ? 'border-emerald-950/80 bg-emerald-900/80 text-emerald-100 shadow-[inset_0_3px_6px_rgba(0,0,0,0.55),inset_0_1px_3px_rgba(0,0,0,0.4),inset_0_-1px_0_rgba(255,255,255,0.08)]'
-                    : 'border-emerald-500/55 bg-emerald-600/65 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.38),inset_0_-2px_0_rgba(0,0,0,0.3),0_3px_5px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.25)] hover:bg-emerald-600/80'
-                  }`}
-                >
-                  <FilterIcon className="h-3.5 w-3.5 shrink-0" />
-                </button>
-                {([
-                  ['TOURNAMENT', 'Turniej'],
-                  ['QUALIFIERS', 'El.'],
-                  ['PLAYOFFS', 'Baraże'],
-                ] as Array<[CoachStageFilterKey, string]>).map(([key, label]) => {
-                  const active = stageFilters.includes(key)
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => toggleStageFilter(key)}
-                      aria-pressed={active}
-                      className={`inline-flex h-[1.05rem] items-center justify-center rounded border px-1 py-0 text-[10px] leading-none transition-colors ${active
-                        ? 'border-emerald-950/80 bg-emerald-900/80 text-emerald-100 shadow-[inset_0_3px_6px_rgba(0,0,0,0.55),inset_0_1px_3px_rgba(0,0,0,0.4),inset_0_-1px_0_rgba(255,255,255,0.08)]'
-                        : 'border-emerald-500/55 bg-emerald-600/65 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.38),inset_0_-2px_0_rgba(0,0,0,0.3),0_3px_5px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.25)] hover:bg-emerald-600/80'
-                      }`}
-                    >
-                      <span className="inline-block scale-75 leading-none">{label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsCoachFilterPanelOpen((current) => !current)}
+            title="Filtruj"
+            aria-label="Filtruj"
+            aria-pressed={isCoachFilterPanelOpen}
+            className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${isCoachFilterPanelOpen
+              ? 'border-emerald-300/80 bg-emerald-700/55 text-emerald-50 shadow-[0_0_0_1px_rgba(110,231,183,0.2)]'
+              : 'border-emerald-700/60 bg-emerald-950/50 text-emerald-200/80 hover:border-emerald-400/70 hover:text-emerald-50'
+            }`}
+          >
+            <FilterIcon className="h-4 w-4" />
+            {activeCoachFilterCount > 0 ? (
+              <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-emerald-200/70 bg-emerald-500 px-1 text-[10px] font-bold text-emerald-950">
+                {activeCoachFilterCount}
+              </span>
+            ) : null}
+          </button>
         ) : null}
 
         <div className="flex-1 min-w-0">
@@ -699,6 +757,72 @@ export default function PublicPeopleSearchTable({
           </div>
         )}
       </div>
+
+      {isPolandCoachView && showCoachStats && isCoachFilterPanelOpen ? (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/35 backdrop-blur-[1px] lg:hidden"
+            onClick={() => setIsCoachFilterPanelOpen(false)}
+            aria-hidden="true"
+          />
+
+          <div
+            className={`fixed z-50 hidden w-[19.5rem] origin-top-left scale-90 rounded-xl border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.2),0_8px_18px_rgba(0,0,0,0.2)] lg:block ${isDraggingCoachFilterPanel ? 'cursor-grabbing' : 'cursor-grab'}`}
+            style={{ left: `${coachFilterPanelPos.x}px`, top: `${coachFilterPanelPos.y}px` }}
+            onMouseDown={startCoachFilterPanelDrag}
+          >
+            <div className="mb-2 flex items-center justify-end gap-1.5">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompetitionFilters([])
+                    setStageFilters([])
+                  }}
+                  className="stat-badge inline-flex h-6 items-center rounded border border-emerald-500/60 bg-[linear-gradient(180deg,rgba(89,190,131,0.9)_0%,rgba(48,150,97,0.86)_44%,rgba(23,91,60,0.92)_100%)] px-2 font-barlow text-[0.72rem] font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] transition-colors hover:border-emerald-300/80 hover:brightness-105"
+                >
+                  Wyczyść
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCoachFilterPanelOpen(false)}
+                  className="stat-badge inline-flex h-6 min-w-6 items-center justify-center rounded border border-emerald-500/60 bg-[linear-gradient(180deg,rgba(89,190,131,0.9)_0%,rgba(48,150,97,0.86)_44%,rgba(23,91,60,0.92)_100%)] px-1 font-barlow text-[0.76rem] font-semibold leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] transition-colors hover:border-emerald-300/80 hover:brightness-105"
+                  aria-label="Zamknij panel filtrów"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            {coachFilterControls}
+          </div>
+
+          <div className="fixed left-1/2 top-20 z-50 w-[19.5rem] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 origin-top scale-90 rounded-xl border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.2),0_8px_18px_rgba(0,0,0,0.2)] lg:hidden">
+            <div className="mb-2 flex items-center justify-end gap-1.5">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompetitionFilters([])
+                    setStageFilters([])
+                  }}
+                  className="stat-badge inline-flex h-6 items-center rounded border border-emerald-500/60 bg-[linear-gradient(180deg,rgba(89,190,131,0.9)_0%,rgba(48,150,97,0.86)_44%,rgba(23,91,60,0.92)_100%)] px-2 font-barlow text-[0.72rem] font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] transition-colors hover:border-emerald-300/80 hover:brightness-105"
+                >
+                  Wyczyść
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCoachFilterPanelOpen(false)}
+                  className="stat-badge inline-flex h-6 min-w-6 items-center justify-center rounded border border-emerald-500/60 bg-[linear-gradient(180deg,rgba(89,190,131,0.9)_0%,rgba(48,150,97,0.86)_44%,rgba(23,91,60,0.92)_100%)] px-1 font-barlow text-[0.76rem] font-semibold leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] transition-colors hover:border-emerald-300/80 hover:brightness-105"
+                  aria-label="Zamknij panel filtrów"
+                >
+                  ×
+                </button>
+              </div>
+            </div>
+            {coachFilterControls}
+          </div>
+        </>
+      ) : null}
 
       {/* People table */}
       <div className="overflow-hidden rounded-xl border border-neutral-800">

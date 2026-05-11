@@ -1240,11 +1240,12 @@ export async function getAdminPlayerMatchEventsByMatch(
     const subOff = subOffByMatchId.get(participation.match_id) ?? null
 
     const entryMin = isStarter ? 0 : subOn!.minute
-    const entryExtra = isStarter ? 0 : (subOn!.minute_extra ?? 0)
     const exitMin = subOff ? subOff.minute : matchRegularEnd
+    const exitExtra = subOff ? (subOff.minute_extra ?? 0) : 0
 
     const effectiveEntry = entryMin > 0 ? entryMin - 1 : entryMin
-    const effectiveExit = Math.min(exitMin, matchRegularEnd)
+    const effectiveExitBase = subOff ? (exitExtra > 0 ? exitMin : exitMin - 1) : matchRegularEnd
+    const effectiveExit = Math.min(Math.max(0, effectiveExitBase), matchRegularEnd)
 
     entry.played_minutes = Math.max(0, effectiveExit - effectiveEntry)
     entry.is_bench = false

@@ -858,11 +858,11 @@ export async function getAdminClubDetailStats(clubId: string): Promise<{
     if (!isStarter && !subOn) continue
     const subOff = subOffMap.get(`${p.match_id}:${p.person_id}`) ?? null
     const entryMin = isStarter ? 0 : subOn!.minute
-    const entryExtra = isStarter ? 0 : subOn!.extra
     const exitMin = subOff ? subOff.minute : matchRegularEnd
     const exitExtra = subOff ? subOff.extra : 0
-    const effectiveEntry = entryExtra > 0 ? entryMin - 1 : entryMin
-    const effectiveExit = Math.min(exitExtra > 0 ? exitMin : exitMin, matchRegularEnd)
+    const effectiveEntry = entryMin > 0 ? entryMin - 1 : entryMin
+    const effectiveExitBase = subOff ? (exitExtra > 0 ? exitMin : exitMin - 1) : matchRegularEnd
+    const effectiveExit = Math.min(Math.max(0, effectiveExitBase), matchRegularEnd)
     minute_count += Math.max(0, effectiveExit - effectiveEntry)
   }
 
@@ -1122,11 +1122,11 @@ export async function getAdminClubPlayerStats(clubId: string): Promise<AdminClub
 
     const subOff = subOffMap.get(`${participation.match_id}:${participation.person_id}`) ?? null
     const entryMin = isStarter ? 0 : subOn!.minute
-    const entryExtra = isStarter ? 0 : subOn!.extra
     const exitMin = subOff ? subOff.minute : matchRegularEnd
     const exitExtra = subOff ? subOff.extra : 0
-    const effectiveEntry = entryExtra > 0 ? entryMin - 1 : entryMin
-    const effectiveExit = Math.min(exitExtra > 0 ? exitMin : exitMin, matchRegularEnd)
+    const effectiveEntry = entryMin > 0 ? entryMin - 1 : entryMin
+    const effectiveExitBase = subOff ? (exitExtra > 0 ? exitMin : exitMin - 1) : matchRegularEnd
+    const effectiveExit = Math.min(Math.max(0, effectiveExitBase), matchRegularEnd)
 
     const entry = statsByPersonId.get(participation.person_id)
     if (entry) entry.minute_count += Math.max(0, effectiveExit - effectiveEntry)
