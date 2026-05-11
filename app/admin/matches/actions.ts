@@ -1500,11 +1500,24 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
     await saveMatchEvents(supabase, formData, id, homeTeamId, awayTeamId, redirectPath)
   }
 
+  // Get all person IDs in this match to revalidate their public coach/player stats
+  const { data: allParticipants } = await supabase
+    .from('tbl_Match_Participants')
+    .select('person_id')
+    .eq('match_id', id)
+
+  const personIds = [...new Set((allParticipants ?? []).map((p) => p.person_id).filter(Boolean))]
+
   revalidatePath('/')
   revalidatePath('/matches')
   revalidatePath(`/matches/${id}`)
-  revalidateTag('public-matches', 'max')
-  revalidateTag(`public-match:${id}`, 'max')
+  revalidateTag('public-matches')
+  revalidateTag(`public-match:${id}`)
+  
+  // Revalidate cache for all people involved (players, coaches, referees)
+  for (const personId of personIds) {
+    revalidateTag(`public-person:${personId}`)
+  }
 
   redirectWithSaved(`/admin/matches/${id}`)
 }
@@ -1622,11 +1635,24 @@ export async function updateMatch(formData: FormData): Promise<void> {
     redirectWithError(redirectPath, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
+  // Get all person IDs in this match to revalidate their public coach/player stats
+  const { data: allParticipants } = await supabase
+    .from('tbl_Match_Participants')
+    .select('person_id')
+    .eq('match_id', id)
+
+  const personIds = [...new Set((allParticipants ?? []).map((p) => p.person_id).filter(Boolean))]
+
   revalidatePath('/')
   revalidatePath('/matches')
   revalidatePath(`/matches/${id}`)
-  revalidateTag('public-matches', 'max')
-  revalidateTag(`public-match:${id}`, 'max')
+  revalidateTag('public-matches')
+  revalidateTag(`public-match:${id}`)
+  
+  // Revalidate cache for all people involved (players, coaches, referees)
+  for (const personId of personIds) {
+    revalidateTag(`public-person:${personId}`)
+  }
 
   redirectWithSaved(redirectPath)
 }
