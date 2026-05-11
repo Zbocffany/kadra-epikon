@@ -4,12 +4,8 @@ import Link from 'next/link'
 import type { ReactNode } from 'react'
 import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
 import CountryFlag from '@/components/CountryFlag'
-import { Icon } from '@/components/icons'
-import type { AppIconName } from '@/components/icons'
 import PitchIcon from '@/components/icons/PitchIcon'
-import BenchIcon from '@/components/icons/BenchIcon'
-import { GoalIcon, AssistIcon } from '@/components/icons'
-import type { AdminMatch, AdminPlayerMatchEventIcon, AdminPlayerMatchEventsByMatchEntry, AdminPlayerYearStats } from '@/lib/db/matches'
+import type { AdminCoachMatch, AdminCoachYearStats } from '@/lib/db/matches'
 
 function formatDate(dateStr: string) {
   const [year, month, day] = dateStr.split('-')
@@ -59,32 +55,47 @@ function getTeamFifaCodeLabel(teamName: string, fifaCode: string | null): string
   return compactName.slice(0, 3) || '---'
 }
 
-function getPolandMatchOutcome(match: AdminMatch): 'WIN' | 'LOSS' | 'DRAW' | null {
-  if (!match.final_score) return null
+function getYearCoachCountries(matches: AdminCoachMatch[]): Array<{ key: string; fifaCode: string | null; countryName: string }> {
+  const seen = new Set<string>()
+  const countries: Array<{ key: string; fifaCode: string | null; countryName: string }> = []
+
+  for (const match of matches) {
+    const countryName = match.coach_is_home === true
+      ? match.home_team_name
+      : match.coach_is_home === false
+        ? match.away_team_name
+        : null
+    if (!countryName) continue
+
+    const fifaCode = match.coach_team_fifa_code
+    const key = `${fifaCode ?? '---'}|${countryName}`
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    countries.push({ key, fifaCode, countryName })
+  }
+
+  return countries
+}
+
+function getCoachMatchOutcome(match: AdminCoachMatch): 'WIN' | 'LOSS' | 'DRAW' | null {
+  if (!match.final_score || match.coach_is_home === null) return null
 
   const scoreMatch = match.final_score.match(/(\d+)\s*[:\-]\s*(\d+)/)
   if (!scoreMatch) return null
 
   const homeGoals = Number(scoreMatch[1])
   const awayGoals = Number(scoreMatch[2])
+  const goalsFor = match.coach_is_home ? homeGoals : awayGoals
+  const goalsAgainst = match.coach_is_home ? awayGoals : homeGoals
 
-  const homeName = (match.home_team_name ?? '').trim().toLowerCase()
-  const awayName = (match.away_team_name ?? '').trim().toLowerCase()
-  const isPolandHome = homeName.startsWith('polska')
-  const isPolandAway = awayName.startsWith('polska')
-
-  if (!isPolandHome && !isPolandAway) return null
-  if (homeGoals === awayGoals) return 'DRAW'
-
-  if (isPolandHome) {
-    return homeGoals > awayGoals ? 'WIN' : 'LOSS'
-  }
-
-  return awayGoals > homeGoals ? 'WIN' : 'LOSS'
+  if (goalsFor > goalsAgainst) return 'WIN'
+  if (goalsFor < goalsAgainst) return 'LOSS'
+  return 'DRAW'
 }
 
-function getScoreBadgeClass(match: AdminMatch): string {
-  const outcome = getPolandMatchOutcome(match)
+function getScoreBadgeClass(match: AdminCoachMatch): string {
+  const outcome = getCoachMatchOutcome(match)
 
   if (outcome === 'WIN') return 'border-emerald-500'
   if (outcome === 'LOSS') return 'border-red-500'
@@ -93,7 +104,7 @@ function getScoreBadgeClass(match: AdminMatch): string {
   return 'border-neutral-400'
 }
 
-function renderScoreWithFlags(match: AdminMatch, compact = false) {
+function renderScoreWithFlags(match: AdminCoachMatch, compact = false) {
   const label = match.final_score
   if (!label) return null
 
@@ -168,99 +179,53 @@ function GlossySummaryBadge({ children, highlighted = false }: { children: React
   )
 }
 
-function YearStatsBadges({ stats, highlighted = false }: { stats: AdminPlayerYearStats; highlighted?: boolean }) {
-  const items = [
-    { icon: <PitchIcon className={highlighted ? 'h-4 w-4 text-emerald-200/90' : 'h-4 w-4 text-neutral-400'} />, label: 'Występy', value: stats.appearance_count },
-    { icon: <GoalIcon className={highlighted ? 'h-4 w-4 text-emerald-200/90' : 'h-4 w-4 text-neutral-400'} />, label: 'Gole', value: stats.goal_count },
-    { icon: <AssistIcon className={highlighted ? 'h-4 w-4 text-emerald-200/90' : 'h-4 w-4 text-neutral-400'} />, label: 'Asysty', value: stats.assist_count },
-  ] as const
+function YearStatsBadges({ stats, highlighted = false, matchesOnly = false }: { stats: AdminCoachYearStats; highlighted?: boolean; matchesOnly?: boolean }) {
+  const matchesValue = stats.match_count
+  const resultsValue = `${stats.win_count}-${stats.draw_count}-${stats.loss_count}`
+  const goalsValue = `${stats.goals_scored}-${stats.goals_conceded}`
+  const pointsAvgValue = stats.match_count > 0 ? stats.points_per_match.toFixed(2) : '-'
 
-  return (
-    <span className="inline-grid grid-cols-3 items-center justify-items-end gap-x-2 gap-y-1">
-      {items.map(({ icon, label, value }) => (
-        <span key={label} className="group/year-stat relative inline-flex w-[4.1rem] items-center justify-end gap-0.5">
-          <span title={label}>{icon}</span>
-          {value > 0 ? (
-            <span className={highlighted
-              ? 'stat-badge inline-flex w-[1.8rem] items-center justify-center rounded border border-white/30 bg-slate-950/35 px-1 py-0.5 shadow-[0_3px_8px_rgba(0,0,0,0.3)] font-barlow text-[0.78rem] font-semibold text-slate-50'
-              : 'stat-badge inline-flex w-[1.8rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.78rem] font-semibold text-neutral-200 light:text-neutral-900'}>{value}</span>
-          ) : (
-            <span className={highlighted ? 'inline-flex w-[1.8rem] items-center justify-center text-sm text-emerald-100/55' : 'inline-flex w-[1.8rem] items-center justify-center text-sm text-neutral-600'}>-</span>
-          )}
-          <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-neutral-500 bg-black px-2 py-1 text-[11px] font-bold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/year-stat:opacity-100">
-            <span className="font-normal text-neutral-400">{label}</span>: {value}
-          </span>
-        </span>
-      ))}
-    </span>
-  )
-}
+  const valueClassName = highlighted
+    ? 'stat-badge inline-flex min-w-[2.5rem] items-center justify-center rounded border border-white/30 bg-slate-950/35 px-1.5 py-0.5 shadow-[0_3px_8px_rgba(0,0,0,0.3)] font-barlow text-[0.76rem] font-semibold text-slate-50'
+    : 'stat-badge inline-flex min-w-[2.5rem] items-center justify-center rounded border border-neutral-600/60 bg-gradient-to-b from-neutral-700 to-neutral-900 px-1.5 py-0.5 font-barlow text-[0.76rem] font-semibold text-neutral-200'
 
-type PlayerMatchesByYearSectionProps = {
-  matches: AdminMatch[]
-  yearStats: Record<string, AdminPlayerYearStats>
-  eventsByMatch: Record<string, AdminPlayerMatchEventsByMatchEntry>
-  detailBasePath: string
-  highlighted?: boolean
-}
-
-function renderPlayerEvents(entry: AdminPlayerMatchEventsByMatchEntry | undefined, highlighted = false) {
-  if (!entry) {
-    return <span className="text-xs text-neutral-600">–</span>
-  }
-
-  const ALLOWED_ICONS = new Set<AdminPlayerMatchEventIcon['icon_name']>([
-    'goal',
-    'ownGoal',
-    'penaltyGoal',
-    'assist',
-    'yellowCard',
-    'secondYellowCard',
-    'redCard',
-  ])
-
-  const events = (entry.icons ?? []).filter((event) => ALLOWED_ICONS.has(event.icon_name))
-
-  function renderEventIcon(iconName: AppIconName) {
-    if (iconName !== 'penaltyGoal') {
-      return <Icon name={iconName} className="h-4 w-4 shrink-0" />
-    }
-
+  if (matchesOnly) {
     return (
-      <span className="relative inline-flex h-4 w-4 shrink-0 items-center justify-center">
-        <Icon name="goal" className="h-4 w-4 shrink-0" />
-        <span className="absolute -bottom-0.5 -right-0.5 rounded-sm bg-neutral-900/95 px-[2px] text-[8px] font-black leading-none text-white ring-1 ring-neutral-500/70">
-          k
-        </span>
+      <span className="inline-flex items-center justify-end gap-0.5">
+        <PitchIcon className={highlighted ? 'h-4 w-4 text-emerald-200/90' : 'h-4 w-4 text-neutral-400'} />
+        <span className={valueClassName}>{matchesValue}</span>
       </span>
     )
   }
 
   return (
-    <span className="inline-flex items-center justify-end gap-2">
-      <span className={highlighted ? 'inline-flex items-center justify-end gap-1 text-emerald-50' : 'inline-flex items-center justify-end gap-1 text-neutral-300'}>
-        {events.length ? events.map(({ icon_name }, index) => (
-          <span key={`${icon_name}-${index}`} className="inline-flex items-center">
-            {renderEventIcon(icon_name as AppIconName)}
-          </span>
-        )) : <span className={highlighted ? 'text-[10px] text-emerald-100/55' : 'text-[10px] text-neutral-600'}>–</span>}
+    <span className="inline-grid grid-cols-4 items-center justify-items-end gap-x-2 gap-y-1">
+      <span className="inline-flex items-center justify-end gap-0.5">
+        <PitchIcon className={highlighted ? 'h-4 w-4 text-emerald-200/90' : 'h-4 w-4 text-neutral-400'} />
+        <span className={valueClassName}>{matchesValue}</span>
       </span>
 
-      {entry.is_bench ? (
-        <span title="Cały mecz na ławce" className={highlighted ? 'inline-flex items-center justify-center rounded border border-emerald-100/40 bg-slate-950/35 px-1.5 py-0.5 text-emerald-50' : 'inline-flex items-center justify-center rounded border border-neutral-700 bg-neutral-900 px-1.5 py-0.5 text-neutral-200'}>
-          <BenchIcon className="h-3.5 w-3.5 opacity-30" />
-        </span>
-      ) : (
-        <span className={highlighted ? 'stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-emerald-100/40 bg-slate-950/35 px-1.5 py-0.5 font-barlow text-[0.78rem] font-semibold text-emerald-50 shadow-[0_3px_8px_rgba(0,0,0,0.3)]' : 'stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 bg-gradient-to-b from-neutral-700 to-neutral-900 px-1.5 py-0.5 font-barlow text-[0.78rem] font-semibold text-neutral-200'}>
-          {entry.played_minutes}
-        </span>
-      )}
+      <span className={valueClassName}>{resultsValue}</span>
+      <span className={valueClassName}>{goalsValue}</span>
+      <span className={valueClassName}>{pointsAvgValue}</span>
     </span>
   )
 }
 
-export default function PlayerMatchesByYearSection({ matches, yearStats, eventsByMatch, detailBasePath, highlighted = false }: PlayerMatchesByYearSectionProps) {
-  const matchesByYear = matches.reduce<Record<string, AdminMatch[]>>((acc, match) => {
+type CoachMatchesByYearSectionProps = {
+  matches: AdminCoachMatch[]
+  yearStats: Record<string, AdminCoachYearStats>
+  detailBasePath: string
+  title?: string
+  highlighted?: boolean
+  showYearCoachFlags?: boolean
+  emptyMessage?: string
+  yearStatsMatchesOnly?: boolean
+  defaultExpanded?: boolean
+}
+
+export default function CoachMatchesByYearSection({ matches, yearStats, detailBasePath, title = 'MECZE', highlighted = false, showYearCoachFlags = false, emptyMessage = 'Brak meczów prowadzonych przez tego trenera.', yearStatsMatchesOnly = false, defaultExpanded = true }: CoachMatchesByYearSectionProps) {
+  const matchesByYear = matches.reduce<Record<string, AdminCoachMatch[]>>((acc, match) => {
     const year = match.match_date.slice(0, 4)
     if (!acc[year]) acc[year] = []
     acc[year].push(match)
@@ -277,15 +242,15 @@ export default function PlayerMatchesByYearSection({ matches, yearStats, eventsB
       {highlighted ? (
         <span aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.18)_0%,rgba(255,255,255,0.05)_30%,rgba(0,0,0,0.16)_100%)]" />
       ) : null}
-      <details open={matches.length > 0} className={highlighted ? 'relative z-10 overflow-hidden rounded-lg border border-emerald-900/80 group/det' : 'overflow-hidden rounded-lg border border-neutral-800 group/det'}>
+      <details open={defaultExpanded && matches.length > 0} className={highlighted ? 'relative z-10 overflow-hidden rounded-lg border border-emerald-900/80 group/det' : 'overflow-hidden rounded-lg border border-neutral-800 group/det'}>
         <summary className={highlighted ? 'flex cursor-pointer list-none items-center justify-between bg-emerald-950/45 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-emerald-100/80 marker:content-none' : 'flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-neutral-500 marker:content-none'}>
-          <span>HISTORIA WYSTĘPÓW</span>
+          <span>{title}</span>
           <GlossyDisclosureCircle rotateClassName="group-open/det:rotate-180" />
         </summary>
 
         <div className="divide-y divide-neutral-800">
           {years.length === 0 ? (
-            <div className="px-4 py-5 text-sm text-neutral-500">Brak meczów rozegranych przez tego piłkarza.</div>
+            <div className="px-4 py-5 text-sm text-neutral-500">{emptyMessage}</div>
           ) : (
             years.map((year) => (
               <details key={year} className={highlighted ? 'group/year bg-emerald-950/20' : 'group/year bg-neutral-950'}>
@@ -293,20 +258,36 @@ export default function PlayerMatchesByYearSection({ matches, yearStats, eventsB
                   ? 'relative z-20 grid cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)_1.25rem] items-center gap-3 border-t border-emerald-900/70 bg-emerald-950/38 px-3 py-2 marker:content-none pointer-events-auto'
                   : 'relative z-20 grid cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)_1.25rem] items-center gap-3 bg-neutral-900 px-3 py-2 marker:content-none pointer-events-auto'}>
                   <GlossySummaryBadge highlighted={highlighted}>{year}</GlossySummaryBadge>
-                  <span className={highlighted ? 'mr-2 min-w-0 text-right text-[13px] font-black text-emerald-50/90' : 'mr-2 min-w-0 text-right text-[13px] font-black text-neutral-300'}>
-                    <YearStatsBadges
-                      highlighted={highlighted}
-                      stats={yearStats[year] ?? {
-                        appearance_count: matchesByYear[year].length,
-                        starting_appearance_count: 0,
-                        sub_on_count: 0,
-                        sub_off_count: 0,
-                        bench_count: 0,
-                        goal_count: 0,
-                        assist_count: 0,
-                      }}
-                    />
-                  </span>
+                  <div className="mr-2 min-w-0 flex items-center gap-2">
+                    {showYearCoachFlags ? (
+                      <span className="inline-flex shrink-0 items-center gap-1">
+                        {getYearCoachCountries(matchesByYear[year]).map((country) => (
+                          <CountryFlag
+                            key={country.key}
+                            fifaCode={country.fifaCode}
+                            countryName={country.countryName}
+                            className={highlighted ? 'h-[15px] w-[23px]' : 'h-[15px] w-[23px]'}
+                          />
+                        ))}
+                      </span>
+                    ) : null}
+                    <span className={highlighted ? 'ml-auto min-w-0 text-right text-[13px] font-black text-emerald-50/90' : 'ml-auto min-w-0 text-right text-[13px] font-black text-neutral-300'}>
+                      <YearStatsBadges
+                        highlighted={highlighted}
+                        matchesOnly={yearStatsMatchesOnly}
+                        stats={yearStats[year] ?? {
+                          match_count: matchesByYear[year].length,
+                          win_count: 0,
+                          draw_count: 0,
+                          loss_count: 0,
+                          goals_scored: 0,
+                          goals_conceded: 0,
+                          points_total: 0,
+                          points_per_match: 0,
+                        }}
+                      />
+                    </span>
+                  </div>
                   <GlossyDisclosureCircle rotateClassName="group-open/year:rotate-180" className="justify-self-end" />
                 </summary>
 
@@ -317,11 +298,9 @@ export default function PlayerMatchesByYearSection({ matches, yearStats, eventsB
                       <col className="w-[8rem]" />
                       <col className="w-[14rem]" />
                       <col className="w-[12rem]" />
-                      <col className="w-[14rem]" />
                     </colgroup>
                     <tbody>
                       {matchesByYear[year].map((match) => {
-                        const entry = eventsByMatch[match.id]
                         const competition = getCompetitionDisplay(match.competition_name)
                         const compactMatchRow = highlighted
                         const showLevel = Boolean(
@@ -335,8 +314,8 @@ export default function PlayerMatchesByYearSection({ matches, yearStats, eventsB
                           <tr
                             key={match.id}
                             className={highlighted
-                              ? `border-t border-emerald-900/65 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] transition-colors hover:bg-[linear-gradient(165deg,#2bb95c_0%,#17a74a_18%,#10933f_40%,#16a34a_58%,#128844_78%,#0d7338_100%)] ${entry?.is_bench ? 'opacity-30' : ''}`
-                              : `border-t border-neutral-800 bg-neutral-950 transition-colors hover:bg-neutral-900/60 ${entry?.is_bench ? 'opacity-30' : ''}`}
+                              ? 'border-t border-emerald-900/65 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] transition-colors hover:bg-[linear-gradient(165deg,#2bb95c_0%,#17a74a_18%,#10933f_40%,#16a34a_58%,#128844_78%,#0d7338_100%)]'
+                              : 'border-t border-neutral-800 bg-neutral-950 transition-colors hover:bg-neutral-900/60'}
                           >
                             <td className="whitespace-nowrap">
                               <Link href={matchHref} className="block px-3 py-3" aria-label={`Otwórz mecz ${match.home_team_name} - ${match.away_team_name}`}>
@@ -349,7 +328,7 @@ export default function PlayerMatchesByYearSection({ matches, yearStats, eventsB
                             </td>
                             <td className={highlighted ? 'whitespace-nowrap font-semibold text-emerald-50' : 'whitespace-nowrap font-semibold text-neutral-100'}>
                               <Link href={matchHref} className={highlighted ? 'block pl-1 pr-2 py-3 text-[10px] leading-none tracking-[0.02em]' : 'block pl-1 pr-2 py-3'}>
-                                {getTeamFifaCodeLabel(match.home_team_name, match.home_team_fifa_code)} – {getTeamFifaCodeLabel(match.away_team_name, match.away_team_fifa_code)}
+                                {getTeamFifaCodeLabel(match.home_team_name, match.home_team_fifa_code)} - {getTeamFifaCodeLabel(match.away_team_name, match.away_team_fifa_code)}
                               </Link>
                             </td>
                             <td className="whitespace-nowrap text-left">
@@ -375,11 +354,6 @@ export default function PlayerMatchesByYearSection({ matches, yearStats, eventsB
                                     </>
                                   ) : null}
                                 </span>
-                              </Link>
-                            </td>
-                            <td className="whitespace-nowrap text-right">
-                              <Link href={matchHref} className="block px-3 py-3">
-                                {renderPlayerEvents(eventsByMatch[match.id], highlighted)}
                               </Link>
                             </td>
                           </tr>

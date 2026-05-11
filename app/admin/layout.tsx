@@ -20,6 +20,14 @@ export default async function AdminLayout({
           <AdminTopNav role={access.role} />
 
           <div className="flex items-center gap-2">
+            {access.role === 'ADMIN' ? (
+              <Link
+                href="/admin/admins"
+                className="rounded-md border border-emerald-700 bg-emerald-950/70 px-3 py-1.5 text-xs font-semibold text-emerald-100 hover:bg-emerald-900"
+              >
+                Dodaj admina
+              </Link>
+            ) : null}
             <ThemeToggle />
             <form action={signOutAction}>
               <button

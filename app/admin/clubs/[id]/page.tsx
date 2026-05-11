@@ -189,6 +189,7 @@ export default async function AdminClubDetailsPage({
         title={club.name}
         backLabel="Powrót do listy klubów"
         backHref={isPublic ? '/clubs' : '/admin/clubs'}
+        showBackButton={!isPublic}
         editHref={`/admin/clubs/${club.id}?mode=edit`}
         deleteAction={deleteClub}
         deleteId={club.id}
@@ -196,16 +197,19 @@ export default async function AdminClubDetailsPage({
       />
 
       <DetailsPageContent
-        title={club.name}
-        breadcrumb=""
-        subtitle={club.city_name ? (
+        title={isPublic ? null : club.name}
+        breadcrumb={isPublic ? null : ''}
+        subtitle={!isPublic && club.city_name ? (
           <span className="stat-badge inline-flex items-center gap-1.5 rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">
             {club.city_name}
           </span>
         ) : undefined}
-        headerRight={club.country_fifa_code ? (
+        headerRight={!isPublic && club.country_fifa_code ? (
           <CountryFlag fifaCode={club.country_fifa_code} countryName={club.country_name ?? '—'} className="h-10 w-[60px]" />
         ) : undefined}
+        containerClassName={isPublic
+          ? 'relative overflow-hidden rounded-xl border border-emerald-900/70 bg-[linear-gradient(165deg,#2d7a52_0%,#1e603f_18%,#134b33_40%,#0f3f2b_60%,#0b3423_80%,#08281c_100%)] p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.34),0_8px_18px_rgba(0,0,0,0.28)]'
+          : undefined}
         saved={saved}
         error={error}
         isEdit={isEdit}
@@ -232,31 +236,81 @@ export default async function AdminClubDetailsPage({
         }
         viewContent={
           <>
-            <div className="mt-4 grid grid-cols-5">
-              {([
-                { icon: <PlayerSilhouetteIcon className="h-5 w-5 text-neutral-400" />, label: 'Zawodnicy', value: clubStats.player_count },
-                { icon: <PitchIcon className="h-5 w-5 text-neutral-400" />, label: 'Występy', value: clubStats.appearance_count },
-                { icon: <GoalIcon className="h-5 w-5 text-neutral-400" />, label: 'Gole', value: clubStats.goal_count },
-                { icon: <AssistIcon className="h-5 w-5 text-neutral-400" />, label: 'Asysty', value: clubStats.assist_count },
-                { icon: <ClockIcon className="h-5 w-5 text-neutral-400" />, label: 'Minuty', value: clubStats.minute_count },
-              ] as const).map(({ icon, label, value }) => (
-                <div key={label} className="flex flex-col items-center gap-1.5 py-3">
-                  <span title={label}>{icon}</span>
-                  <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{value}</span>
+            {isPublic ? (
+              <div className="mb-2 flex items-center justify-between gap-4">
+                <div className="flex flex-col items-start gap-2">
+                  <h1 className="font-barlow text-[1.8rem] font-semibold leading-tight text-emerald-50">{club.name}</h1>
+                  <span
+                    title={`Zawodnicy: ${clubStats.player_count} | Występy-Gole: ${clubStats.appearance_count}-${clubStats.goal_count}`}
+                    className="stat-badge inline-flex items-center gap-2 rounded-md border border-white/30 bg-slate-950/35 px-2.5 py-1 font-barlow text-[1.06rem] font-semibold text-slate-50 shadow-[0_3px_8px_rgba(0,0,0,0.3)]"
+                  >
+                    <span>{clubStats.player_count}</span>
+                    <span className="mx-2 text-emerald-200/50">|</span>
+                    <span>{clubStats.appearance_count}<span className="mx-[2px] font-normal text-emerald-200/60">-</span>{clubStats.goal_count}</span>
+                  </span>
                 </div>
-              ))}
-            </div>
+                <div className="flex flex-col items-end gap-2">
+                  {club.country_fifa_code ? (
+                    <CountryFlag
+                      fifaCode={club.country_fifa_code}
+                      countryName={club.country_name ?? '—'}
+                      glossy
+                      className="h-[33px] w-[50px] ring-1 ring-neutral-500/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_1px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.7),0_4px_8px_rgba(0,0,0,0.45)]"
+                    />
+                  ) : null}
+                  {(club.country_name || club.city_name) ? (
+                    <div className="flex items-center gap-2">
+                      {club.city_name ? (
+                        <span className="stat-badge inline-flex items-center rounded-md border border-white/30 bg-slate-950/35 px-2 py-0.5 font-barlow text-[0.82rem] font-semibold text-slate-50 shadow-[0_3px_8px_rgba(0,0,0,0.3)]">
+                          {club.city_name}
+                        </span>
+                      ) : null}
+                      {club.country_name ? (
+                        <span className="stat-badge inline-flex items-center rounded-md border border-white/30 bg-slate-950/35 px-2 py-0.5 font-barlow text-[0.82rem] font-semibold text-slate-50 shadow-[0_3px_8px_rgba(0,0,0,0.3)]">
+                          {club.country_name}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
+
+            {!isPublic ? (
+              <div className="mt-4 grid grid-cols-5">
+                {([
+                  { icon: <PlayerSilhouetteIcon className="h-5 w-5 text-neutral-400" />, label: 'Zawodnicy', value: clubStats.player_count },
+                  { icon: <PitchIcon className="h-5 w-5 text-neutral-400" />, label: 'Występy', value: clubStats.appearance_count },
+                  { icon: <GoalIcon className="h-5 w-5 text-neutral-400" />, label: 'Gole', value: clubStats.goal_count },
+                  { icon: <AssistIcon className="h-5 w-5 text-neutral-400" />, label: 'Asysty', value: clubStats.assist_count },
+                  { icon: <ClockIcon className="h-5 w-5 text-neutral-400" />, label: 'Minuty', value: clubStats.minute_count },
+                ] as const).map(({ icon, label, value }) => (
+                  <div key={label} className="flex flex-col items-center gap-1.5 py-3">
+                    <span title={label}>{icon}</span>
+                    <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{value}</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
 
             <div className="mt-6">
               {isPublic ? (
-                <div className="rounded-xl border border-neutral-800 bg-neutral-950">
-                  <div className="border-b border-neutral-800 bg-neutral-900 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-neutral-500">
+                <div className="rounded-xl border border-emerald-900/80 bg-emerald-950/30">
+                  <div className="border-b border-emerald-900/80 bg-emerald-950/45 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-emerald-100/80">
                     Piłkarze reprezentacji Polski w tym klubie
                   </div>
 
                   <div className="p-4">
                     {clubPlayers.length > 0 ? (
-                      <PublicClubPlayersTable players={clubPlayers} />
+                      <PublicClubPlayersTable
+                        players={clubPlayers}
+                        summary={{
+                          appearance_count: clubStats.appearance_count,
+                          goal_count: clubStats.goal_count,
+                          assist_count: clubStats.assist_count,
+                          minute_count: clubStats.minute_count,
+                        }}
+                      />
                     ) : (
                       <p className="mb-1 text-sm text-neutral-500">Brak piłkarzy reprezentacji Polski powiązanych z tym klubem.</p>
                     )}

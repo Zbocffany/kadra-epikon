@@ -124,6 +124,16 @@ export type AdminPlayerMatch = AdminMatch & {
   player_is_starting: boolean | null
 }
 
+export type AdminCoachMatch = AdminMatch & {
+  coach_team_id: string | null
+  coach_team_fifa_code: string | null
+  coach_is_home: boolean | null
+}
+
+export type AdminRefereeMatch = AdminMatch & {
+  poland_is_home: boolean | null
+}
+
 export type AdminMatchDetails = AdminMatch & {
   competition_id: string
   match_level_id: string | null
@@ -233,6 +243,12 @@ export type AdminPlayerMatchEventIcon = {
   minute_left: boolean
 }
 
+export type AdminPlayerMatchEventsByMatchEntry = {
+  icons: AdminPlayerMatchEventIcon[]
+  played_minutes: number
+  is_bench: boolean
+}
+
 export type AdminPlayerYearStats = {
   appearance_count: number
   starting_appearance_count: number
@@ -241,6 +257,17 @@ export type AdminPlayerYearStats = {
   bench_count: number
   goal_count: number
   assist_count: number
+}
+
+export type AdminCoachYearStats = {
+  match_count: number
+  win_count: number
+  draw_count: number
+  loss_count: number
+  goals_scored: number
+  goals_conceded: number
+  points_total: number
+  points_per_match: number
 }
 
 type MatchParticipantRow = {
@@ -642,6 +669,307 @@ export async function getPublicMatchesForPlayer(personId: string): Promise<Admin
   )()
 }
 
+export async function getAdminMatchesForCoach(personId: string): Promise<AdminCoachMatch[]> {
+  const supabase = createServiceRoleClient()
+
+  const { data: participations, error: participationsError } = await supabase
+    .from('tbl_Match_Participants')
+    .select('match_id, team_id')
+    .eq('role', 'COACH')
+    .eq('person_id', personId)
+
+  if (participationsError) {
+    throw new Error(`tbl_Match_Participants (coach matches): ${participationsError.message}`)
+  }
+  if (!participations?.length) {
+    return []
+  }
+
+  const allMatchIds = [...new Set(participations.map((p) => p.match_id as string))]
+  if (!allMatchIds.length) {
+    return []
+  }
+
+  const { data: matches, error: matchesError } = await supabase
+    .from('tbl_Matches')
+    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id')
+    .in('id', allMatchIds)
+    .order('match_date', { ascending: false })
+    .order('match_time', { ascending: false })
+    .order('id', { ascending: false })
+
+  if (matchesError) {
+    throw new Error(`tbl_Matches (coach matches): ${matchesError.message}`)
+  }
+  if (!matches?.length) {
+    return []
+  }
+
+  const coachTeamIdByMatchId = new Map(
+    participations.map((participation) => [
+      participation.match_id as string,
+      (participation.team_id as string | null | undefined) ?? null,
+    ])
+  )
+
+  const coachTeamIds = [...new Set(
+    participations
+      .map((participation) => (participation.team_id as string | null | undefined) ?? null)
+      .filter((teamId): teamId is string => Boolean(teamId))
+  )]
+  const coachTeamFifaCodeMap = await getTeamCountryFifaCodeMap(coachTeamIds)
+  const adminMatches = await mapAdminMatches(supabase, matches as MatchListRow[])
+  const matchTeamsById = new Map(
+    (matches as MatchListRow[]).map((match) => [
+      match.id,
+      {
+        homeTeamId: match.home_team_id,
+        awayTeamId: match.away_team_id,
+      },
+    ])
+  )
+
+  return adminMatches.map((match) => {
+    const coachTeamId = coachTeamIdByMatchId.get(match.id) ?? null
+    const matchTeams = matchTeamsById.get(match.id)
+    const coachIsHome = coachTeamId && matchTeams
+      ? (coachTeamId === matchTeams.homeTeamId ? true : coachTeamId === matchTeams.awayTeamId ? false : null)
+      : null
+
+    return {
+      ...match,
+      coach_team_id: coachTeamId,
+      coach_team_fifa_code: coachTeamId
+        ? (coachTeamFifaCodeMap.get(coachTeamId) ?? null)
+        : null,
+      coach_is_home: coachIsHome,
+    }
+  })
+}
+
+export async function getPublicMatchesForCoach(personId: string): Promise<AdminCoachMatch[]> {
+  return unstable_cache(
+    async () => getAdminMatchesForCoach(personId),
+    ['public-coach-matches', personId],
+    {
+      revalidate: 3600,
+      tags: ['public-people', `public-person:${personId}`],
+    }
+  )()
+}
+
+export async function getAdminMatchesForReferee(personId: string): Promise<AdminRefereeMatch[]> {
+  const supabase = createServiceRoleClient()
+
+  const { data: participations, error: participationsError } = await supabase
+    .from('tbl_Match_Participants')
+    .select('match_id')
+    .eq('role', 'REFEREE')
+    .eq('person_id', personId)
+
+  if (participationsError) {
+    throw new Error(`tbl_Match_Participants (referee matches): ${participationsError.message}`)
+  }
+  if (!participations?.length) {
+    return []
+  }
+
+  const allMatchIds = [...new Set(participations.map((p) => p.match_id as string))]
+  if (!allMatchIds.length) {
+    return []
+  }
+
+  const { data: matches, error: matchesError } = await supabase
+    .from('tbl_Matches')
+    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id')
+    .in('id', allMatchIds)
+    .order('match_date', { ascending: false })
+    .order('match_time', { ascending: false })
+    .order('id', { ascending: false })
+
+  if (matchesError) {
+    throw new Error(`tbl_Matches (referee matches): ${matchesError.message}`)
+  }
+  if (!matches?.length) {
+    return []
+  }
+
+  const adminMatches = await mapAdminMatches(supabase, matches as MatchListRow[])
+
+  return adminMatches.map((match) => ({
+    ...match,
+    poland_is_home: match.home_team_fifa_code === 'POL'
+      ? true
+      : match.away_team_fifa_code === 'POL'
+        ? false
+        : null,
+  }))
+}
+
+export async function getPublicMatchesForReferee(personId: string): Promise<AdminRefereeMatch[]> {
+  return unstable_cache(
+    async () => getAdminMatchesForReferee(personId),
+    ['public-referee-matches', personId],
+    {
+      revalidate: 3600,
+      tags: ['public-people', `public-person:${personId}`],
+    }
+  )()
+}
+
+function parseGoalsFromFinalScore(finalScore: string | null): { homeGoals: number; awayGoals: number } | null {
+  if (!finalScore) return null
+
+  const scoreMatch = finalScore.match(/(\d+)\s*[:\-]\s*(\d+)/)
+  if (!scoreMatch) return null
+
+  return {
+    homeGoals: Number(scoreMatch[1]),
+    awayGoals: Number(scoreMatch[2]),
+  }
+}
+
+export async function getAdminCoachYearStats(personId: string): Promise<Record<string, AdminCoachYearStats>> {
+  const coachMatches = await getAdminMatchesForCoach(personId)
+  if (!coachMatches.length) return {}
+
+  const result: Record<string, AdminCoachYearStats> = {}
+  const ensureYear = (year: string): AdminCoachYearStats => {
+    if (!result[year]) {
+      result[year] = {
+        match_count: 0,
+        win_count: 0,
+        draw_count: 0,
+        loss_count: 0,
+        goals_scored: 0,
+        goals_conceded: 0,
+        points_total: 0,
+        points_per_match: 0,
+      }
+    }
+    return result[year]
+  }
+
+  for (const match of coachMatches) {
+    if (match.result_type === 'WALKOVER') continue
+
+    const year = match.match_date.slice(0, 4)
+    const stats = ensureYear(year)
+    stats.match_count += 1
+
+    const parsedScore = parseGoalsFromFinalScore(match.final_score)
+    if (!parsedScore || match.coach_is_home === null) continue
+
+    const goalsFor = match.coach_is_home ? parsedScore.homeGoals : parsedScore.awayGoals
+    const goalsAgainst = match.coach_is_home ? parsedScore.awayGoals : parsedScore.homeGoals
+
+    stats.goals_scored += goalsFor
+    stats.goals_conceded += goalsAgainst
+
+    if (goalsFor > goalsAgainst) {
+      stats.win_count += 1
+      stats.points_total += 3
+    } else if (goalsFor === goalsAgainst) {
+      stats.draw_count += 1
+      stats.points_total += 1
+    } else {
+      stats.loss_count += 1
+    }
+  }
+
+  for (const year of Object.keys(result)) {
+    const stats = result[year]
+    stats.points_per_match = stats.match_count > 0
+      ? Number((stats.points_total / stats.match_count).toFixed(2))
+      : 0
+  }
+
+  return result
+}
+
+export async function getPublicCoachYearStats(personId: string): Promise<Record<string, AdminCoachYearStats>> {
+  return unstable_cache(
+    async () => getAdminCoachYearStats(personId),
+    ['public-coach-year-stats', personId],
+    {
+      revalidate: 3600,
+      tags: ['public-people', `public-person:${personId}`],
+    }
+  )()
+}
+
+export async function getAdminRefereeYearStats(personId: string): Promise<Record<string, AdminCoachYearStats>> {
+  const refereeMatches = await getAdminMatchesForReferee(personId)
+  if (!refereeMatches.length) return {}
+
+  const result: Record<string, AdminCoachYearStats> = {}
+  const ensureYear = (year: string): AdminCoachYearStats => {
+    if (!result[year]) {
+      result[year] = {
+        match_count: 0,
+        win_count: 0,
+        draw_count: 0,
+        loss_count: 0,
+        goals_scored: 0,
+        goals_conceded: 0,
+        points_total: 0,
+        points_per_match: 0,
+      }
+    }
+    return result[year]
+  }
+
+  for (const match of refereeMatches) {
+    if (match.result_type === 'WALKOVER') continue
+
+    const year = match.match_date.slice(0, 4)
+    const stats = ensureYear(year)
+    stats.match_count += 1
+
+    const parsedScore = parseGoalsFromFinalScore(match.final_score)
+    if (!parsedScore || match.poland_is_home === null) continue
+
+    const goalsFor = match.poland_is_home ? parsedScore.homeGoals : parsedScore.awayGoals
+    const goalsAgainst = match.poland_is_home ? parsedScore.awayGoals : parsedScore.homeGoals
+
+    stats.goals_scored += goalsFor
+    stats.goals_conceded += goalsAgainst
+
+    if (match.result_type === 'PENALTIES' || match.result_type === 'EXTRA_TIME_AND_PENALTIES') {
+      stats.draw_count += 1
+      stats.points_total += 1
+    } else if (goalsFor > goalsAgainst) {
+      stats.win_count += 1
+      stats.points_total += 3
+    } else if (goalsFor === goalsAgainst) {
+      stats.draw_count += 1
+      stats.points_total += 1
+    } else {
+      stats.loss_count += 1
+    }
+  }
+
+  for (const year of Object.keys(result)) {
+    const stats = result[year]
+    stats.points_per_match = stats.match_count > 0
+      ? Number((stats.points_total / stats.match_count).toFixed(2))
+      : 0
+  }
+
+  return result
+}
+
+export async function getPublicRefereeYearStats(personId: string): Promise<Record<string, AdminCoachYearStats>> {
+  return unstable_cache(
+    async () => getAdminRefereeYearStats(personId),
+    ['public-referee-year-stats', personId],
+    {
+      revalidate: 3600,
+      tags: ['public-people', `public-person:${personId}`],
+    }
+  )()
+}
+
 export async function getPublicPlayerGoalsByYear(personId: string): Promise<Record<string, number>> {
   return unstable_cache(
     async () => getAdminPlayerGoalsByYear(personId),
@@ -731,7 +1059,7 @@ function formatEventMinuteForPlayerEvent(event: Pick<MatchEventRow, 'minute' | '
 export async function getPublicPlayerMatchEventsByMatch(
   personId: string,
   matchIds: string[]
-): Promise<Record<string, AdminPlayerMatchEventIcon[]>> {
+): Promise<Record<string, AdminPlayerMatchEventsByMatchEntry>> {
   const normalizedMatchIds = [...new Set(matchIds)].sort()
 
   return unstable_cache(
@@ -747,7 +1075,7 @@ export async function getPublicPlayerMatchEventsByMatch(
 export async function getAdminPlayerMatchEventsByMatch(
   personId: string,
   matchIds: string[]
-): Promise<Record<string, AdminPlayerMatchEventIcon[]>> {
+): Promise<Record<string, AdminPlayerMatchEventsByMatchEntry>> {
   const supabase = createServiceRoleClient()
 
   if (!matchIds.length) {
@@ -787,10 +1115,16 @@ export async function getAdminPlayerMatchEventsByMatch(
     allSecondaryEvents.push(...((secondaryRes.data ?? []) as MatchEventRow[]))
   }
 
-  const result: Record<string, AdminPlayerMatchEventIcon[]> = {}
+  const result: Record<string, AdminPlayerMatchEventsByMatchEntry> = {}
   const append = (matchId: string, icon: AdminPlayerMatchEventIcon) => {
-    if (!result[matchId]) result[matchId] = []
-    result[matchId].push(icon)
+    if (!result[matchId]) {
+      result[matchId] = {
+        icons: [],
+        played_minutes: 0,
+        is_bench: false,
+      }
+    }
+    result[matchId].icons.push(icon)
   }
 
   for (const event of allPrimaryEvents.sort(compareEventsChronologicallyForPlayer)) {
@@ -824,6 +1158,96 @@ export async function getAdminPlayerMatchEventsByMatch(
       minute: event.event_type === 'SUBSTITUTION' ? formatEventMinuteForPlayerEvent(event) : null,
       minute_left: true,
     })
+  }
+
+  type ParticipationRow = { match_id: string; is_starting: boolean | null }
+  const { data: participationsData, error: participationsError } = await supabase
+    .from('tbl_Match_Participants')
+    .select('match_id, is_starting')
+    .eq('role', 'PLAYER')
+    .eq('person_id', personId)
+    .in('match_id', uniqueMatchIds)
+
+  if (participationsError) {
+    throw new Error(`tbl_Match_Participants (player match minutes): ${participationsError.message}`)
+  }
+
+  type MatchResultTypeRow = { id: string; result_type: string | null }
+  const resultTypeByMatchId = new Map<string, string | null>()
+  for (let i = 0; i < uniqueMatchIds.length; i += CHUNK_SIZE) {
+    const batch = uniqueMatchIds.slice(i, i + CHUNK_SIZE)
+    const { data: matchesData, error: matchesError } = await supabase
+      .from('tbl_Matches')
+      .select('id, result_type')
+      .in('id', batch)
+
+    if (matchesError) {
+      throw new Error(`tbl_Matches (player match minutes): ${matchesError.message}`)
+    }
+
+    for (const row of (matchesData ?? []) as MatchResultTypeRow[]) {
+      resultTypeByMatchId.set(row.id, row.result_type)
+    }
+  }
+
+  const subOnByMatchId = new Map<string, Pick<MatchEventRow, 'minute' | 'minute_extra'>>()
+  const subOffByMatchId = new Map<string, Pick<MatchEventRow, 'minute' | 'minute_extra'>>()
+
+  for (const event of allSecondaryEvents.sort(compareEventsChronologicallyForPlayer)) {
+    if (event.event_type !== 'SUBSTITUTION' || !event.match_id) continue
+    if (!subOnByMatchId.has(event.match_id)) {
+      subOnByMatchId.set(event.match_id, { minute: event.minute, minute_extra: event.minute_extra })
+    }
+  }
+
+  for (const event of allPrimaryEvents.sort(compareEventsChronologicallyForPlayer)) {
+    if (event.event_type !== 'SUBSTITUTION' || !event.match_id) continue
+    if (!subOffByMatchId.has(event.match_id)) {
+      subOffByMatchId.set(event.match_id, { minute: event.minute, minute_extra: event.minute_extra })
+    }
+  }
+
+  for (const matchId of uniqueMatchIds) {
+    if (!result[matchId]) {
+      result[matchId] = {
+        icons: [],
+        played_minutes: 0,
+        is_bench: false,
+      }
+    }
+  }
+
+  for (const participation of (participationsData ?? []) as ParticipationRow[]) {
+    const entry = result[participation.match_id]
+    if (!entry) continue
+
+    const rt = resultTypeByMatchId.get(participation.match_id) ?? null
+    const hasExtraTime =
+      rt === 'EXTRA_TIME' ||
+      rt === 'EXTRA_TIME_AND_PENALTIES' ||
+      rt === 'GOLDEN_GOAL'
+    const matchRegularEnd = hasExtraTime ? 120 : 90
+
+    const isStarter = participation.is_starting === true
+    const subOn = isStarter ? null : (subOnByMatchId.get(participation.match_id) ?? null)
+
+    if (!isStarter && !subOn) {
+      entry.played_minutes = 0
+      entry.is_bench = true
+      continue
+    }
+
+    const subOff = subOffByMatchId.get(participation.match_id) ?? null
+
+    const entryMin = isStarter ? 0 : subOn!.minute
+    const entryExtra = isStarter ? 0 : (subOn!.minute_extra ?? 0)
+    const exitMin = subOff ? subOff.minute : matchRegularEnd
+
+    const effectiveEntry = entryExtra > 0 ? entryMin - 1 : entryMin
+    const effectiveExit = Math.min(exitMin, matchRegularEnd)
+
+    entry.played_minutes = Math.max(0, effectiveExit - effectiveEntry)
+    entry.is_bench = false
   }
 
   return result
@@ -1114,24 +1538,48 @@ async function mapAdminMatches(
     }
   }
 
-  const [{ data: matchEvents, error: matchEventsError }, teamNameMap, teamFifaMap] = await Promise.all([
-    runSelectWithRetry<any>(async () =>
-      await supabase
-        .from('tbl_Match_Events')
-        .select('match_id, team_id, event_type')
-        .in('match_id', matches.map((match) => match.id))
-    ),
+  const [matchEvents, teamNameMap, teamFifaMap] = await Promise.all([
+    (async () => {
+      const EVENT_TYPES_FOR_SCORE = ['GOAL', 'OWN_GOAL', 'PENALTY_GOAL', 'PENALTY_SHOOTOUT_SCORED']
+      const PAGE_SIZE = 1000
+      const allEvents: Array<Pick<MatchEventRow, 'match_id' | 'team_id' | 'event_type'>> = []
+      const matchIds = matches.map((match) => match.id)
+
+      for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
+        const chunkIds = matchIds.slice(i, i + CHUNK_SIZE)
+        let from = 0
+
+        while (true) {
+          const { data, error } = await runSelectWithRetry<any>(async () =>
+            await supabase
+              .from('tbl_Match_Events')
+              .select('match_id, team_id, event_type')
+              .in('match_id', chunkIds)
+              .in('event_type', EVENT_TYPES_FOR_SCORE)
+              .order('id', { ascending: true })
+              .range(from, from + PAGE_SIZE - 1)
+          )
+
+          if (error) throw new Error(`tbl_Match_Events: ${error.message}`)
+          const rows = (data ?? []) as Array<Pick<MatchEventRow, 'match_id' | 'team_id' | 'event_type'>>
+          allEvents.push(...rows)
+
+          if (rows.length < PAGE_SIZE) break
+          from += PAGE_SIZE
+        }
+      }
+
+      return allEvents
+    })(),
     getTeamDisplayMap(teamIds),
     getTeamCountryFifaCodeMap(teamIds),
   ])
-
-  if (matchEventsError) throw new Error(`tbl_Match_Events: ${matchEventsError.message}`)
 
   // 3. Lookup maps
   const compMap = new Map(competitions?.map((c) => [c.id, c.name]) ?? [])
   const eventsByMatchId = new Map<string, Array<Pick<MatchEventRow, 'team_id' | 'event_type'>>>()
 
-  for (const event of ((matchEvents ?? []) as Array<Pick<MatchEventRow, 'match_id' | 'team_id' | 'event_type'>>)) {
+  for (const event of matchEvents) {
     if (!event.match_id) continue
     const existing = eventsByMatchId.get(event.match_id) ?? []
     existing.push({ team_id: event.team_id, event_type: event.event_type })
@@ -1143,7 +1591,13 @@ async function mapAdminMatches(
     if (walkoverScore) return walkoverScore
 
     const events = eventsByMatchId.get(match.id) ?? []
-    if (!events.length) return null
+    if (!events.length) {
+      // For finished non-walkover matches, absence of scoring events means a 0:0 draw.
+      if (match.match_status === 'FINISHED' && match.result_type !== 'WALKOVER') {
+        return '0:0'
+      }
+      return null
+    }
 
     let homeGoals = 0
     let awayGoals = 0

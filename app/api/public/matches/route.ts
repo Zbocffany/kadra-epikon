@@ -8,10 +8,14 @@ export type PublicMatchesApiResponse = {
 
 export async function GET(req: NextRequest): Promise<NextResponse<PublicMatchesApiResponse>> {
   const period = req.nextUrl.searchParams.get('period') ?? 'upcoming'
+  const allPublicMatchesPromise = getCachedPublicMatches()
 
   if (period === 'upcoming') {
     const matches = await getCachedPublicMatches({ status: 'SCHEDULED' })
-    return NextResponse.json({ matches, yearStats: null })
+    const allPublicMatches = await allPublicMatchesPromise
+    const historyMatches = allPublicMatches.filter((m) => m.match_status !== 'SCHEDULED')
+    const yearStats = historyMatches.length > 0 ? await getMatchesYearStats(historyMatches) : null
+    return NextResponse.json({ matches, yearStats })
   }
 
   const startYear = Number.parseInt(period, 10)
@@ -24,7 +28,8 @@ export async function GET(req: NextRequest): Promise<NextResponse<PublicMatchesA
     toDate: `${startYear + 9}-12-31`,
   })
 
-  const historyMatches = matches.filter((m) => m.match_status !== 'SCHEDULED')
+  const allPublicMatches = await allPublicMatchesPromise
+  const historyMatches = allPublicMatches.filter((m) => m.match_status !== 'SCHEDULED')
   const yearStats = historyMatches.length > 0 ? await getMatchesYearStats(historyMatches) : null
 
   return NextResponse.json({ matches, yearStats })

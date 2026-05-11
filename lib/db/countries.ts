@@ -86,7 +86,7 @@ async function getCountryVsPolandStats(
   const [{ data: homeMatches }, { data: awayMatches }] = await Promise.all([
     supabase
       .from('tbl_Matches')
-      .select('id, home_team_id, away_team_id')
+      .select('id, home_team_id, away_team_id, result_type')
       .eq('match_status', 'FINISHED')
       .neq('result_type', 'WALKOVER')
       .in('editorial_status', ['COMPLETE', 'VERIFIED'])
@@ -94,7 +94,7 @@ async function getCountryVsPolandStats(
       .in('away_team_id', opponentTeamIds),
     supabase
       .from('tbl_Matches')
-      .select('id, home_team_id, away_team_id')
+      .select('id, home_team_id, away_team_id, result_type')
       .eq('match_status', 'FINISHED')
       .neq('result_type', 'WALKOVER')
       .in('editorial_status', ['COMPLETE', 'VERIFIED'])
@@ -157,9 +157,15 @@ async function getCountryVsPolandStats(
     stat.matches++
     stat.goals_for += polandGoals
     stat.goals_against += opponentGoals
-    if (polandGoals > opponentGoals) stat.wins++
-    else if (polandGoals === opponentGoals) stat.draws++
-    else stat.losses++
+    if (match.result_type === 'PENALTIES' || match.result_type === 'EXTRA_TIME_AND_PENALTIES') {
+      stat.draws++
+    } else if (polandGoals > opponentGoals) {
+      stat.wins++
+    } else if (polandGoals === opponentGoals) {
+      stat.draws++
+    } else {
+      stat.losses++
+    }
     result.set(countryId, stat)
   }
 

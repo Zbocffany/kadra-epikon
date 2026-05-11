@@ -23,6 +23,105 @@ type DecadeFilter = {
   endYear: number
 }
 
+type PolandGlobalStats = {
+  totalMatches: number
+  wins: number
+  draws: number
+  losses: number
+  goalsScored: number
+  goalsConceded: number
+}
+
+function normalizeTeamName(name: string | null): string {
+  return (name ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function isPolandTeam(fifaCode: string | null, teamName: string | null): boolean {
+  const fifa = (fifaCode ?? '').trim().toUpperCase()
+  if (fifa === 'POL') return true
+
+  const normalizedName = normalizeTeamName(teamName)
+  return normalizedName.includes('polsk') || normalizedName.includes('poland')
+}
+
+function getPolandMatchOutcome(match: AdminMatch): 'WIN' | 'LOSS' | 'DRAW' | null {
+  if (!match.final_score) return null
+
+  const scoreMatch = match.final_score.match(/(\d+)\s*[:\-]\s*(\d+)/)
+  if (!scoreMatch) return null
+
+  const homeGoals = Number(scoreMatch[1])
+  const awayGoals = Number(scoreMatch[2])
+  const isPolandHome = isPolandTeam(match.home_team_fifa_code, match.home_team_name)
+  const isPolandAway = isPolandTeam(match.away_team_fifa_code, match.away_team_name)
+
+  if (!isPolandHome && !isPolandAway) return null
+
+  if (match.result_type === 'PENALTIES' || match.result_type === 'EXTRA_TIME_AND_PENALTIES') {
+    return 'DRAW'
+  }
+  if (homeGoals === awayGoals) return 'DRAW'
+
+  if (isPolandHome) return homeGoals > awayGoals ? 'WIN' : 'LOSS'
+  return awayGoals > homeGoals ? 'WIN' : 'LOSS'
+}
+
+function getPolandGoals(match: AdminMatch): { scored: number; conceded: number } | null {
+  if (!match.final_score) return null
+  const scoreMatch = match.final_score.match(/(\d+)\s*[:\-]\s*(\d+)/)
+  if (!scoreMatch) return null
+
+  const homeGoals = Number(scoreMatch[1])
+  const awayGoals = Number(scoreMatch[2])
+  const isPolandHome = isPolandTeam(match.home_team_fifa_code, match.home_team_name)
+  const isPolandAway = isPolandTeam(match.away_team_fifa_code, match.away_team_name)
+
+  if (!isPolandHome && !isPolandAway) return null
+  return isPolandHome
+    ? { scored: homeGoals, conceded: awayGoals }
+    : { scored: awayGoals, conceded: homeGoals }
+}
+
+function getPolandGlobalStats(matches: AdminMatch[]): PolandGlobalStats {
+  const comparableMatches = matches.filter(
+    (match) =>
+      match.match_status === 'FINISHED'
+      && (match.editorial_status === 'COMPLETE' || match.editorial_status === 'VERIFIED')
+      && match.result_type !== 'WALKOVER'
+  )
+  let wins = 0
+  let draws = 0
+  let losses = 0
+  let goalsScored = 0
+  let goalsConceded = 0
+
+  for (const match of comparableMatches) {
+    const outcome = getPolandMatchOutcome(match)
+    if (outcome === 'WIN') wins += 1
+    if (outcome === 'DRAW') draws += 1
+    if (outcome === 'LOSS') losses += 1
+
+    const goals = getPolandGoals(match)
+    if (goals) {
+      goalsScored += goals.scored
+      goalsConceded += goals.conceded
+    }
+  }
+
+  return {
+    totalMatches: comparableMatches.length,
+    wins,
+    draws,
+    losses,
+    goalsScored,
+    goalsConceded,
+  }
+}
+
 function parseSingleSearchParam(value: string | string[] | undefined): string | undefined {
   return Array.isArray(value) ? value[0] : value
 }
@@ -74,6 +173,7 @@ export default async function PublicMatchesPage({
   let selectedPeriod = 'upcoming'
   let fetchError: string | null = null
   let yearStats: MatchYearStatsData | undefined = undefined
+  let globalPolandStats: PolandGlobalStats | undefined = undefined
 
   try {
     const yearBounds = await getCachedPublicMatchYearBounds()
@@ -85,6 +185,8 @@ export default async function PublicMatchesPage({
     const selectedDecade = parseRequestedDecade(period, decadeFilters)
     selectedPeriod = period === 'upcoming' ? 'upcoming' : (selectedDecade ? String(selectedDecade.startYear) : 'upcoming')
 
+    const allPublicMatchesPromise = getCachedPublicMatches()
+
     if (selectedPeriod === 'upcoming') {
       matches = await getCachedPublicMatches({ status: 'SCHEDULED' })
     } else if (selectedDecade) {
@@ -94,7 +196,9 @@ export default async function PublicMatchesPage({
       })
     }
 
-    const historyMatches = matches.filter((match) => match.match_status !== 'SCHEDULED')
+    const allPublicMatches = await allPublicMatchesPromise
+    const historyMatches = allPublicMatches.filter((match) => match.match_status !== 'SCHEDULED')
+    globalPolandStats = getPolandGlobalStats(historyMatches)
     if (historyMatches.length > 0) {
       yearStats = await getMatchesYearStats(historyMatches)
     }
@@ -131,6 +235,7 @@ export default async function PublicMatchesPage({
         decadeFilters={decadeFilters}
         selectedPeriod={selectedPeriod}
         yearStats={yearStats}
+        globalPolandStats={globalPolandStats}
       />
     </div>
   )

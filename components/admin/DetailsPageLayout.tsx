@@ -19,6 +19,7 @@ type DetailsPageContentProps = {
   breadcrumb: ReactNode
   subtitle?: ReactNode
   headerRight?: ReactNode
+  containerClassName?: string
   saved?: string
   error?: string
   isEdit: boolean
@@ -39,6 +40,11 @@ export function DetailsPageHeader({
 }: DetailsPageHeaderProps) {
   const deleteTargetLabel = title.trim() && title !== '—' ? `"${title}"` : 'ten element'
   const confirmMessage = deleteConfirmMessage ?? `Czy na pewno chcesz usunąć ${deleteTargetLabel}?`
+  const hasHeaderControls = showBackButton || showActions
+
+  if (!hasHeaderControls) {
+    return null
+  }
 
   return (
     <div className="mb-6 flex items-center justify-between gap-3">
@@ -80,6 +86,7 @@ export function DetailsPageContent({
   breadcrumb,
   subtitle,
   headerRight,
+  containerClassName,
   saved,
   error,
   isEdit,
@@ -91,7 +98,7 @@ export function DetailsPageContent({
 
   return (
     <>
-      <div className="rounded-xl border border-neutral-800 bg-neutral-950 p-6">
+      <div className={containerClassName ?? 'rounded-xl border border-neutral-800 bg-neutral-950 p-6'}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="text-xs font-semibold uppercase tracking-widest text-neutral-500">

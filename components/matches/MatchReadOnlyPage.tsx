@@ -431,10 +431,22 @@ function MatchLineupsSummarySection({
   const phaseOrder: MatchPhaseKey[] = ['SHOOTOUT', 'EXTRA_2', 'EXTRA_1', 'HALF_2', 'HALF_1']
   const phaseEventsMap = new Map<MatchPhaseKey, AdminMatchEvent[]>(phaseOrder.map((phase) => [phase, []]))
   for (const event of sortedEvents) phaseEventsMap.get(getPhaseKey(event))?.push(event)
-  const phaseSections = phaseOrder.map((phase) => ({ phase, title: phaseTitles[phase], events: phaseEventsMap.get(phase) ?? [] })).filter((section) => section.events.length > 0)
+  const hasExtraTimeByResult = match.result_type === 'EXTRA_TIME' || match.result_type === 'EXTRA_TIME_AND_PENALTIES' || match.result_type === 'GOLDEN_GOAL'
+  const hasShootoutByResult = match.result_type === 'PENALTIES' || match.result_type === 'EXTRA_TIME_AND_PENALTIES'
 
-  const hasExtraTime = (phaseEventsMap.get('EXTRA_1') ?? []).length > 0 || (phaseEventsMap.get('EXTRA_2') ?? []).length > 0
-  const hasShootout = (phaseEventsMap.get('SHOOTOUT') ?? []).length > 0
+  const shouldRenderPhase = (phase: MatchPhaseKey): boolean => {
+    if (phase === 'HALF_1' || phase === 'HALF_2') return true
+    if (phase === 'EXTRA_1' || phase === 'EXTRA_2') return hasExtraTimeByResult
+    if (phase === 'SHOOTOUT') return hasShootoutByResult
+    return true
+  }
+
+  const phaseSections = phaseOrder
+    .filter(shouldRenderPhase)
+    .map((phase) => ({ phase, title: phaseTitles[phase], events: phaseEventsMap.get(phase) ?? [] }))
+
+  const hasExtraTime = hasExtraTimeByResult || (phaseEventsMap.get('EXTRA_1') ?? []).length > 0 || (phaseEventsMap.get('EXTRA_2') ?? []).length > 0
+  const hasShootout = hasShootoutByResult || (phaseEventsMap.get('SHOOTOUT') ?? []).length > 0
 
   let runningHome = 0
   let runningAway = 0
@@ -465,7 +477,7 @@ function MatchLineupsSummarySection({
           <span>{title}</span>
           <span className="inline-flex items-center gap-2"><span>{getHalfScore(halfEvents)}</span><span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/12 bg-emerald-950/40 text-[10px] transition-transform duration-200 group-open:rotate-180">▾</span></span>
         </summary>
-        {halfEvents.length === 0 ? <div className="bg-emerald-950/40 px-3 py-3 text-sm text-emerald-100/80">Brak zdarzeń.</div> : (
+        {halfEvents.length > 0 ? (
           <div className="relative overflow-hidden bg-emerald-950/18">
             <span aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0.01)_35%,rgba(0,0,0,0.12)_100%)]" />
             {halfEvents.map((event) => {
@@ -507,7 +519,7 @@ function MatchLineupsSummarySection({
               )
             })}
           </div>
-        )}
+        ) : null}
       </details>
     )
   }
@@ -544,7 +556,7 @@ function MatchLineupsSummarySection({
       </div>
       {lineupGraphic ? <div className="mt-4">{lineupGraphic}</div> : null}
       <div className="mt-4 space-y-3">
-        {phaseSections.length === 0 ? <div className="rounded-lg border border-neutral-800 bg-neutral-950 px-3 py-3 text-sm text-neutral-500">Brak zdarzeń.</div> : phaseSections.map((section) => <HalfBlock key={section.phase} title={section.title} halfEvents={section.events} />)}
+        {phaseSections.map((section) => <HalfBlock key={section.phase} title={section.title} halfEvents={section.events} />)}
       </div>
     </section>
   )

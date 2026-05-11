@@ -19,6 +19,14 @@ type PublicMatchesClientProps = {
   decadeFilters: DecadeFilter[]
   selectedPeriod: string
   yearStats?: MatchYearStatsData
+  globalPolandStats?: {
+    totalMatches: number
+    wins: number
+    draws: number
+    losses: number
+    goalsScored: number
+    goalsConceded: number
+  }
 }
 
 export default function PublicMatchesClient({
@@ -30,6 +38,7 @@ export default function PublicMatchesClient({
   decadeFilters,
   selectedPeriod: initialPeriod,
   yearStats: initialYearStats,
+  globalPolandStats,
 }: PublicMatchesClientProps) {
   const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod)
   const [visibleMatches, setVisibleMatches] = useState(initialMatches)
@@ -101,6 +110,7 @@ export default function PublicMatchesClient({
         displayMode={selectedPeriod === 'upcoming' ? 'upcoming' : 'history'}
         buildMatchHref={(match) => `${detailBasePath}/${match.id}?from=${encodeURIComponent(currentListHref)}`}
         yearStats={visibleYearStats ?? undefined}
+        globalPolandStatsOverride={globalPolandStats}
         leftFilters={[
         {
           key: 'upcoming',

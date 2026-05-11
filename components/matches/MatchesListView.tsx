@@ -242,6 +242,15 @@ type YearPolandResultStats = {
   goalsConceded: number
 }
 
+type PolandGlobalStats = {
+  totalMatches: number
+  wins: number
+  draws: number
+  losses: number
+  goalsScored: number
+  goalsConceded: number
+}
+
 function getPolandGoals(match: AdminMatch): { scored: number; conceded: number } | null {
   if (!match.final_score) return null
   const scoreMatch = match.final_score.match(/(\d+)\s*[:\-]\s*(\d+)/)
@@ -348,6 +357,7 @@ type MatchesListViewProps = {
   }>
   buildMatchHref?: (match: AdminMatch) => string
   yearStats?: MatchYearStatsData
+  globalPolandStatsOverride?: PolandGlobalStats
 }
 
 export default function MatchesListView({
@@ -364,6 +374,7 @@ export default function MatchesListView({
   leftFilters = [],
   buildMatchHref,
   yearStats,
+  globalPolandStatsOverride,
 }: MatchesListViewProps) {
   const upcomingMatches = [...matches]
     .filter((match) => match.match_status === 'SCHEDULED')
@@ -376,7 +387,7 @@ export default function MatchesListView({
     return acc
   }, {})
   const years = Object.keys(matchesByYear).sort((a, b) => Number(b) - Number(a))
-  const globalPolandStats = getPolandResultStats(completedAndOtherMatches)
+  const globalPolandStats = globalPolandStatsOverride ?? getPolandResultStats(completedAndOtherMatches)
   const showUpcomingSection = displayMode !== 'history'
   const showHistorySection = displayMode !== 'upcoming'
 
