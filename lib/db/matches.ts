@@ -1243,7 +1243,7 @@ export async function getAdminPlayerMatchEventsByMatch(
     const entryExtra = isStarter ? 0 : (subOn!.minute_extra ?? 0)
     const exitMin = subOff ? subOff.minute : matchRegularEnd
 
-    const effectiveEntry = entryExtra > 0 ? entryMin - 1 : entryMin
+    const effectiveEntry = entryMin > 0 ? entryMin - 1 : entryMin
     const effectiveExit = Math.min(exitMin, matchRegularEnd)
 
     entry.played_minutes = Math.max(0, effectiveExit - effectiveEntry)

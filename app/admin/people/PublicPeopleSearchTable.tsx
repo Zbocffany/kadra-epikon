@@ -1,16 +1,19 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import CountryFlag from '@/components/CountryFlag'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
-import type { AdminPersonListItem, CoachCompetitionFilterKey, CoachStageFilterKey } from '@/lib/db/people'
+import type { AdminPersonListItem, CoachCompetitionFilterKey, CoachStageFilterKey, CoachPolandFilterMatch } from '@/lib/db/people'
 import { getPersonDisplayName } from '@/lib/db/people'
+import type { AdminCoachMatch, AdminCoachYearStats } from '@/lib/db/matches'
 import PitchIcon from '@/components/icons/PitchIcon'
 import ClockIcon from '@/components/icons/ClockIcon'
 import { GoalIcon, AssistIcon, YellowCardIcon, RedCardIcon } from '@/components/icons'
 import BenchIcon from '@/components/icons/BenchIcon'
 import SortableStatHeader from '@/components/admin/SortableStatHeader'
+import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
 
 export type PeopleCardVariant = 'players' | 'coaches' | 'referees'
 type PublicPlayerMode = 'poland' | 'rivals'
@@ -25,6 +28,86 @@ type CoachComputedStats = {
   coach_goals_scored: number
   coach_goals_conceded: number
   coach_points_per_match: number
+}
+
+function formatDate(dateStr: string) {
+  const [year, month, day] = dateStr.split('-')
+  return `${day}.${month}.${year}`
+}
+
+function getCompetitionDisplay(name: string): { label: string; fullName: string; isCompact: boolean } {
+  const normalized = name.trim()
+  if (normalized === 'Mistrzostwa Świata') return { label: 'MŚ', fullName: normalized, isCompact: false }
+  if (normalized === 'Mistrzostwa Europy') return { label: 'ME', fullName: normalized, isCompact: false }
+  if (normalized === 'Liga Narodów') return { label: 'LN', fullName: normalized, isCompact: false }
+  if (normalized === 'Nieoficjalny') return { label: 'NO', fullName: normalized, isCompact: false }
+  if (normalized === 'Towarzyski') return { label: normalized, fullName: normalized, isCompact: false }
+  return { label: normalized, fullName: normalized, isCompact: false }
+}
+
+function getCompetitionLevelTooltip(competitionName: string, matchLevelName: string | null): string {
+  if (!matchLevelName || competitionName === 'Towarzyski' || competitionName === 'Nieoficjalny') return competitionName
+  return `${competitionName} - ${matchLevelName}`
+}
+
+function getTeamFifaCodeLabel(teamName: string, fifaCode: string | null): string {
+  const normalizedCode = fifaCode?.trim().toUpperCase()
+  if (normalizedCode) return normalizedCode
+  const compactName = teamName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z]/g, '').toUpperCase()
+  return compactName.slice(0, 3) || '---'
+}
+
+function getCoachMatchOutcome(match: AdminCoachMatch): 'WIN' | 'LOSS' | 'DRAW' | null {
+  if (!match.final_score || match.coach_is_home === null) return null
+  const scoreMatch = match.final_score.match(/(\d+)\s*[:\-]\s*(\d+)/)
+  if (!scoreMatch) return null
+  const homeGoals = Number(scoreMatch[1])
+  const awayGoals = Number(scoreMatch[2])
+  const goalsFor = match.coach_is_home ? homeGoals : awayGoals
+  const goalsAgainst = match.coach_is_home ? awayGoals : homeGoals
+  if (goalsFor > goalsAgainst) return 'WIN'
+  if (goalsFor < goalsAgainst) return 'LOSS'
+  return 'DRAW'
+}
+
+function getScoreBadgeClass(match: AdminCoachMatch): string {
+  const outcome = getCoachMatchOutcome(match)
+  if (outcome === 'WIN') return 'border-emerald-500'
+  if (outcome === 'LOSS') return 'border-red-500'
+  if (outcome === 'DRAW') return 'border-neutral-500'
+  return 'border-neutral-400'
+}
+
+function renderScoreWithFlags(match: AdminCoachMatch, compact = false) {
+  const label = match.final_score
+  if (!label) return null
+  const badgeClass = `text-white ${getScoreBadgeClass(match)}`
+  const shootout = match.shootout_score
+  let homeShootoutWin = false, awayShootoutWin = false
+  if (shootout) {
+    const m = shootout.match(/(\d+):(\d+)/)
+    if (m) {
+      const h = Number(m[1]), a = Number(m[2])
+      homeShootoutWin = h > a
+      awayShootoutWin = a > h
+    }
+  }
+  const starClass = 'absolute -top-2.5 z-10 text-[18px] leading-none text-amber-400 select-none drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]'
+  return (
+    <span className="inline-flex items-center gap-[0.5cm]">
+      <CountryFlag fifaCode={match.home_team_fifa_code} countryName={match.home_team_name} glossy className={compact ? 'h-[15px] w-[23px] ring-1 ring-neutral-500/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_1px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.7),0_4px_8px_rgba(0,0,0,0.45)]' : 'h-[22px] w-[33px] ring-1 ring-neutral-500/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_1px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.7),0_4px_8px_rgba(0,0,0,0.45)]'} />
+      <span className="group/score relative">
+        {homeShootoutWin && <span className={`${starClass} -left-3`}>★</span>}
+        {awayShootoutWin && <span className={`${starClass} -right-3`}>★</span>}
+        <span className={`relative inline-flex items-center overflow-hidden rounded-md border bg-black ${compact ? 'px-1.5 py-[0.1rem] text-[0.72rem]' : 'px-2 py-0.5 text-xs'} font-bold shadow-[inset_0_1px_0_rgba(255,255,255,0.5),inset_0_-1px_1px_rgba(0,0,0,0.55),0_1px_2px_rgba(0,0,0,0.65),0_4px_8px_rgba(0,0,0,0.35)] ${badgeClass}`} style={{ fontSize: compact ? '0.8em' : '0.95em', fontWeight: 700 }}>
+          <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]" />
+          <span className="relative z-10">{label}</span>
+        </span>
+        {shootout && <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-md border border-neutral-500 bg-black px-2 py-1 text-[11px] font-bold text-white opacity-0 shadow-lg transition-opacity duration-150 group-hover/score:opacity-100">Karne {shootout}</span>}
+      </span>
+      <CountryFlag fifaCode={match.away_team_fifa_code} countryName={match.away_team_name} glossy className={compact ? 'h-[15px] w-[23px] ring-1 ring-neutral-500/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_1px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.7),0_4px_8px_rgba(0,0,0,0.45)]' : 'h-[22px] w-[33px] ring-1 ring-neutral-500/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_1px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.7),0_4px_8px_rgba(0,0,0,0.45)]'} />
+    </span>
+  )
 }
 
 function getAgeDisplay(person: AdminPersonListItem): string | null {
@@ -165,8 +248,11 @@ export default function PublicPeopleSearchTable({
         const competitionAllowed = allCompetitionsActive
           ? true
           : (row.competition_key !== 'OTHER' && activeCompetitionSet.has(row.competition_key))
-        const stageIndependentCompetition = row.competition_key === 'FRIENDLY' || row.competition_key === 'NATIONS_LEAGUE'
-        const stageAllowed = stageIndependentCompetition ? true : (allStagesActive || activeStageSet.has(row.stage_key))
+        const isPhaselesCompetition = row.competition_key === 'FRIENDLY' || row.competition_key === 'NATIONS_LEAGUE'
+        // Phaseless competitions (FRIENDLY, LN) have no stage — exclude them when any stage filter is active
+        const stageAllowed = allStagesActive
+          ? true
+          : (!isPhaselesCompetition && activeStageSet.has(row.stage_key))
         return competitionAllowed && stageAllowed
       })
 
@@ -314,6 +400,81 @@ export default function PublicPeopleSearchTable({
 
   const displayed = filtered.slice(0, visibleCount)
 
+  const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null)
+
+  function getFilteredMatchesForCoach(person: AdminPersonListItem): AdminCoachMatch[] {
+    const rows = person.coach_poland_filter_matches ?? []
+    const activeCompetitionSet = new Set<VisibleCoachCompetitionFilter>(competitionFilters)
+    const activeStageSet = new Set<CoachStageFilterKey>(stageFilters)
+
+    const filteredRows = rows.filter((row: CoachPolandFilterMatch) => {
+      const competitionAllowed = allCompetitionsActive
+        ? true
+        : (row.competition_key !== 'OTHER' && activeCompetitionSet.has(row.competition_key as VisibleCoachCompetitionFilter))
+      const isPhaselesCompetition = row.competition_key === 'FRIENDLY' || row.competition_key === 'NATIONS_LEAGUE'
+      const stageAllowed = allStagesActive
+        ? true
+        : (!isPhaselesCompetition && activeStageSet.has(row.stage_key))
+      return competitionAllowed && stageAllowed
+    })
+
+    return filteredRows
+      .sort((a: CoachPolandFilterMatch, b: CoachPolandFilterMatch) => a.match_date < b.match_date ? -1 : a.match_date > b.match_date ? 1 : 0)
+      .map((row: CoachPolandFilterMatch): AdminCoachMatch => ({
+        id: row.match_id,
+        match_date: row.match_date,
+        match_time: row.match_time,
+        match_status: row.match_status as AdminCoachMatch['match_status'],
+        result_type: row.result_type as AdminCoachMatch['result_type'],
+        walkover_winner_team_id: row.walkover_winner_team_id,
+        editorial_status: row.editorial_status as AdminCoachMatch['editorial_status'],
+        competition_name: row.competition_name,
+        match_level_name: row.match_level_name,
+        home_team_name: row.home_team_name,
+        away_team_name: row.away_team_name,
+        home_team_fifa_code: row.home_team_fifa_code,
+        away_team_fifa_code: row.away_team_fifa_code,
+        final_score: row.final_score,
+        shootout_score: row.shootout_score,
+        coach_team_id: row.coach_team_id,
+        coach_team_fifa_code: row.coach_team_fifa_code,
+        coach_is_home: row.coach_is_home,
+      }))
+  }
+
+  function computeYearStats(matches: AdminCoachMatch[]): Record<string, AdminCoachYearStats> {
+    const result: Record<string, AdminCoachYearStats> = {}
+    for (const match of matches) {
+      const year = match.match_date.slice(0, 4)
+      if (!result[year]) {
+        result[year] = { match_count: 0, win_count: 0, draw_count: 0, loss_count: 0, goals_scored: 0, goals_conceded: 0, points_total: 0, points_per_match: 0 }
+      }
+      const s = result[year]
+      s.match_count += 1
+      if (match.final_score) {
+        const [h, a] = match.final_score.split(':').map(Number)
+        const coachGoals = match.coach_is_home ? h : a
+        const oppGoals = match.coach_is_home ? a : h
+        s.goals_scored += coachGoals ?? 0
+        s.goals_conceded += oppGoals ?? 0
+        const isPenalties = match.result_type === 'PENALTIES' || match.result_type === 'EXTRA_TIME_AND_PENALTIES'
+        if (isPenalties) {
+          s.draw_count += 1
+        } else if ((coachGoals ?? 0) > (oppGoals ?? 0)) {
+          s.win_count += 1
+          s.points_total += 3
+        } else if ((coachGoals ?? 0) < (oppGoals ?? 0)) {
+          s.loss_count += 1
+        } else {
+          s.draw_count += 1
+          s.points_total += 1
+        }
+      }
+      s.points_per_match = s.match_count > 0 ? s.points_total / s.match_count : 0
+    }
+    return result
+  }
+
   function renderStatBadge(value: number) {
     return value > 0
       ? <span className="stat-badge inline-flex min-w-[2rem] items-center justify-center rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900">{value}</span>
@@ -351,14 +512,14 @@ export default function PublicPeopleSearchTable({
   return (
     <div className="space-y-3">
       {/* Search bar and filter — blends with green card */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         {isPublicCoachesView && isPolandCoachView ? (
           <button
             type="button"
             onClick={() => setCoachDisplayMode((current) => (current === 'stats' ? 'tenure' : 'stats'))}
             title={coachDisplayMode === 'stats' ? 'Pokaż listę kadencji' : 'Pokaż widok statystyk'}
             aria-label={coachDisplayMode === 'stats' ? 'Pokaż listę kadencji' : 'Pokaż widok statystyk'}
-            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center self-start rounded-lg border transition-colors ${coachDisplayMode === 'stats'
+            className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${coachDisplayMode === 'stats'
               ? 'border-emerald-300/80 bg-emerald-700/55 text-emerald-50 shadow-[0_0_0_1px_rgba(110,231,183,0.2)]'
               : 'border-emerald-700/60 bg-emerald-950/50 text-emerald-200/80 hover:border-emerald-400/70 hover:text-emerald-50'
             }`}
@@ -367,7 +528,100 @@ export default function PublicPeopleSearchTable({
           </button>
         ) : null}
 
-        <div className="flex-1">
+        {isPolandCoachView && showCoachStats ? (
+          <div className="inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border border-neutral-700/70 bg-neutral-900/35 px-2">
+            <button
+              type="button"
+              onClick={() => { setCompetitionFilters([]); setStageFilters([]) }}
+              aria-pressed={allCompetitionsActive && allStagesActive}
+              title="Wyczyść wszystkie filtry"
+              aria-label="Wyczyść wszystkie filtry"
+              className={`inline-flex h-[2.1rem] w-[2.1rem] shrink-0 items-center justify-center rounded border px-0 py-0 transition-colors ${allCompetitionsActive && allStagesActive
+                ? 'border-emerald-950/80 bg-emerald-900/80 text-emerald-100 shadow-[inset_0_3px_6px_rgba(0,0,0,0.55),inset_0_1px_3px_rgba(0,0,0,0.4),inset_0_-1px_0_rgba(255,255,255,0.08)]'
+                : 'border-emerald-500/55 bg-emerald-600/65 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.38),inset_0_-2px_0_rgba(0,0,0,0.3),0_3px_5px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.25)] hover:bg-emerald-600/80'
+              }`}
+            >
+              <FilterIcon className="h-[1.5rem] w-[1.5rem] shrink-0" />
+            </button>
+            <div className="flex flex-col gap-[3px]">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setCompetitionFilters([])}
+                  aria-pressed={allCompetitionsActive}
+                  title="Wszystkie mecze"
+                  aria-label="Wszystkie mecze"
+                  className={`inline-flex h-[1.05rem] w-[1.05rem] items-center justify-center rounded border px-0 py-0 text-[10px] leading-none transition-colors ${allCompetitionsActive
+                    ? 'border-emerald-950/80 bg-emerald-900/80 text-emerald-100 shadow-[inset_0_3px_6px_rgba(0,0,0,0.55),inset_0_1px_3px_rgba(0,0,0,0.4),inset_0_-1px_0_rgba(255,255,255,0.08)]'
+                    : 'border-emerald-500/55 bg-emerald-600/65 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.38),inset_0_-2px_0_rgba(0,0,0,0.3),0_3px_5px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.25)] hover:bg-emerald-600/80'
+                  }`}
+                >
+                  <FilterIcon className="h-3.5 w-3.5 shrink-0" />
+                </button>
+                {([
+                  ['WORLD_CUP', 'MŚ'],
+                  ['EURO', 'ME'],
+                  ['FRIENDLY', 'T'],
+                  ['NATIONS_LEAGUE', 'LN'],
+                ] as Array<[VisibleCoachCompetitionFilter, string]>).map(([key, label]) => {
+                  const active = competitionFilters.includes(key)
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggleCompetitionFilter(key)}
+                      aria-pressed={active}
+                      className={`inline-flex h-[1.05rem] items-center justify-center rounded border px-1 py-0 text-[10px] leading-none transition-colors ${active
+                        ? 'border-emerald-950/80 bg-emerald-900/80 text-emerald-100 shadow-[inset_0_3px_6px_rgba(0,0,0,0.55),inset_0_1px_3px_rgba(0,0,0,0.4),inset_0_-1px_0_rgba(255,255,255,0.08)]'
+                        : 'border-emerald-500/55 bg-emerald-600/65 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.38),inset_0_-2px_0_rgba(0,0,0,0.3),0_3px_5px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.25)] hover:bg-emerald-600/80'
+                      }`}
+                    >
+                      <span className="inline-block scale-75 leading-none">{label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setStageFilters([])}
+                  aria-pressed={allStagesActive}
+                  title="Wszystkie fazy"
+                  aria-label="Wszystkie fazy"
+                  className={`inline-flex h-[1.05rem] w-[1.05rem] items-center justify-center rounded border px-0 py-0 text-[10px] leading-none transition-colors ${allStagesActive
+                    ? 'border-emerald-950/80 bg-emerald-900/80 text-emerald-100 shadow-[inset_0_3px_6px_rgba(0,0,0,0.55),inset_0_1px_3px_rgba(0,0,0,0.4),inset_0_-1px_0_rgba(255,255,255,0.08)]'
+                    : 'border-emerald-500/55 bg-emerald-600/65 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.38),inset_0_-2px_0_rgba(0,0,0,0.3),0_3px_5px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.25)] hover:bg-emerald-600/80'
+                  }`}
+                >
+                  <FilterIcon className="h-3.5 w-3.5 shrink-0" />
+                </button>
+                {([
+                  ['TOURNAMENT', 'Turniej'],
+                  ['QUALIFIERS', 'El.'],
+                  ['PLAYOFFS', 'Baraże'],
+                ] as Array<[CoachStageFilterKey, string]>).map(([key, label]) => {
+                  const active = stageFilters.includes(key)
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => toggleStageFilter(key)}
+                      aria-pressed={active}
+                      className={`inline-flex h-[1.05rem] items-center justify-center rounded border px-1 py-0 text-[10px] leading-none transition-colors ${active
+                        ? 'border-emerald-950/80 bg-emerald-900/80 text-emerald-100 shadow-[inset_0_3px_6px_rgba(0,0,0,0.55),inset_0_1px_3px_rgba(0,0,0,0.4),inset_0_-1px_0_rgba(255,255,255,0.08)]'
+                        : 'border-emerald-500/55 bg-emerald-600/65 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.38),inset_0_-2px_0_rgba(0,0,0,0.3),0_3px_5px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.25)] hover:bg-emerald-600/80'
+                      }`}
+                    >
+                      <span className="inline-block scale-75 leading-none">{label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        <div className="flex-1 min-w-0">
           <input
             type="text"
             value={query}
@@ -446,100 +700,6 @@ export default function PublicPeopleSearchTable({
         )}
       </div>
 
-      {isPolandCoachView && showCoachStats ? (
-        <div className="flex items-center gap-2.5 rounded-lg border border-neutral-700/70 bg-neutral-900/35 p-2.5">
-          <button
-            type="button"
-            onClick={() => { setCompetitionFilters([]); setStageFilters([]) }}
-            aria-pressed={allCompetitionsActive && allStagesActive}
-            title="Wyczyść wszystkie filtry"
-            aria-label="Wyczyść wszystkie filtry"
-            className={`inline-flex h-[2.1rem] w-[2.1rem] shrink-0 items-center justify-center rounded border px-0 py-0 transition-colors ${allCompetitionsActive && allStagesActive
-              ? 'border-emerald-900/80 bg-emerald-800 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.35),0_1px_2px_rgba(0,0,0,0.35)]'
-              : 'border-emerald-300/45 bg-emerald-600/60 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.2)] hover:bg-emerald-600/70'
-            }`}
-          >
-            <FilterIcon className="h-[1.5rem] w-[1.5rem] shrink-0" />
-          </button>
-          <div className="flex flex-col gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setCompetitionFilters([])}
-              aria-pressed={allCompetitionsActive}
-              title="Wszystkie mecze"
-              aria-label="Wszystkie mecze"
-              className={`inline-flex h-[1.05rem] w-[1.05rem] items-center justify-center rounded border px-0 py-0 text-[10px] leading-none transition-colors ${allCompetitionsActive
-                ? 'border-emerald-900/80 bg-emerald-800 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.35),0_1px_2px_rgba(0,0,0,0.35)]'
-                : 'border-emerald-300/45 bg-emerald-600/60 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.2)] hover:bg-emerald-600/70'
-              }`}
-            >
-              <FilterIcon className="h-3.5 w-3.5 shrink-0" />
-            </button>
-            {([
-              ['WORLD_CUP', 'MŚ'],
-              ['EURO', 'ME'],
-              ['FRIENDLY', 'T'],
-              ['NATIONS_LEAGUE', 'LN'],
-            ] as Array<[VisibleCoachCompetitionFilter, string]>).map(([key, label]) => {
-              const active = competitionFilters.includes(key)
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => toggleCompetitionFilter(key)}
-                  aria-pressed={active}
-                  className={`inline-flex h-[1.05rem] items-center justify-center rounded border px-1 py-0 text-[10px] leading-none transition-colors ${active
-                    ? 'border-emerald-900/80 bg-emerald-800 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.35),0_1px_2px_rgba(0,0,0,0.35)]'
-                    : 'border-emerald-300/45 bg-emerald-600/60 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.2)] hover:bg-emerald-600/70'
-                  }`}
-                >
-                  <span className="inline-block scale-75 leading-none">{label}</span>
-                </button>
-              )
-            })}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setStageFilters([])}
-              aria-pressed={allStagesActive}
-              title="Wszystkie fazy"
-              aria-label="Wszystkie fazy"
-              className={`inline-flex h-[1.05rem] w-[1.05rem] items-center justify-center rounded border px-0 py-0 text-[10px] leading-none transition-colors ${allStagesActive
-                ? 'border-emerald-900/80 bg-emerald-800 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.35),0_1px_2px_rgba(0,0,0,0.35)]'
-                : 'border-emerald-300/45 bg-emerald-600/60 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.2)] hover:bg-emerald-600/70'
-              }`}
-            >
-              <FilterIcon className="h-3.5 w-3.5 shrink-0" />
-            </button>
-            {([
-              ['TOURNAMENT', 'Turniej'],
-                ['QUALIFIERS', 'El.'],
-              ['PLAYOFFS', 'Baraże'],
-            ] as Array<[CoachStageFilterKey, string]>).map(([key, label]) => {
-              const active = stageFilters.includes(key)
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => toggleStageFilter(key)}
-                  aria-pressed={active}
-                  className={`inline-flex h-[1.05rem] items-center justify-center rounded border px-1 py-0 text-[10px] leading-none transition-colors ${active
-                    ? 'border-emerald-900/80 bg-emerald-800 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.35),0_1px_2px_rgba(0,0,0,0.35)]'
-                    : 'border-emerald-300/45 bg-emerald-600/60 text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_1px_2px_rgba(0,0,0,0.2)] hover:bg-emerald-600/70'
-                  }`}
-                >
-                  <span className="inline-block scale-75 leading-none">{label}</span>
-                </button>
-              )
-            })}
-          </div>
-          </div>
-        </div>
-      ) : null}
-
       {/* People table */}
       <div className="overflow-hidden rounded-xl border border-neutral-800">
         <table className="w-full border-collapse text-sm table-auto">
@@ -579,8 +739,6 @@ export default function PublicPeopleSearchTable({
               </>
             )}
           </colgroup>
-
-          {/* Header row */}
           <thead>
             <tr className="h-[52px] border-b border-neutral-800 bg-neutral-900 text-left">
               <th className="px-4 py-3 font-medium text-neutral-400" />
@@ -660,15 +818,25 @@ export default function PublicPeopleSearchTable({
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {displayed.length === 0 ? (
               <tr>
-                <td colSpan={variant === 'coaches' ? (showCoachStats ? 9 : 2) : variant === 'referees' ? 8 : 9} className="px-4 py-8 text-center text-sm text-neutral-500">
-                  {query ? 'Brak osób pasujących do wyszukiwanej frazy.' : 'Brak osób w bazie danych.'}
+                <td
+                  colSpan={variant === 'coaches' ? (showCoachStats ? 9 : 2) : variant === 'referees' ? 8 : 9}
+                  className="px-4 py-8 text-center text-sm text-neutral-500"
+                >
+                  Brak wynikow.
                 </td>
               </tr>
             ) : (
-              displayed.map((person, i) => (
-                <tr key={person.id} className="table-data-row border-b border-neutral-800 last:border-b-0 bg-neutral-950 transition-colors hover:bg-neutral-900/60">
+              displayed.map((person, i) => {
+                const isExpanded = isPolandCoachView && expandedPersonId === person.id
+                const colSpanCount = variant === 'coaches' ? (showCoachStats ? 9 : 2) : variant === 'referees' ? 8 : 9
+                return (
+                <Fragment key={person.id}>
+                <tr
+                  className={`table-data-row border-b border-neutral-800 last:border-b-0 bg-neutral-950 transition-colors hover:bg-neutral-900/60${isPolandCoachView ? ' cursor-pointer select-none' : ''}`}
+                  onClick={isPolandCoachView ? () => setExpandedPersonId((prev) => prev === person.id ? null : person.id) : undefined}
+                >
                   <td className="pl-4 pr-1 py-3 text-neutral-500 text-sm">{i + 1}</td>
                   <td className="pl-1 pr-4 py-3">
                     {isPolandCoachView && coachDisplayMode === 'tenure' ? (
@@ -677,6 +845,7 @@ export default function PublicPeopleSearchTable({
                           <SmartPrefetchLink
                             href={`${basePath}/${person.id}`}
                             className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+                            onClick={(e) => e.stopPropagation()}
                           >
                             {getPersonDisplayName(person)}
                             {person.death_date && (
@@ -719,6 +888,7 @@ export default function PublicPeopleSearchTable({
                         <SmartPrefetchLink
                           href={`${basePath}/${person.id}`}
                           className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           {getPersonDisplayName(person)}
                           {person.death_date && (
@@ -852,7 +1022,123 @@ export default function PublicPeopleSearchTable({
                     </>
                   )}
                 </tr>
-              ))
+                {isExpanded && (() => {
+                  const filteredMatches = getFilteredMatchesForCoach(person)
+                  if (filteredMatches.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={colSpanCount} className="px-4 py-8 text-center text-sm text-neutral-500">
+                          Brak meczów pasujących do aktywnych filtrów.
+                        </td>
+                      </tr>
+                    )
+                  }
+
+                  const matchesByYear = filteredMatches.reduce<Record<string, AdminCoachMatch[]>>((acc, match) => {
+                    const year = match.match_date.slice(0, 4)
+                    if (!acc[year]) acc[year] = []
+                    acc[year].push(match)
+                    return acc
+                  }, {})
+                  const years = Object.keys(matchesByYear).sort((a, b) => Number(b) - Number(a))
+
+                  return (
+                    <tr>
+                      <td colSpan={colSpanCount} className="p-0">
+                        <div className="space-y-0">
+                          {years.map((year) => (
+                            <details key={year} className="group/year bg-emerald-950/20 rounded-lg overflow-hidden">
+                              <summary className="relative z-20 grid cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)_1.25rem] items-center gap-3 border-t border-emerald-900/70 bg-emerald-950/38 px-3 py-2 marker:content-none pointer-events-auto rounded-t-lg">
+                                <span className="relative inline-flex items-center overflow-hidden rounded-md border border-white/35 bg-slate-950/36 px-[11px] py-[5px] text-[13px] font-black text-slate-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-1px_1px_rgba(0,0,0,0.5),0_1px_2px_rgba(0,0,0,0.55),0_4px_8px_rgba(0,0,0,0.3)]">
+                                  <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.58)_0%,rgba(255,255,255,0.2)_32%,rgba(255,255,255,0)_60%),linear-gradient(130deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0)_50%)]" />
+                                  <span className="relative z-10">{year}</span>
+                                </span>
+                                <div className="mr-2 min-w-0 flex items-center gap-2">
+                                  <span className="ml-auto min-w-0 text-right text-[13px] font-black text-neutral-300">
+                                    <span className="inline-flex items-center justify-end gap-0.5">
+                                      <PitchIcon className="h-4 w-4 text-neutral-400" />
+                                      <span className="inline-flex min-w-[2.6rem] items-center justify-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200">
+                                        {matchesByYear[year].length}
+                                      </span>
+                                    </span>
+                                  </span>
+                                </div>
+                                <GlossyDisclosureCircle rotateClassName="group-open/year:rotate-180" className="justify-self-end" />
+                              </summary>
+
+                              <div className="relative z-0 overflow-clip rounded-b-lg">
+                                <div className="overflow-x-auto pt-6 -mt-6">
+                                  <table className="w-full border-collapse text-sm table-auto">
+                                  <colgroup>
+                                    <col className="w-[7.5rem]" />
+                                    <col className="w-[8rem]" />
+                                    <col className="w-[14rem]" />
+                                    <col className="w-[12rem]" />
+                                  </colgroup>
+                                  <tbody>
+                                    {matchesByYear[year].map((match) => {
+                                      const competition = getCompetitionDisplay(match.competition_name)
+                                      const showLevel = Boolean(
+                                        match.match_level_name
+                                        && match.competition_name !== 'Towarzyski'
+                                        && match.competition_name !== 'Nieoficjalny'
+                                      )
+                                      const matchHref = `/matches/${match.id}`
+
+                                      return (
+                                        <tr
+                                          key={match.id}
+                                          className="border-t border-neutral-800 bg-neutral-950 transition-colors hover:bg-neutral-900/60"
+                                        >
+                                          <td className="whitespace-nowrap">
+                                            <Link href={matchHref} className="block px-3 py-3" aria-label={`Otwórz mecz ${match.home_team_name} - ${match.away_team_name}`}>
+                                              <span className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200">
+                                                {formatDate(match.match_date)}
+                                              </span>
+                                            </Link>
+                                          </td>
+                                          <td className="whitespace-nowrap font-semibold text-neutral-100">
+                                            <Link href={matchHref} className="block pl-1 pr-2 py-3">
+                                              {getTeamFifaCodeLabel(match.home_team_name, match.home_team_fifa_code)} - {getTeamFifaCodeLabel(match.away_team_name, match.away_team_fifa_code)}
+                                            </Link>
+                                          </td>
+                                          <td className="whitespace-nowrap text-left">
+                                            <Link href={matchHref} className="block pl-0 pr-2 py-3">
+                                              {renderScoreWithFlags(match, false)}
+                                            </Link>
+                                          </td>
+                                          <td className="whitespace-nowrap">
+                                            <Link href={matchHref} className="block px-8 py-3">
+                                              <span
+                                                title={getCompetitionLevelTooltip(match.competition_name, match.match_level_name)}
+                                                className="inline-flex items-center gap-1.5 rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-neutral-200"
+                                              >
+                                                <span className={`font-semibold ${competition.isCompact ? 'text-[10px]' : 'text-xs'}`}>
+                                                  {competition.label}
+                                                </span>
+                                                {showLevel && (
+                                                  <span className="text-[10px] text-neutral-500">{match.match_level_name}</span>
+                                                )}
+                                              </span>
+                                            </Link>
+                                          </td>
+                                        </tr>
+                                      )
+                                    })}
+                                  </tbody>
+                                </table>
+                                </div>
+                              </div>
+                            </details>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })()}
+                </Fragment>
+                )
+              })
             )}
           </tbody>
         </table>
