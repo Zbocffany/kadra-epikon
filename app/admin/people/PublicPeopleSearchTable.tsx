@@ -2,6 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import CountryFlag from '@/components/CountryFlag'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
@@ -20,6 +21,13 @@ type PublicPlayerMode = 'poland' | 'rivals'
 type PublicCoachMode = 'poland' | 'rivals'
 type CoachDisplayMode = 'tenure' | 'stats'
 type VisibleCoachCompetitionFilter = Exclude<CoachCompetitionFilterKey, 'OTHER'>
+type CoachFilterHistoryState = {
+  competitionFilters: VisibleCoachCompetitionFilter[]
+  stageFilters: CoachStageFilterKey[]
+  coachDateFrom: string
+  coachDateTo: string
+}
+
 type CoachComputedStats = {
   coach_match_count: number
   coach_wins: number
@@ -170,10 +178,16 @@ export default function PublicPeopleSearchTable({
   )
   const [competitionFilters, setCompetitionFilters] = useState<VisibleCoachCompetitionFilter[]>([])
   const [stageFilters, setStageFilters] = useState<CoachStageFilterKey[]>([])
+  const [coachDateFrom, setCoachDateFrom] = useState('')
+  const [coachDateTo, setCoachDateTo] = useState('')
+  const [hasInitializedCoachDateRange, setHasInitializedCoachDateRange] = useState(false)
   const [isCoachFilterPanelOpen, setIsCoachFilterPanelOpen] = useState(false)
   const [coachFilterPanelPos, setCoachFilterPanelPos] = useState({ x: 24, y: 196 })
   const [isDraggingCoachFilterPanel, setIsDraggingCoachFilterPanel] = useState(false)
   const coachFilterPanelDragOffsetRef = useRef({ x: 0, y: 0 })
+  const pathname = usePathname()
+  const restoreCoachFiltersFromHistoryRef = useRef(false)
+  const previousPathnameRef = useRef(pathname)
   const [visibleCount, setVisibleCount] = useState(50)
   const isPublicPlayersView = variant === 'players' && Boolean(publicPlayerMode)
   const isPublicCoachesView = variant === 'coaches' && Boolean(publicCoachMode)
@@ -200,9 +214,21 @@ export default function PublicPeopleSearchTable({
   }, [coachMode, isPublicCoachesView])
 
   useEffect(() => {
+    const handlePopState = () => {
+      restoreCoachFiltersFromHistoryRef.current = true
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  useEffect(() => {
     if (!isPolandCoachView) return
     setCompetitionFilters([])
     setStageFilters([])
+    setCoachDateFrom('')
+    setCoachDateTo('')
+    setHasInitializedCoachDateRange(false)
   }, [isPolandCoachView])
 
   useEffect(() => {
@@ -230,6 +256,22 @@ export default function PublicPeopleSearchTable({
       window.removeEventListener('mouseup', onMouseUp)
     }
   }, [isDraggingCoachFilterPanel])
+
+  useEffect(() => {
+    if (!isPolandCoachView) return
+
+    const nextHistoryState = {
+      ...(window.history.state ?? {}),
+      __publicCoachFilters: {
+        competitionFilters,
+        stageFilters,
+        coachDateFrom,
+        coachDateTo,
+      } satisfies CoachFilterHistoryState,
+    }
+
+    window.history.replaceState(nextHistoryState, '')
+  }, [competitionFilters, stageFilters, coachDateFrom, coachDateTo, isPolandCoachView])
 
   const countryOptions = useMemo(() => {
     if (isPublicPlayersView || isPublicCoachesView) return []
@@ -265,6 +307,95 @@ export default function PublicPeopleSearchTable({
     return people
   }, [isPublicPlayersView, isPublicCoachesView, people, playerMode, coachMode])
 
+  const coachDateBounds = useMemo(() => {
+    if (!isPolandCoachView) return { firstYear: '', lastYear: '' }
+
+    let firstMatchDate: string | null = null
+    let lastMatchDate: string | null = null
+
+    for (const person of basePeople) {
+      for (const row of person.coach_poland_filter_matches ?? []) {
+        if (!firstMatchDate || row.match_date < firstMatchDate) firstMatchDate = row.match_date
+        if (!lastMatchDate || row.match_date > lastMatchDate) lastMatchDate = row.match_date
+      }
+    }
+
+    return {
+      firstYear: firstMatchDate ? firstMatchDate.slice(0, 4) : '',
+      lastYear: lastMatchDate ? lastMatchDate.slice(0, 4) : '',
+    }
+  }, [basePeople, isPolandCoachView])
+
+  useEffect(() => {
+    if (!isPolandCoachView || hasInitializedCoachDateRange) return
+    if (!coachDateBounds.firstYear && !coachDateBounds.lastYear) return
+
+    setCoachDateFrom(coachDateBounds.firstYear)
+    setCoachDateTo(coachDateBounds.lastYear)
+    setHasInitializedCoachDateRange(true)
+  }, [coachDateBounds, hasInitializedCoachDateRange, isPolandCoachView])
+
+  useEffect(() => {
+    if (!isPolandCoachView) return
+    if (previousPathnameRef.current === pathname) return
+
+    previousPathnameRef.current = pathname
+
+    if (restoreCoachFiltersFromHistoryRef.current) {
+      const historyState = window.history.state as { __publicCoachFilters?: CoachFilterHistoryState } | null
+      const savedFilters = historyState?.__publicCoachFilters
+
+      if (savedFilters) {
+        setCompetitionFilters(savedFilters.competitionFilters)
+        setStageFilters(savedFilters.stageFilters)
+        setCoachDateFrom(savedFilters.coachDateFrom)
+        setCoachDateTo(savedFilters.coachDateTo)
+        setHasInitializedCoachDateRange(true)
+      } else {
+        setCompetitionFilters([])
+        setStageFilters([])
+        setCoachDateFrom(coachDateBounds.firstYear)
+        setCoachDateTo(coachDateBounds.lastYear)
+        setHasInitializedCoachDateRange(false)
+      }
+
+      restoreCoachFiltersFromHistoryRef.current = false
+      return
+    }
+
+    setCompetitionFilters([])
+    setStageFilters([])
+    setCoachDateFrom(coachDateBounds.firstYear)
+    setCoachDateTo(coachDateBounds.lastYear)
+    setHasInitializedCoachDateRange(false)
+    setIsCoachFilterPanelOpen(false)
+  }, [coachDateBounds.firstYear, coachDateBounds.lastYear, isPolandCoachView, pathname])
+
+  useEffect(() => {
+    if (!isPolandCoachView) return
+
+    const handleDocumentClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null
+      const link = target?.closest('a[href]') as HTMLAnchorElement | null
+      if (!link || !link.href || link.target === '_blank') return
+      if (link.href.startsWith('mailto:') || link.href.startsWith('tel:')) return
+
+      const nextUrl = new URL(link.href, window.location.href)
+      if (nextUrl.origin !== window.location.origin) return
+      if (nextUrl.pathname === pathname) return
+
+      setCompetitionFilters([])
+      setStageFilters([])
+      setCoachDateFrom(coachDateBounds.firstYear)
+      setCoachDateTo(coachDateBounds.lastYear)
+      setCoachDisplayMode('tenure')
+      setIsCoachFilterPanelOpen(false)
+    }
+
+    document.addEventListener('click', handleDocumentClick, true)
+    return () => document.removeEventListener('click', handleDocumentClick, true)
+  }, [coachDateBounds.firstYear, coachDateBounds.lastYear, isPolandCoachView, pathname])
+
   const filteredPolandCoachStatsByPersonId = useMemo(() => {
     const map = new Map<string, CoachComputedStats>()
     if (!isPolandCoachView || !showCoachStats) return map
@@ -283,7 +414,8 @@ export default function PublicPeopleSearchTable({
         const stageAllowed = allStagesActive
           ? true
           : (!isPhaselesCompetition && activeStageSet.has(row.stage_key))
-        return competitionAllowed && stageAllowed
+        const dateAllowed = isCoachMatchWithinDateRange(row.match_date)
+        return competitionAllowed && stageAllowed && dateAllowed
       })
 
       let wins = 0
@@ -313,7 +445,7 @@ export default function PublicPeopleSearchTable({
     }
 
     return map
-  }, [basePeople, competitionFilters, stageFilters, allCompetitionsActive, allStagesActive, isPolandCoachView, showCoachStats])
+  }, [basePeople, competitionFilters, stageFilters, coachDateFrom, coachDateTo, allCompetitionsActive, allStagesActive, isPolandCoachView, showCoachStats])
 
   const getDisplayedCoachStatValue = (person: AdminPersonListItem, key: CoachSortKey): number => {
     if (isPolandCoachView && showCoachStats) {
@@ -380,7 +512,7 @@ export default function PublicPeopleSearchTable({
 
   useEffect(() => {
     setVisibleCount(50)
-  }, [query, countryFilter, sortKey, coachSortKey, refereeSortKey, variant, playerMode, coachMode, coachDisplayMode, competitionFilters, stageFilters])
+  }, [query, countryFilter, sortKey, coachSortKey, refereeSortKey, variant, playerMode, coachMode, coachDisplayMode, competitionFilters, stageFilters, coachDateFrom, coachDateTo])
 
   function StatsBarsIcon({ className }: { className?: string }) {
     return (
@@ -441,7 +573,41 @@ export default function PublicPeopleSearchTable({
     setIsDraggingCoachFilterPanel(true)
   }
 
-  const activeCoachFilterCount = competitionFilters.length + stageFilters.length
+  function clearCoachDateFilters() {
+    setCoachDateFrom('')
+    setCoachDateTo('')
+  }
+
+  function resetCoachFilters() {
+    setCompetitionFilters([])
+    setStageFilters([])
+    clearCoachDateFilters()
+  }
+
+  function setCoachCenturyRange(century: 'XX' | 'XXI') {
+    if (century === 'XX') {
+      setCoachDateFrom('1901')
+      setCoachDateTo('2000')
+      return
+    }
+
+    setCoachDateFrom('2001')
+    setCoachDateTo('2100')
+  }
+
+  function isCoachMatchWithinDateRange(matchDate: string) {
+    const matchYear = Number(matchDate.slice(0, 4))
+    const fromYear = /^\d{4}$/.test(coachDateFrom) ? Number(coachDateFrom) : null
+    const toYear = /^\d{4}$/.test(coachDateTo) ? Number(coachDateTo) : null
+
+    if (fromYear !== null && matchYear < fromYear) return false
+    if (toYear !== null && matchYear > toYear) return false
+    return true
+  }
+
+  const isTwentiethCenturyActive = coachDateFrom === '1901' && coachDateTo === '2000'
+  const isTwentyFirstCenturyActive = coachDateFrom === '2001' && coachDateTo === '2100'
+  const activeCoachFilterCount = competitionFilters.length + stageFilters.length + (coachDateFrom ? 1 : 0) + (coachDateTo ? 1 : 0)
 
   const coachFilterControls = (
     <div className="space-y-2">
@@ -525,6 +691,69 @@ export default function PublicPeopleSearchTable({
           })}
         </div>
       </div>
+
+      <div className="rounded-md border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-2">
+        <div className="mb-2 inline-flex rounded border border-emerald-200/30 bg-emerald-900/28 px-1.5 py-[1px] text-[10px] uppercase tracking-[0.14em] text-emerald-100/80">
+          Daty
+        </div>
+        <div className="space-y-2">
+          <div className="grid grid-cols-[4.25rem_4.25rem_auto] grid-rows-2 justify-start gap-1.5">
+            <input
+              type="text"
+              value={coachDateFrom}
+              onChange={(event) => setCoachDateFrom(event.target.value.replace(/\D/g, '').slice(0, 4))}
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="Od"
+              className="h-7 w-[4.25rem] rounded-md border border-emerald-700/75 bg-emerald-950/45 px-2 text-center text-[11px] font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_2px_rgba(0,0,0,0.28)] placeholder:text-emerald-200/55 focus:border-emerald-300/80 focus:outline-none"
+              aria-label="Rok od"
+            />
+            <input
+              type="text"
+              value={coachDateTo}
+              onChange={(event) => setCoachDateTo(event.target.value.replace(/\D/g, '').slice(0, 4))}
+              inputMode="numeric"
+              maxLength={4}
+              placeholder="Do"
+              className="h-7 w-[4.25rem] rounded-md border border-emerald-700/75 bg-emerald-950/45 px-2 text-center text-[11px] font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_2px_rgba(0,0,0,0.28)] placeholder:text-emerald-200/55 focus:border-emerald-300/80 focus:outline-none"
+              aria-label="Rok do"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setCoachDateFrom(coachDateBounds.firstYear)
+                setCoachDateTo(coachDateBounds.lastYear)
+              }}
+              className="row-span-2 self-center inline-flex h-7 items-center justify-center rounded-md border border-emerald-500/65 bg-[linear-gradient(180deg,rgba(89,190,131,0.9)_0%,rgba(48,150,97,0.86)_44%,rgba(23,91,60,0.92)_100%)] px-2 text-[11px] font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] transition-colors hover:border-emerald-300/80 hover:brightness-105"
+              aria-label="Cały okres"
+            >
+              Cały okres
+            </button>
+            <button
+              type="button"
+              onClick={() => setCoachCenturyRange('XX')}
+              aria-pressed={isTwentiethCenturyActive}
+              className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${isTwentiethCenturyActive
+                ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
+                : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
+              }`}
+            >
+              XX w.
+            </button>
+            <button
+              type="button"
+              onClick={() => setCoachCenturyRange('XXI')}
+              aria-pressed={isTwentyFirstCenturyActive}
+              className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${isTwentyFirstCenturyActive
+                ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
+                : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
+              }`}
+            >
+              XXI w.
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 
@@ -545,7 +774,8 @@ export default function PublicPeopleSearchTable({
       const stageAllowed = allStagesActive
         ? true
         : (!isPhaselesCompetition && activeStageSet.has(row.stage_key))
-      return competitionAllowed && stageAllowed
+      const dateAllowed = isCoachMatchWithinDateRange(row.match_date)
+      return competitionAllowed && stageAllowed && dateAllowed
     })
 
     return filteredRows
@@ -775,10 +1005,7 @@ export default function PublicPeopleSearchTable({
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => {
-                    setCompetitionFilters([])
-                    setStageFilters([])
-                  }}
+                  onClick={resetCoachFilters}
                   className="stat-badge inline-flex h-6 items-center rounded border border-emerald-500/60 bg-[linear-gradient(180deg,rgba(89,190,131,0.9)_0%,rgba(48,150,97,0.86)_44%,rgba(23,91,60,0.92)_100%)] px-2 font-barlow text-[0.72rem] font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] transition-colors hover:border-emerald-300/80 hover:brightness-105"
                 >
                   Wyczyść
@@ -801,10 +1028,7 @@ export default function PublicPeopleSearchTable({
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => {
-                    setCompetitionFilters([])
-                    setStageFilters([])
-                  }}
+                  onClick={resetCoachFilters}
                   className="stat-badge inline-flex h-6 items-center rounded border border-emerald-500/60 bg-[linear-gradient(180deg,rgba(89,190,131,0.9)_0%,rgba(48,150,97,0.86)_44%,rgba(23,91,60,0.92)_100%)] px-2 font-barlow text-[0.72rem] font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] transition-colors hover:border-emerald-300/80 hover:brightness-105"
                 >
                   Wyczyść

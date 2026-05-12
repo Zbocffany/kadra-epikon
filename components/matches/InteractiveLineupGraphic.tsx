@@ -23,6 +23,7 @@ type TeamKey = 'home' | 'away'
 
 type PitchPlayer = {
   id: string
+  personId: string
   label: string
   position: PlayerPosition | null
 }
@@ -31,6 +32,14 @@ type EnteredPlayer = {
   id: string
   label: string
   minute: string
+  replacedPersonId: string | null
+}
+
+type HoveredPlayerState = {
+  sourcePlayerId: string
+  targetPersonId: string
+  label: string
+  usesFlipAnimation: boolean
 }
 
 const COLUMN_X_BY_POSITION: Record<PlayerPosition, number> = {
@@ -82,13 +91,14 @@ function normalizeLetters(value: string): string {
     .toUpperCase()
 }
 
-function buildLineupLabels(players: AdminMatchParticipant[]): Array<{ id: string; label: string; position: PlayerPosition | null }> {
+function buildLineupLabels(players: AdminMatchParticipant[]): Array<{ id: string; personId: string; label: string; position: PlayerPosition | null }> {
   const firstEleven = players.slice(0, 11)
   const base = firstEleven.map((player) => {
     const surname = extractSurname(player.person_name)
     const firstName = extractFirstName(player.person_name)
     return {
       id: player.id,
+      personId: player.person_id,
       surname,
       firstName,
       position: player.player_position,
@@ -135,6 +145,7 @@ function buildLineupLabels(players: AdminMatchParticipant[]): Array<{ id: string
 
   return base.map((player) => ({
     id: player.id,
+    personId: player.personId,
     label: prefixedLabelById.get(player.id) ?? player.surname,
     position: player.position,
   }))
@@ -209,7 +220,7 @@ function buildEnteredPlayers(participants: AdminMatchParticipant[] | undefined, 
   )
   const seen = new Set<string>()
   // collect raw entries in order
-  const raw: Array<{ id: string; personName: string; minute: string }> = []
+  const raw: Array<{ id: string; personName: string; minute: string; replacedPersonId: string | null }> = []
 
   for (const event of [...events].sort(compareEventsChronologically)) {
     if (event.event_type !== 'SUBSTITUTION' || event.team_id !== teamId || !event.secondary_person_id) continue
@@ -220,6 +231,7 @@ function buildEnteredPlayers(participants: AdminMatchParticipant[] | undefined, 
       id: event.secondary_person_id,
       personName: participant?.person_name ?? 'Nieznany',
       minute: formatEventMinute(event),
+      replacedPersonId: event.primary_person_id ?? null,
     })
   }
 
@@ -267,7 +279,146 @@ function buildEnteredPlayers(participants: AdminMatchParticipant[] | undefined, 
     id: entry.id,
     label: labelById.get(entry.id) ?? extractSurname(entry.personName),
     minute: entry.minute,
+    replacedPersonId: entry.replacedPersonId,
   }))
+}
+
+function getPlayerEvents(personId: string, events: AdminMatchEvent[], teamId: string | undefined): AdminMatchEvent[] {
+  if (!teamId) return []
+  
+  const eventTypePriority = (eventType: string): number => {
+    if (['GOAL', 'OWN_GOAL', 'PENALTY_GOAL'].includes(eventType)) return 0
+    if (['YELLOW_CARD', 'SECOND_YELLOW_CARD'].includes(eventType)) return 1
+    if (eventType === 'RED_CARD') return 2
+    return 3
+  }
+  
+  return events
+    .filter((e) => e.primary_person_id === personId && e.team_id === teamId && e.event_type !== 'SUBSTITUTION')
+    .sort((a, b) => {
+      const priorityA = eventTypePriority(a.event_type)
+      const priorityB = eventTypePriority(b.event_type)
+      if (priorityA !== priorityB) return priorityA - priorityB
+      return compareEventsChronologically(a, b)
+    })
+}
+
+function getEventIcon(eventType: string): string {
+  switch (eventType) {
+    case 'GOAL':
+    case 'OWN_GOAL':
+    case 'PENALTY_GOAL':
+      return '⚽'
+    case 'YELLOW_CARD':
+    case 'SECOND_YELLOW_CARD':
+      return '🟨'
+    case 'RED_CARD':
+      return '🟥'
+    case 'MATCH_PENALTY_SAVED':
+    case 'PENALTY_SHOOTOUT_SAVED':
+      return '🛡️'
+    case 'MATCH_PENALTY_MISSED':
+    case 'PENALTY_SHOOTOUT_MISSED':
+      return '❌'
+    case 'PENALTY_SHOOTOUT_SCORED':
+      return '✓'
+    default:
+      return '◆'
+  }
+}
+
+type EventIconProps = {
+  event: AdminMatchEvent
+  isHovered?: boolean
+  multiplier?: number
+}
+
+function EventIcon({ event, isHovered = false, multiplier }: EventIconProps) {
+  const icon = getEventIcon(event.event_type)
+  const minute = formatEventMinute(event)
+  const title = multiplier && multiplier >= 5
+    ? `${event.event_type} x${multiplier}`
+    : `${event.event_type} (${minute})`
+  
+  return (
+    <div
+      className="relative inline-flex h-[21.6px] w-[21.6px] items-center justify-center text-[13px] transition-all duration-300 -ml-2"
+      style={{ filter: isHovered ? 'brightness(1.3)' : 'brightness(1)', opacity: isHovered ? 1 : 0.6 }}
+      title={title}
+    >
+      <span className="inline-flex items-center gap-0.5">
+        <span>{icon}</span>
+        {multiplier && multiplier >= 5 ? <span className="text-[10px] font-semibold leading-none">x{multiplier}</span> : null}
+      </span>
+    </div>
+  )
+}
+
+type PlayerEventsDisplayProps = {
+  events: AdminMatchEvent[]
+  isHovered: boolean
+  offsetPx?: number
+}
+
+type EventRenderItem = {
+  key: string
+  event: AdminMatchEvent
+  multiplier?: number
+}
+
+function PlayerEventsDisplay({ events, isHovered, offsetPx = 5 }: PlayerEventsDisplayProps) {
+  if (!events.length) return null
+
+  const goalEvents = events.filter((event) => ['GOAL', 'OWN_GOAL', 'PENALTY_GOAL'].includes(event.event_type))
+  const nonGoalEvents = events.filter((event) => !['GOAL', 'OWN_GOAL', 'PENALTY_GOAL'].includes(event.event_type))
+
+  const renderItems: EventRenderItem[] = goalEvents.length >= 5
+    ? [{ key: `goals-${goalEvents[0].id}`, event: goalEvents[0], multiplier: goalEvents.length }, ...nonGoalEvents.map((event) => ({ key: event.id, event }))]
+    : events.map((event) => ({ key: event.id, event }))
+
+  return (
+    <div
+      className="absolute left-full top-1/2 flex -translate-y-1/2 gap-0 transition-all duration-300"
+      style={{ marginLeft: `${offsetPx}px`, marginTop: '-3px' }}
+    >
+      {renderItems.slice(0, 4).map((item) => (
+        <EventIcon key={item.key} event={item.event} isHovered={isHovered} multiplier={item.multiplier} />
+      ))}
+    </div>
+  )
+}
+
+function FlippingSurnameBanner({
+  frontLabel,
+  backLabel,
+  flipped,
+  fontSize = 'text-[10px]',
+}: {
+  frontLabel: string
+  backLabel: string
+  flipped: boolean
+  fontSize?: string
+}) {
+  return (
+    <span className="relative block h-[16px] w-full overflow-hidden [perspective:900px]">
+      <span
+        className={`relative block h-full w-full transition-transform duration-500 ease-out [transform-style:preserve-3d] ${flipped ? '[transform:rotateY(180deg)]' : '[transform:rotateY(0deg)]'}`}
+      >
+        <span
+          className={`absolute inset-0 flex items-center justify-center rounded-md border border-emerald-900/80 bg-emerald-950/85 px-1.5 py-0 ${fontSize} font-semibold uppercase tracking-[0.08em] text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)] [backface-visibility:hidden]`}
+          title={frontLabel}
+        >
+          <span className="block w-full truncate text-center leading-none">{frontLabel}</span>
+        </span>
+        <span
+          className={`absolute inset-0 flex items-center justify-center rounded-md border border-emerald-100/80 bg-[linear-gradient(180deg,rgba(240,255,246,0.44)_0%,rgba(173,238,199,0.28)_28%,rgba(12,74,40,0.92)_100%)] px-1.5 py-0 ${fontSize} font-semibold uppercase tracking-[0.08em] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),inset_0_-2px_6px_rgba(0,0,0,0.5),0_8px_16px_rgba(0,0,0,0.3)] [backface-visibility:hidden] [transform:rotateY(180deg)]`}
+          title={backLabel}
+        >
+          <span className="block w-full truncate text-center leading-none">{backLabel}</span>
+        </span>
+      </span>
+    </span>
+  )
 }
 
 export default function InteractiveLineupGraphic({
@@ -284,7 +435,7 @@ export default function InteractiveLineupGraphic({
   events = [],
 }: InteractiveLineupGraphicProps) {
   const [activeTeam, setActiveTeam] = useState<TeamKey>(() => getDefaultTeam(homeTeamName, awayTeamName))
-  const [hoveredPlayerId, setHoveredPlayerId] = useState<string | null>(null)
+  const [hoveredPlayerState, setHoveredPlayerState] = useState<HoveredPlayerState | null>(null)
 
   const current = activeTeam === 'home'
     ? { name: homeTeamName, fifaCode: homeTeamFifaCode, players: homeStarters, participants: homeParticipants, teamId: homeTeamId }
@@ -314,13 +465,21 @@ export default function InteractiveLineupGraphic({
         <aside className="relative overflow-hidden rounded-xl border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.2),0_8px_18px_rgba(0,0,0,0.2)] sm:p-4">
           <span aria-hidden className="pointer-events-none absolute inset-0 rounded-xl bg-[linear-gradient(180deg,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.03)_30%,rgba(0,0,0,0.12)_100%)]" />
           <div className="relative z-10">
-            <ol className="space-y-1.5" onMouseLeave={() => setHoveredPlayerId(null)}>
-              {lineup.map((player, index) => (
+            <ol className="space-y-1.5" onMouseLeave={() => setHoveredPlayerState(null)}>
+              {lineup.map((player) => (
                 <li
                   key={player.id}
-                  onMouseEnter={() => setHoveredPlayerId(player.id)}
+                  onMouseEnter={() => {
+                    setHoveredPlayerState({
+                      sourcePlayerId: player.id,
+                      targetPersonId: player.personId,
+                      label: player.label,
+                      usesFlipAnimation: false,
+                    })
+                  }}
+                  onMouseLeave={() => setHoveredPlayerState(null)}
                   className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 transition-all duration-200 ${
-                    hoveredPlayerId === player.id
+                    hoveredPlayerState?.sourcePlayerId === player.id
                       ? 'border-emerald-100/70 bg-[linear-gradient(180deg,rgba(240,255,246,0.44)_0%,rgba(173,238,199,0.28)_28%,rgba(12,74,40,0.92)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.62),inset_0_-2px_6px_rgba(0,0,0,0.5),0_8px_16px_rgba(0,0,0,0.3)]'
                       : 'border-emerald-900/65 bg-emerald-950/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]'
                   }`}
@@ -358,7 +517,19 @@ export default function InteractiveLineupGraphic({
                   <span aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0.01)_35%,rgba(0,0,0,0.12)_100%)]" />
                   <ul className="relative z-10 space-y-1.5">
                     {enteredPlayers.map((player) => (
-                      <li key={player.id} className="flex items-center gap-2 rounded-md border border-emerald-900/65 bg-emerald-950/35 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                      <li
+                        key={player.id}
+                        onMouseEnter={() => {
+                          setHoveredPlayerState({
+                            sourcePlayerId: player.id,
+                            targetPersonId: player.replacedPersonId ?? player.id,
+                            label: player.label,
+                            usesFlipAnimation: Boolean(player.replacedPersonId),
+                          })
+                        }}
+                        onMouseLeave={() => setHoveredPlayerState(null)}
+                        className="flex items-center gap-2 rounded-md border border-emerald-900/65 bg-emerald-950/35 px-2 py-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-colors duration-200 hover:border-emerald-100/70 hover:bg-[linear-gradient(180deg,rgba(240,255,246,0.18)_0%,rgba(12,74,40,0.72)_100%)]"
+                      >
                         <span className="inline-flex shrink-0 items-center rounded-md border border-white/12 bg-transparent px-1.5 py-0.5 text-[11px] font-semibold leading-none text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)]">{player.minute}</span>
                         <span className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-emerald-50">{player.label}</span>
                       </li>
@@ -383,34 +554,65 @@ export default function InteractiveLineupGraphic({
               <div aria-hidden className="pointer-events-none absolute right-0 top-1/2 h-[52%] w-[16%] -translate-y-1/2 border-2 border-r-0 border-white/85" />
               <div aria-hidden className="pointer-events-none absolute right-0 top-1/2 h-[28%] w-[7%] -translate-y-1/2 border-2 border-r-0 border-white/85" />
 
-              {pitchPlayers.map((player) => (
-                <div key={player.id} className="absolute" style={{ left: `${player.x}%`, top: `${player.y}%`, transform: 'translate(-50%, -50%)' }}>
-                  <div className="flex flex-col items-center gap-1">
-                    <span
-                      className="relative inline-flex h-7 w-7 items-center justify-center text-[10px] font-black uppercase tracking-[0.14em] text-emerald-900 shadow-[0_6px_10px_rgba(0,0,0,0.32)] transition-transform duration-200"
-                      style={{ transform: hoveredPlayerId === player.id ? 'scale(1.45)' : 'scale(1)' }}
-                    >
-                      <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full" aria-hidden="true">
-                        <path d="M18 10h28l8 9-8 7v28H18V26l-8-7z" fill="#f2f7f3" stroke="#d9e7de" strokeWidth="2" />
-                        <path d="M26 10h12v8H26z" fill="#1e7a43" opacity="0.85" />
-                        <path d="M11 19l7-9 8 9-8 7z" fill="#f2f7f3" stroke="#d9e7de" strokeWidth="2" />
-                        <path d="M53 19l-7-9-8 9 8 7z" fill="#f2f7f3" stroke="#d9e7de" strokeWidth="2" />
-                      </svg>
-                      <span className="relative z-10">{getPositionInitial(player.position)}</span>
-                    </span>
-                    <span
-                      title={player.label}
-                      className={`rounded-md border border-emerald-900/80 bg-emerald-950/85 px-1.5 py-[2px] text-[10px] font-semibold uppercase tracking-[0.08em] text-emerald-50 transition-all duration-200 ${
-                        hoveredPlayerId === player.id ? 'max-w-[14rem] whitespace-normal text-center break-words' : 'max-w-[8.25rem] truncate'
-                      }`}
-                    >
-                      {hoveredPlayerId === player.id
-                        ? player.label
-                        : (player.label.length > 20 ? `${player.label.slice(0, 20)}...` : player.label)}
-                    </span>
+              {pitchPlayers.map((player) => {
+                const isHoveredPitchPlayer = hoveredPlayerState?.targetPersonId === player.personId
+                const displayLabel = isHoveredPitchPlayer && hoveredPlayerState?.usesFlipAnimation
+                  ? hoveredPlayerState.label
+                  : player.label
+                const showFlippedBanner = Boolean(isHoveredPitchPlayer && hoveredPlayerState?.usesFlipAnimation)
+                const longestLabel = Math.max(player.label.length, displayLabel.length)
+                const baseWidth = Math.max(5.8, (longestLabel / 17) * 5.8)
+                const widthRem = baseWidth * 1.1
+                const fontSize = longestLabel > 15 ? 'text-[8px]' : longestLabel > 12 ? 'text-[9px]' : 'text-[10px]'
+                
+                const playerEvents = getPlayerEvents(player.personId, events, current.teamId)
+                const enteredPlayerData = enteredPlayers.find((ep) => ep.replacedPersonId === player.personId)
+                const enteredPlayerEvents = enteredPlayerData ? getPlayerEvents(enteredPlayerData.id, events, current.teamId) : []
+                const displayedEvents = isHoveredPitchPlayer && hoveredPlayerState?.usesFlipAnimation ? enteredPlayerEvents : playerEvents
+
+                return (
+                  <div
+                    key={player.id}
+                    className="absolute"
+                    style={{ left: `${player.x}%`, top: `${player.y}%`, transform: 'translate(-50%, -50%)' }}
+                    onMouseEnter={() => {
+                      setHoveredPlayerState({
+                        sourcePlayerId: player.id,
+                        targetPersonId: player.personId,
+                        label: player.label,
+                        usesFlipAnimation: false,
+                      })
+                    }}
+                    onMouseLeave={() => setHoveredPlayerState(null)}
+                  >
+                    <div className="relative flex flex-row items-start gap-0 -m-1 p-1">
+                      <div className="relative flex flex-col items-center gap-0.5">
+                        <span
+                          className="relative inline-flex h-7 w-7 items-center justify-center text-[10px] font-black uppercase tracking-[0.14em] text-emerald-900 shadow-[0_6px_10px_rgba(0,0,0,0.32)] transition-transform duration-200"
+                          style={{ transform: isHoveredPitchPlayer ? 'scale(1.45)' : 'scale(1)' }}
+                        >
+                          <svg viewBox="0 0 64 64" className="absolute inset-0 h-full w-full" aria-hidden="true">
+                            <path d="M18 10h28l8 9-8 7v28H18V26l-8-7z" fill="#f2f7f3" stroke="#d9e7de" strokeWidth="2" />
+                            <path d="M26 10h12v8H26z" fill="#1e7a43" opacity="0.85" />
+                            <path d="M11 19l7-9 8 9-8 7z" fill="#f2f7f3" stroke="#d9e7de" strokeWidth="2" />
+                            <path d="M53 19l-7-9-8 9 8 7z" fill="#f2f7f3" stroke="#d9e7de" strokeWidth="2" />
+                          </svg>
+                          <span className="relative z-10">{getPositionInitial(player.position)}</span>
+                          <PlayerEventsDisplay events={displayedEvents} isHovered={isHoveredPitchPlayer} offsetPx={5} />
+                        </span>
+                        <div className="max-w-[14rem]" style={{ width: `${widthRem}rem` }}>
+                          <FlippingSurnameBanner
+                            frontLabel={player.label}
+                            backLabel={displayLabel}
+                            flipped={showFlippedBanner}
+                            fontSize={fontSize}
+                          />
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
 
               <div className="absolute left-2 top-2 z-20 inline-flex items-center justify-center rounded-md border border-white/12 bg-transparent p-1.5 shadow-[0_6px_12px_rgba(0,0,0,0.38)]">
                 <CountryFlag
@@ -431,7 +633,7 @@ export default function InteractiveLineupGraphic({
                   type="button"
                   onClick={() => {
                     setActiveTeam(other.key)
-                    setHoveredPlayerId(null)
+                    setHoveredPlayerState(null)
                   }}
                   title={other.name}
                   aria-label={`Przelacz na ${other.name}`}
