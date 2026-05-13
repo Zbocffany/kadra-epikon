@@ -266,18 +266,25 @@ export default function PersonPickerField({
         {isOpen && (
           <div ref={listRef} className="absolute left-0 top-full z-10 mt-1 max-h-80 min-w-full w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-md border border-neutral-700 bg-neutral-900 shadow-lg">
             {filteredPeople.length > 0 ? (
-              filteredPeople.map((person, idx) => (
-                <button
-                  key={person.id}
-                  type="button"
-                  onMouseDown={(e) => { e.preventDefault(); handleSelect(person.id); setActiveIndex(-1) }}
-                  className={`w-full border-b border-neutral-800 px-3 py-1.5 text-left text-sm text-neutral-100 last:border-b-0 ${
-                    idx === activeIndex ? 'bg-neutral-700' : 'hover:bg-neutral-800'
-                  }`}
-                >
-                  {person.label}
-                </button>
-              ))
+              filteredPeople.map((person, idx) => {
+                const birthYear = person.birth_date ? new Date(person.birth_date).getFullYear() : null
+                const countryCode = person.represented_country_fifa_code
+                const birthAndCountry = [birthYear?.toString(), countryCode].filter(Boolean).join(', ')
+                const displayLabel = birthAndCountry ? `${person.label} (${birthAndCountry})` : person.label
+
+                return (
+                  <button
+                    key={person.id}
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); handleSelect(person.id); setActiveIndex(-1) }}
+                    className={`w-full border-b border-neutral-800 px-3 py-1.5 text-left text-sm text-neutral-100 last:border-b-0 ${
+                      idx === activeIndex ? 'bg-neutral-700' : 'hover:bg-neutral-800'
+                    }`}
+                  >
+                    {displayLabel}
+                  </button>
+                )
+              })
             ) : isFetching ? (
               <div className="px-3 py-1.5 text-sm text-neutral-500 animate-pulse">Szukam…</div>
             ) : searchText ? (

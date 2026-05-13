@@ -336,8 +336,8 @@ function getEventIcon(eventType: string): string {
     case 'PENALTY_GOAL':
       return '⚽'
     case 'YELLOW_CARD':
-    case 'SECOND_YELLOW_CARD':
       return '🟨'
+    case 'SECOND_YELLOW_CARD':
     case 'RED_CARD':
       return '🟥'
     case 'MATCH_PENALTY_SAVED':
@@ -386,6 +386,7 @@ type EventIconProps = {
 
 function EventIcon({ event, isHovered = false, multiplier }: EventIconProps) {
   const icon = getEventIcon(event.event_type)
+  const isRedCardEvent = event.event_type === 'RED_CARD' || event.event_type === 'SECOND_YELLOW_CARD'
   const minute = formatEventMinute(event)
   const title = multiplier && multiplier >= 5
     ? `${event.event_type} x${multiplier}`
@@ -394,11 +395,21 @@ function EventIcon({ event, isHovered = false, multiplier }: EventIconProps) {
   return (
     <div
       className="relative inline-flex h-[21.6px] w-[21.6px] items-center justify-center text-[13px] transition-all duration-300 -ml-2"
-      style={{ filter: isHovered ? 'brightness(1.3)' : 'brightness(1)', opacity: isHovered ? 1 : 0.6 }}
+      style={{
+        filter: isHovered ? 'brightness(1.3)' : isRedCardEvent ? 'brightness(1.15)' : 'brightness(1)',
+        opacity: isHovered ? 1 : isRedCardEvent ? 0.95 : 0.6,
+      }}
       title={title}
     >
       <span className="inline-flex items-center gap-0.5">
-        <span>{icon}</span>
+        {isRedCardEvent ? (
+          <span
+            aria-hidden
+            className="inline-block h-[12px] w-[9px] rounded-[1px] border border-[#8f122b] bg-[#dc143c]"
+          />
+        ) : (
+          <span>{icon}</span>
+        )}
         {multiplier && multiplier >= 5 ? <span className="text-[10px] font-semibold leading-none">x{multiplier}</span> : null}
       </span>
     </div>

@@ -193,6 +193,8 @@ export type AdminMatchParticipantPersonOption = {
   firstName: string
   lastName: string
   nickname: string
+  birth_date?: string | null
+  represented_country_fifa_code?: string | null
 }
 
 export type AdminMatchEvent = {
