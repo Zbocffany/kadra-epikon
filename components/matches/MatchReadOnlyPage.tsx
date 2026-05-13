@@ -498,16 +498,32 @@ function MatchLineupsSummarySection({
               const isShootoutEvent = SHOOTOUT_TYPES.has(event.event_type)
               const minuteClass = 'inline-flex shrink-0 items-center rounded-md border border-emerald-300/50 bg-emerald-950/85 px-1.5 py-0.5 text-xs font-semibold leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]'
               const minuteBadge = isShootoutEvent ? null : <span className={minuteClass}>{minuteLabel}</span>
+              
+              // Build text and icon separately for flexibility in layout
+              const getIcon = () => {
+                if (event.event_type === 'GOAL' || event.event_type === 'OWN_GOAL' || event.event_type === 'PENALTY_GOAL' || event.event_type === 'PENALTY_SHOOTOUT_SCORED') {
+                  return null
+                } else if (event.event_type === 'PENALTY_SHOOTOUT_MISSED' || event.event_type === 'MATCH_PENALTY_MISSED') {
+                  return <Icon name="missedPenalty" className="h-4 w-4 shrink-0" />
+                } else if (iconName) {
+                  return <Icon name={iconName} className="h-4 w-4 shrink-0" />
+                } else {
+                  return <span className="inline-block h-3.5 w-3.5 shrink-0 rounded-sm bg-pink-500" />
+                }
+              }
+              const icon = getIcon()
+              
               const content = (
                 <div className="inline-flex items-center gap-2 text-sm text-emerald-50">
+                  {icon}
                   {event.event_type === 'GOAL' || event.event_type === 'OWN_GOAL' || event.event_type === 'PENALTY_GOAL' || event.event_type === 'PENALTY_SHOOTOUT_SCORED' ? (
                     <span>{text}</span>
                   ) : event.event_type === 'PENALTY_SHOOTOUT_MISSED' || event.event_type === 'MATCH_PENALTY_MISSED' ? (
-                    <><Icon name="missedPenalty" className="h-4 w-4 shrink-0" /><span>{text}</span></>
-                  ) : iconName ? (
-                    <><Icon name={iconName} className="h-4 w-4 shrink-0" />{event.event_type === 'SUBSTITUTION' ? <span>{text}</span> : <span className="font-semibold">{text}</span>}</>
+                    <span>{text}</span>
+                  ) : event.event_type === 'SUBSTITUTION' ? (
+                    <span>{text}</span>
                   ) : (
-                    <><span className="inline-block h-3.5 w-3.5 shrink-0 rounded-sm bg-pink-500" /><span className="font-semibold">{text}</span></>
+                    <span className="font-semibold">{text}</span>
                   )}
                 </div>
               )
@@ -515,7 +531,7 @@ function MatchLineupsSummarySection({
               return (
                 <div key={event.id} className="relative z-10 px-3 py-1">
                   {side === 'home' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><div className="flex items-center gap-2">{minuteBadge}<div className="min-w-0">{content}</div></div>{runningScore ? renderGlossyEventScore(runningScore, scoreBadgeVariant) : <span />}<span /></div> : null}
-                  {side === 'away' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><span />{runningScore ? renderGlossyEventScore(runningScore, scoreBadgeVariant) : <span />}<div className="flex items-center justify-end gap-2"><div className="min-w-0 text-right">{content}</div>{minuteBadge}</div></div> : null}
+                  {side === 'away' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><span />{runningScore ? renderGlossyEventScore(runningScore, scoreBadgeVariant) : <span />}<div className="flex items-center justify-end gap-2"><div className="min-w-0 text-right text-sm text-emerald-50">{text}</div>{icon ? <div className="flex shrink-0 items-center">{icon}</div> : null}{minuteBadge}</div></div> : null}
                   {side === 'neutral' ? <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2"><span /><div className="flex items-center gap-2">{minuteBadge}{content}{runningScore ? renderGlossyEventScore(runningScore, scoreBadgeVariant) : null}</div><span /></div> : null}
                 </div>
               )
