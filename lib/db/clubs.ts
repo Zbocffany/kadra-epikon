@@ -1,6 +1,7 @@
 ﻿import { unstable_cache } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
+import { getPublicCacheKey } from '@/lib/db/publicCache'
 
 export type AdminClub = {
   id: string
@@ -395,9 +396,10 @@ export async function getAdminClubs(): Promise<AdminClub[]> {
 }
 
 export async function getPublicClubs(): Promise<AdminClub[]> {
+  const cacheKey = await getPublicCacheKey('public-clubs')
   return unstable_cache(
     async () => getAdminClubs(),
-    ['public-clubs'],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-clubs'],
@@ -548,9 +550,10 @@ export async function getAdminCities(): Promise<AdminCity[]> {
 }
 
 export async function getPublicClubDetails(id: string): Promise<AdminClubDetails | null> {
+  const cacheKey = await getPublicCacheKey('public-club-details', id)
   return unstable_cache(
     async () => getAdminClubDetails(id),
-    ['public-club-details', id],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-clubs', `public-club:${id}`],
@@ -680,9 +683,10 @@ export async function getPublicClubDetailStats(clubId: string): Promise<{
   assist_count: number
   minute_count: number
 }> {
+  const cacheKey = await getPublicCacheKey('public-club-stats', clubId)
   return unstable_cache(
     async () => getAdminClubDetailStats(clubId),
-    ['public-club-stats', clubId],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-clubs', `public-club:${clubId}`],
@@ -870,9 +874,10 @@ export async function getAdminClubDetailStats(clubId: string): Promise<{
 }
 
 export async function getPublicClubPlayerStats(clubId: string): Promise<AdminClubPlayerStat[]> {
+  const cacheKey = await getPublicCacheKey('public-club-player-stats', clubId)
   return unstable_cache(
     async () => getAdminClubPlayerStats(clubId),
-    ['public-club-player-stats', clubId],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-clubs', `public-club:${clubId}`],
@@ -1144,9 +1149,10 @@ export async function getAdminClubPlayerStats(clubId: string): Promise<AdminClub
 }
 
 export async function getPublicClubHistory(clubId: string): Promise<AdminClubHistoryEvent[]> {
+  const cacheKey = await getPublicCacheKey('public-club-history', clubId)
   return unstable_cache(
     async () => getClubHistory(clubId),
-    ['public-club-history', clubId],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-clubs', `public-club:${clubId}`],

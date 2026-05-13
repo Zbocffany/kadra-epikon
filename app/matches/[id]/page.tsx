@@ -1,10 +1,10 @@
 import { notFound } from 'next/navigation'
 import MatchReadOnlyPage from '@/components/matches/MatchReadOnlyPage'
-import { getPublicMatchDetails, getPublicMatchEvents, getPublicMatchParticipants } from '@/lib/db/matches'
+import { getPublicMatchDetails, getPublicMatchEvents, getPublicMatchParticipants, getPublicPolandPlayerMiniStats } from '@/lib/db/matches'
 import { getAdminCityDetails } from '@/lib/db/cities'
 import { getAdminStadiumDetails } from '@/lib/db/stadiums'
 
-export const revalidate = 86400
+export const dynamic = 'force-dynamic'
 
 type Params = Promise<{ id: string }>
 type SearchParams = Promise<{ from?: string | string[] | undefined }>
@@ -50,9 +50,10 @@ export default async function PublicMatchDetailsPage({
     notFound()
   }
 
-  const [participants, events, cityDetails, stadiumDetails] = await Promise.all([
+  const [participants, events, polandPlayerMiniStats, cityDetails, stadiumDetails] = await Promise.all([
     getPublicMatchParticipants(match),
     getPublicMatchEvents(match.id),
+    getPublicPolandPlayerMiniStats(match),
     match.match_city_id ? getAdminCityDetails(match.match_city_id) : Promise.resolve(null),
     match.match_stadium_id ? getAdminStadiumDetails(match.match_stadium_id) : Promise.resolve(null),
   ])
@@ -69,6 +70,7 @@ export default async function PublicMatchDetailsPage({
       match={match}
       participants={participants}
       events={events}
+      polandPlayerMiniStats={polandPlayerMiniStats}
       backHref={backHref}
       backLabel={backHref === '/' || backHref.startsWith('/?') ? 'Powrót do strony głównej' : 'Powrót do listy meczów'}
       competitionName={match.competition_name}

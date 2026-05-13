@@ -11,7 +11,7 @@ import {
 import CoachMatchesByYearSection from '@/components/matches/CoachMatchesByYearSection'
 import type { DetailPageParams } from '@/lib/types/admin'
 
-export const revalidate = 3600
+export const dynamic = 'force-dynamic'
 
 type Params = DetailPageParams
 

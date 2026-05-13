@@ -222,6 +222,9 @@ export async function updatePerson(formData: FormData): Promise<void> {
     redirectWithError(`/admin/people/${id}`, message)
   }
 
+  // Cache publicznych widoków jest unieważniany automatycznie przez triggery DB
+  // (tbl_Public_Cache_Version) — patrz migracja 032_public_cache_versioning.sql.
+
   redirectWithSaved(`/admin/people/${id}`)
 }
 

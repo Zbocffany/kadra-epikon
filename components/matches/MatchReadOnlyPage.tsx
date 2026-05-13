@@ -11,6 +11,7 @@ import type {
   AdminMatchEvent,
   AdminMatchParticipant,
   AdminMatchParticipantPersonOption,
+  PublicPolandPlayerMiniStats,
   PlayerPosition,
 } from '@/lib/db/matches'
 
@@ -25,6 +26,7 @@ type MatchReadOnlyPageProps = {
   match: AdminMatchDetails
   participants: MatchParticipantsBundle
   events: AdminMatchEvent[]
+  polandPlayerMiniStats?: Record<string, PublicPolandPlayerMiniStats>
   backHref: string
   backLabel: string
   competitionName: string
@@ -566,6 +568,7 @@ export default function MatchReadOnlyPage({
   match,
   participants,
   events,
+  polandPlayerMiniStats,
   competitionName,
   matchDateTimeLabel,
   stadiumSummary,
@@ -654,11 +657,13 @@ export default function MatchReadOnlyPage({
                   awayTeamId={match.away_team_id}
                   homeTeamFifaCode={match.home_team_fifa_code}
                   awayTeamFifaCode={match.away_team_fifa_code}
+                  matchDate={match.match_date}
                   homeStarters={homeStarters}
                   awayStarters={awayStarters}
                   homeParticipants={participants.homeParticipants}
                   awayParticipants={participants.awayParticipants}
                   events={events}
+                  polandPlayerMiniStats={polandPlayerMiniStats}
                 />
               )
             : undefined

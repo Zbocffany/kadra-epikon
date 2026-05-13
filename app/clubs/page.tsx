@@ -2,7 +2,7 @@ import { getPublicClubs } from '@/lib/db/clubs'
 import type { AdminClub } from '@/lib/db/clubs'
 import PublicClubsSearchTable from './PublicClubsSearchTable'
 
-export const revalidate = 3600
+export const dynamic = 'force-dynamic'
 
 export default async function PublicClubsPage() {
   let clubs: AdminClub[] = []

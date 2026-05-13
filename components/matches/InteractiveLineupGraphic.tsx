@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import CountryFlag from '@/components/CountryFlag'
+import { Icon, type AppIconName } from '@/components/icons'
 import { getFlagAssetPath } from '@/lib/flags/fifaFlagMap'
-import type { AdminMatchEvent, AdminMatchParticipant, PlayerPosition } from '@/lib/db/matches'
+import type { AdminMatchEvent, AdminMatchParticipant, PlayerPosition, PublicPolandPlayerMiniStats } from '@/lib/db/matches'
 
 type InteractiveLineupGraphicProps = {
   homeTeamName: string
@@ -12,11 +13,13 @@ type InteractiveLineupGraphicProps = {
   awayTeamId: string
   homeTeamFifaCode?: string | null
   awayTeamFifaCode?: string | null
+  matchDate: string
   homeStarters: AdminMatchParticipant[]
   awayStarters: AdminMatchParticipant[]
   homeParticipants: AdminMatchParticipant[]
   awayParticipants: AdminMatchParticipant[]
   events: AdminMatchEvent[]
+  polandPlayerMiniStats?: Record<string, PublicPolandPlayerMiniStats>
 }
 
 type TeamKey = 'home' | 'away'
@@ -38,6 +41,7 @@ type EnteredPlayer = {
 type HoveredPlayerState = {
   sourcePlayerId: string
   targetPersonId: string
+  hoveredPersonId: string
   label: string
   usesFlipAnimation: boolean
 }
@@ -58,6 +62,28 @@ function getDefaultTeam(homeTeamName: string, awayTeamName: string): TeamKey {
   if (isPolandTeam(homeTeamName)) return 'home'
   if (isPolandTeam(awayTeamName)) return 'away'
   return 'home'
+}
+
+function getAgeOnMatchDay(birthDate: string | null | undefined, matchDate: string): number | null {
+  if (!birthDate) return null
+  const [birthYearRaw, birthMonthRaw, birthDayRaw] = birthDate.split('-')
+  const [matchYearRaw, matchMonthRaw, matchDayRaw] = matchDate.split('-')
+  const birthYear = Number(birthYearRaw)
+  const birthMonth = Number(birthMonthRaw)
+  const birthDay = Number(birthDayRaw)
+  const matchYear = Number(matchYearRaw)
+  const matchMonth = Number(matchMonthRaw)
+  const matchDay = Number(matchDayRaw)
+
+  if (!Number.isFinite(birthYear) || !Number.isFinite(birthMonth) || !Number.isFinite(birthDay)) return null
+  if (!Number.isFinite(matchYear) || !Number.isFinite(matchMonth) || !Number.isFinite(matchDay)) return null
+
+  let age = matchYear - birthYear
+  if (matchMonth < birthMonth || (matchMonth === birthMonth && matchDay < birthDay)) {
+    age -= 1
+  }
+
+  return age >= 0 ? age : null
 }
 
 function getPositionInitial(position: PlayerPosition | null): string {
@@ -322,9 +348,34 @@ function getEventIcon(eventType: string): string {
       return '❌'
     case 'PENALTY_SHOOTOUT_SCORED':
       return '✓'
+    case 'SUBSTITUTION':
+      return '🔁'
     default:
       return '◆'
   }
+}
+
+function getTimelineEventIconName(eventType: AdminMatchEvent['event_type']): AppIconName | null {
+  if (eventType === 'GOAL') return 'goal'
+  if (eventType === 'OWN_GOAL') return 'ownGoal'
+  if (eventType === 'PENALTY_GOAL' || eventType === 'PENALTY_SHOOTOUT_SCORED') return 'penaltyGoal'
+  if (eventType === 'PENALTY_SHOOTOUT_MISSED' || eventType === 'MATCH_PENALTY_MISSED') return 'missedPenalty'
+  if (eventType === 'PENALTY_SHOOTOUT_SAVED' || eventType === 'MATCH_PENALTY_SAVED') return 'savedPenalty'
+  if (eventType === 'YELLOW_CARD') return 'yellowCard'
+  if (eventType === 'SECOND_YELLOW_CARD') return 'secondYellowCard'
+  if (eventType === 'RED_CARD') return 'redCard'
+  if (eventType === 'SUBSTITUTION') return 'substitution'
+  return null
+}
+
+function getTimelineIconNameForPerson(event: AdminMatchEvent, personId: string): AppIconName | null {
+  if (
+    event.secondary_person_id === personId
+    && (event.event_type === 'GOAL' || event.event_type === 'OWN_GOAL')
+  ) {
+    return 'assist'
+  }
+  return getTimelineEventIconName(event.event_type)
 }
 
 type EventIconProps = {
@@ -428,11 +479,13 @@ export default function InteractiveLineupGraphic({
   awayTeamId,
   homeTeamFifaCode,
   awayTeamFifaCode,
+  matchDate,
   homeStarters = [],
   awayStarters = [],
   homeParticipants = [],
   awayParticipants = [],
   events = [],
+  polandPlayerMiniStats = {},
 }: InteractiveLineupGraphicProps) {
   const [activeTeam, setActiveTeam] = useState<TeamKey>(() => getDefaultTeam(homeTeamName, awayTeamName))
   const [hoveredPlayerState, setHoveredPlayerState] = useState<HoveredPlayerState | null>(null)
@@ -456,6 +509,41 @@ export default function InteractiveLineupGraphic({
     const coach = current.participants.find((participant) => participant.role === 'COACH')
     return coach ? extractSurname(coach.person_name) : null
   }, [current.participants])
+  const participantByPersonId = useMemo(
+    () => new Map(current.participants.map((participant) => [participant.person_id, participant])),
+    [current.participants]
+  )
+  const hoveredParticipant = hoveredPlayerState ? participantByPersonId.get(hoveredPlayerState.hoveredPersonId) ?? null : null
+  const hoveredPlayerAge = hoveredParticipant ? getAgeOnMatchDay(hoveredParticipant.birth_date, matchDate) : null
+  const currentTeamIsPoland = (current.fifaCode ?? '').trim().toUpperCase() === 'POL'
+  const hoveredPolandStats = hoveredParticipant ? polandPlayerMiniStats[hoveredParticipant.person_id] : undefined
+  const hoveredPlayerClubName = hoveredParticipant?.club_team_name ?? hoveredParticipant?.derived_club_team_name ?? '—'
+  const hoveredTimelineEvents = useMemo(() => {
+    if (!hoveredParticipant) return [] as Array<{ key: string; iconName: AppIconName | null; minute: string }>
+
+    return events
+      .filter((event) => {
+        if (event.team_id !== current.teamId) return false
+        return event.primary_person_id === hoveredParticipant.person_id || event.secondary_person_id === hoveredParticipant.person_id
+      })
+      .sort(compareEventsChronologically)
+      .map((event) => {
+        const iconName = getTimelineIconNameForPerson(event, hoveredParticipant.person_id)
+        if (event.event_type === 'SUBSTITUTION') {
+          return {
+            key: event.id,
+            iconName,
+            minute: formatEventMinute(event),
+          }
+        }
+
+        return {
+          key: event.id,
+          iconName,
+          minute: formatEventMinute(event),
+        }
+      })
+  }, [hoveredParticipant, events, current.teamId])
 
   if (!homeStarters.length && !awayStarters.length) return null
 
@@ -473,6 +561,7 @@ export default function InteractiveLineupGraphic({
                     setHoveredPlayerState({
                       sourcePlayerId: player.id,
                       targetPersonId: player.personId,
+                      hoveredPersonId: player.personId,
                       label: player.label,
                       usesFlipAnimation: false,
                     })
@@ -523,6 +612,7 @@ export default function InteractiveLineupGraphic({
                           setHoveredPlayerState({
                             sourcePlayerId: player.id,
                             targetPersonId: player.replacedPersonId ?? player.id,
+                            hoveredPersonId: player.id,
                             label: player.label,
                             usesFlipAnimation: Boolean(player.replacedPersonId),
                           })
@@ -579,6 +669,7 @@ export default function InteractiveLineupGraphic({
                       setHoveredPlayerState({
                         sourcePlayerId: player.id,
                         targetPersonId: player.personId,
+                        hoveredPersonId: player.personId,
                         label: player.label,
                         usesFlipAnimation: false,
                       })
@@ -652,6 +743,59 @@ export default function InteractiveLineupGraphic({
                   <span aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.22)_0%,rgba(255,255,255,0)_55%)]" />
                 </button>
               </div>
+            </div>
+          </div>
+
+          <div className="relative mt-3 overflow-hidden rounded-xl border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.2),0_8px_18px_rgba(0,0,0,0.2)] sm:p-3.5">
+            <span aria-hidden className="pointer-events-none absolute inset-0 rounded-xl bg-[linear-gradient(180deg,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.03)_30%,rgba(0,0,0,0.12)_100%)]" />
+            <div className="relative z-10 min-h-[84px]">
+              {hoveredParticipant ? (
+                <div className="relative space-y-2 pr-24">
+                  {currentTeamIsPoland && hoveredParticipant.role === 'PLAYER' && hoveredPolandStats ? (
+                    <div className="absolute right-0 top-0 flex flex-col items-end gap-1">
+                      <span className="relative inline-flex items-center overflow-hidden rounded-md border border-emerald-300/50 bg-emerald-950/82 px-1.5 py-0.5 text-sm font-bold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.14),inset_0_-1px_1px_rgba(0,0,0,0.4),0_2px_5px_rgba(0,0,0,0.28)]">
+                        <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0.08)_34%,rgba(255,255,255,0)_72%)]" />
+                        <span className="relative z-10">{hoveredPolandStats.capsBeforeMatch}/{hoveredPolandStats.goalsBeforeMatch}</span>
+                      </span>
+                      <div className="flex flex-col items-end gap-1 text-xs">
+                        {hoveredPolandStats.isDebut ? (
+                          <span className="inline-flex items-center rounded-md border border-emerald-100/55 bg-[linear-gradient(180deg,rgba(240,255,246,0.28)_0%,rgba(12,74,40,0.9)_100%)] px-2 py-0.5 font-semibold uppercase tracking-[0.08em] text-emerald-50">Debiut</span>
+                        ) : null}
+                        {hoveredPolandStats.isFirstGoal ? (
+                          <span className="inline-flex items-center rounded-md border border-emerald-100/55 bg-[linear-gradient(180deg,rgba(240,255,246,0.28)_0%,rgba(12,74,40,0.9)_100%)] px-2 py-0.5 font-semibold uppercase tracking-[0.08em] text-emerald-50">Pierwszy gol</span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="flex flex-col items-start gap-2">
+                    <span className="inline-flex items-center rounded-md border border-emerald-100/70 bg-[linear-gradient(180deg,rgba(240,255,246,0.44)_0%,rgba(173,238,199,0.28)_28%,rgba(12,74,40,0.92)_100%)] px-2.5 py-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.62),inset_0_-2px_6px_rgba(0,0,0,0.5),0_8px_16px_rgba(0,0,0,0.3)]">
+                      {hoveredParticipant.person_name}{hoveredPlayerAge !== null ? ` (${hoveredPlayerAge})` : ''}
+                    </span>
+
+                    <span className="inline-flex items-center rounded-md border border-white/25 bg-slate-950/28 px-2 py-0.5 text-xs font-semibold tracking-[0.08em] text-emerald-50 shadow-[0_3px_8px_rgba(0,0,0,0.25)]">
+                      {hoveredPlayerClubName}
+                    </span>
+
+                    {hoveredTimelineEvents.length > 0 ? (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {hoveredTimelineEvents.map((entry) => (
+                          <span
+                            key={entry.key}
+                            className="inline-flex items-center gap-1 rounded-md border border-white/12 bg-emerald-950/30 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-50 shadow-[0_2px_6px_rgba(0,0,0,0.28)]"
+                            title={entry.minute}
+                          >
+                            {entry.iconName ? <Icon name={entry.iconName} className="h-3.5 w-3.5" /> : <span>◆</span>}
+                            <span>{entry.minute}</span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex h-full items-center text-xs font-medium uppercase tracking-[0.08em] text-emerald-100/75">Najedź na piłkarza na liście lub na boisku</div>
+              )}
             </div>
           </div>
         </div>

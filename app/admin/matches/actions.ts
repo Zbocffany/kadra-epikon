@@ -1511,12 +1511,12 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
   revalidatePath('/')
   revalidatePath('/matches')
   revalidatePath(`/matches/${id}`)
-  revalidateTag('public-matches')
-  revalidateTag(`public-match:${id}`)
+  revalidateTag('public-matches', 'max')
+  revalidateTag(`public-match:${id}`, 'max')
   
   // Revalidate cache for all people involved (players, coaches, referees)
   for (const personId of personIds) {
-    revalidateTag(`public-person:${personId}`)
+    revalidateTag(`public-person:${personId}`, 'max')
   }
 
   redirectWithSaved(`/admin/matches/${id}`)
@@ -1646,12 +1646,12 @@ export async function updateMatch(formData: FormData): Promise<void> {
   revalidatePath('/')
   revalidatePath('/matches')
   revalidatePath(`/matches/${id}`)
-  revalidateTag('public-matches')
-  revalidateTag(`public-match:${id}`)
+  revalidateTag('public-matches', 'max')
+  revalidateTag(`public-match:${id}`, 'max')
   
   // Revalidate cache for all people involved (players, coaches, referees)
   for (const personId of personIds) {
-    revalidateTag(`public-person:${personId}`)
+    revalidateTag(`public-person:${personId}`, 'max')
   }
 
   redirectWithSaved(redirectPath)

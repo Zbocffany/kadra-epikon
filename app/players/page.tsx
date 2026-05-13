@@ -1,7 +1,7 @@
 import { getPublicPeople } from '@/lib/db/people'
 import PublicPeopleSearchTable from '@/app/admin/people/PublicPeopleSearchTable'
 
-export const revalidate = 3600
+export const dynamic = 'force-dynamic'
 
 export default async function PublicPlayersPage() {
 	const people = await getPublicPeople()

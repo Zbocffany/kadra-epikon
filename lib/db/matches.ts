@@ -1,6 +1,7 @@
 import { unstable_cache, unstable_noStore as noStore } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
+import { getPublicCacheKey } from '@/lib/db/publicCache'
 
 type QueryError = { message: string } | null
 type QueryResult<T> = { data: T[] | null; error: QueryError }
@@ -176,6 +177,7 @@ export type AdminMatchParticipant = {
   team_id: string | null
   person_id: string
   person_name: string
+  birth_date: string | null
   role: MatchParticipantRole
   is_starting: boolean | null
   player_position: PlayerPosition | null
@@ -203,6 +205,13 @@ export type AdminMatchEvent = {
   secondary_person_id: string | null
   notes: string | null
   event_order: number | null
+}
+
+export type PublicPolandPlayerMiniStats = {
+  capsBeforeMatch: number
+  goalsBeforeMatch: number
+  isDebut: boolean
+  isFirstGoal: boolean
 }
 
 export type AdminMatchFilterOptions = {
@@ -297,6 +306,7 @@ type MatchParticipantPersonRow = {
   first_name: string | null
   last_name: string | null
   nickname: string | null
+  birth_date: string | null
 }
 
 type PersonTeamPeriodRow = {
@@ -554,9 +564,10 @@ export async function getAdminMatches(options?: AdminMatchFilterOptions): Promis
 }
 
 export async function getPublicMatches(): Promise<AdminMatch[]> {
+  const cacheKey = await getPublicCacheKey('public-matches')
   return unstable_cache(
     async () => getAdminMatches(),
-    ['public-matches'],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-matches'],
@@ -570,9 +581,10 @@ export async function getPublicMatches(): Promise<AdminMatch[]> {
  */
 export async function getCachedPublicMatches(options?: AdminMatchFilterOptions): Promise<AdminMatch[]> {
   const key = options ? JSON.stringify(options) : 'all'
+  const cacheKey = await getPublicCacheKey('public-matches', key)
   return unstable_cache(
     () => getAdminMatches(options),
-    [`public-matches-${key}`],
+    cacheKey,
     { revalidate: 1800 }
   )()
 }
@@ -659,9 +671,10 @@ export async function getAdminMatchesForPlayer(personId: string): Promise<AdminP
 }
 
 export async function getPublicMatchesForPlayer(personId: string): Promise<AdminPlayerMatch[]> {
+  const cacheKey = await getPublicCacheKey('public-player-matches', personId)
   return unstable_cache(
     async () => getAdminMatchesForPlayer(personId),
-    ['public-player-matches', personId],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-people', `public-person:${personId}`],
@@ -748,9 +761,10 @@ export async function getAdminMatchesForCoach(personId: string): Promise<AdminCo
 }
 
 export async function getPublicMatchesForCoach(personId: string): Promise<AdminCoachMatch[]> {
+  const cacheKey = await getPublicCacheKey('public-coach-matches', personId)
   return unstable_cache(
     async () => getAdminMatchesForCoach(personId),
-    ['public-coach-matches', personId],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-people', `public-person:${personId}`],
@@ -807,9 +821,10 @@ export async function getAdminMatchesForReferee(personId: string): Promise<Admin
 }
 
 export async function getPublicMatchesForReferee(personId: string): Promise<AdminRefereeMatch[]> {
+  const cacheKey = await getPublicCacheKey('public-referee-matches', personId)
   return unstable_cache(
     async () => getAdminMatchesForReferee(personId),
-    ['public-referee-matches', personId],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-people', `public-person:${personId}`],
@@ -888,9 +903,10 @@ export async function getAdminCoachYearStats(personId: string): Promise<Record<s
 }
 
 export async function getPublicCoachYearStats(personId: string): Promise<Record<string, AdminCoachYearStats>> {
+  const cacheKey = await getPublicCacheKey('public-coach-year-stats', personId)
   return unstable_cache(
     async () => getAdminCoachYearStats(personId),
-    ['public-coach-year-stats', personId],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-people', `public-person:${personId}`],
@@ -960,9 +976,10 @@ export async function getAdminRefereeYearStats(personId: string): Promise<Record
 }
 
 export async function getPublicRefereeYearStats(personId: string): Promise<Record<string, AdminCoachYearStats>> {
+  const cacheKey = await getPublicCacheKey('public-referee-year-stats', personId)
   return unstable_cache(
     async () => getAdminRefereeYearStats(personId),
-    ['public-referee-year-stats', personId],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-people', `public-person:${personId}`],
@@ -971,9 +988,10 @@ export async function getPublicRefereeYearStats(personId: string): Promise<Recor
 }
 
 export async function getPublicPlayerGoalsByYear(personId: string): Promise<Record<string, number>> {
+  const cacheKey = await getPublicCacheKey('public-player-goals-year', personId)
   return unstable_cache(
     async () => getAdminPlayerGoalsByYear(personId),
-    ['public-player-goals-year', personId],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-people', `public-person:${personId}`],
@@ -1061,10 +1079,11 @@ export async function getPublicPlayerMatchEventsByMatch(
   matchIds: string[]
 ): Promise<Record<string, AdminPlayerMatchEventsByMatchEntry>> {
   const normalizedMatchIds = [...new Set(matchIds)].sort()
+  const cacheKey = await getPublicCacheKey('public-player-events', personId, ...normalizedMatchIds)
 
   return unstable_cache(
     async () => getAdminPlayerMatchEventsByMatch(personId, normalizedMatchIds),
-    ['public-player-events', personId, ...normalizedMatchIds],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-people', `public-person:${personId}`],
@@ -1255,9 +1274,10 @@ export async function getAdminPlayerMatchEventsByMatch(
 }
 
 export async function getPublicPlayerYearStats(personId: string): Promise<Record<string, AdminPlayerYearStats>> {
+  const cacheKey = await getPublicCacheKey('public-player-year-stats', personId)
   return unstable_cache(
     async () => getAdminPlayerYearStats(personId),
-    ['public-player-year-stats', personId],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-people', `public-person:${personId}`],
@@ -1440,11 +1460,14 @@ export const getCachedAdminMatchYearBounds = unstable_cache(
 /**
  * Same as above for the public site — 1 h TTL since public data changes infrequently.
  */
-export const getCachedPublicMatchYearBounds = unstable_cache(
-  getAdminMatchYearBounds,
-  ['public-match-year-bounds'],
-  { revalidate: 3600 }
-)
+export async function getCachedPublicMatchYearBounds(): Promise<AdminMatchYearBounds | null> {
+  const cacheKey = await getPublicCacheKey('public-match-year-bounds')
+  return unstable_cache(
+    getAdminMatchYearBounds,
+    cacheKey,
+    { revalidate: 3600 }
+  )()
+}
 
 export async function getAdminMatchesPage(
   page: number,
@@ -1745,9 +1768,10 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
 }
 
 export async function getPublicMatchDetails(id: string): Promise<AdminMatchDetails | null> {
+  const cacheKey = await getPublicCacheKey('public-match-details', id)
   return unstable_cache(
     async () => getAdminMatchDetails(id),
-    ['public-match-details', id],
+    cacheKey,
     {
       revalidate: 86400,
       tags: ['public-matches', `public-match:${id}`],
@@ -1755,12 +1779,13 @@ export async function getPublicMatchDetails(id: string): Promise<AdminMatchDetai
   )()
 }
 
-export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 'id' | 'home_team_id' | 'away_team_id'>): Promise<{
+export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 'id' | 'match_date' | 'home_team_id' | 'away_team_id'>): Promise<{
   homeParticipants: AdminMatchParticipant[]
   awayParticipants: AdminMatchParticipant[]
   referees: AdminMatchParticipant[]
   people: AdminMatchParticipantPersonOption[]
 }> {
+  const cacheKey = await getPublicCacheKey('public-match-participants', match.id)
   return unstable_cache(
     async () => {
       const supabase = createServiceRoleClient()
@@ -1778,7 +1803,7 @@ export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 
   const { data: people, error: peopleError } = personIds.length
     ? await supabase
         .from('tbl_People')
-        .select('id, first_name, last_name, nickname')
+        .select('id, first_name, last_name, nickname, birth_date')
         .in('id', personIds)
     : { data: [] as MatchParticipantPersonRow[], error: null }
 
@@ -1786,6 +1811,13 @@ export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 
 
   const peopleRows = (people ?? []) as MatchParticipantPersonRow[]
   const peopleById = new Map(peopleRows.map((person) => [person.id, person]))
+
+  const { data: periods, error: periodsError } = personIds.length
+    ? await supabase
+        .from('tbl_Person_Team_Periods')
+        .select('person_id, club_team_id, valid_from, valid_to')
+        .in('person_id', personIds)
+    : { data: [] as PersonTeamPeriodRow[], error: null }
 
   const participantsWithCountryCodeIds = [...new Set(
     participantRows
@@ -1812,6 +1844,7 @@ export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 
 
   if (personCountriesRes.error) throw new Error(`tbl_Person_Countries: ${personCountriesRes.error.message}`)
   if (birthCountriesRes.error) throw new Error(`tbl_People (birth_country_id): ${birthCountriesRes.error.message}`)
+  if (periodsError) throw new Error(`tbl_Person_Team_Periods: ${periodsError.message}`)
 
   const personCountryRows = (personCountriesRes.data ?? []) as PersonCountryAssignmentRow[]
   const participantsBirthCountryRows = (birthCountriesRes.data ?? []) as PersonBirthCountryRow[]
@@ -1850,21 +1883,60 @@ export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 
     if (code) personCountryMap.set(row.id, code)
   }
 
-  const mappedParticipants = participantRows.map((participant) => ({
-    id: participant.id,
-    team_id: participant.team_id,
-    person_id: participant.person_id,
-    person_name: buildPersonDisplayName(peopleById.get(participant.person_id) ?? { id: participant.person_id, first_name: null, last_name: null, nickname: null }),
-    role: participant.role,
-    is_starting: participant.is_starting,
-    player_position: participant.player_position,
-    club_team_id: participant.club_team_id,
-    club_team_name: null,
-    derived_club_team_name: null,
-    country_code: participant.role === 'REFEREE' || participant.role === 'COACH'
-      ? personCountryMap.get(participant.person_id) ?? undefined
-      : undefined,
-  } satisfies AdminMatchParticipant))
+  const periodsByPerson = new Map<string, PersonTeamPeriodRow[]>()
+  for (const period of (periods ?? []) as PersonTeamPeriodRow[]) {
+    const existing = periodsByPerson.get(period.person_id) ?? []
+    existing.push(period)
+    periodsByPerson.set(period.person_id, existing)
+  }
+
+  const derivedClubTeamIds = participantRows
+    .filter((participant) => !participant.club_team_id && participant.role !== 'REFEREE')
+    .map((participant) => getDerivedClubTeamId(periodsByPerson.get(participant.person_id) ?? [], match.match_date))
+    .filter((teamId): teamId is string => Boolean(teamId))
+
+  const allClubTeamIds = [...new Set([
+    ...participantRows
+      .map((participant) => participant.club_team_id)
+      .filter((teamId): teamId is string => Boolean(teamId)),
+    ...derivedClubTeamIds,
+  ])]
+
+  const clubTeamNameMap = await getTeamDisplayMap(allClubTeamIds)
+
+  const mappedParticipants = participantRows.map((participant) => {
+    const person = peopleById.get(participant.person_id) ?? {
+      id: participant.person_id,
+      first_name: null,
+      last_name: null,
+      nickname: null,
+      birth_date: null,
+    }
+    const derivedClubTeamId = !participant.club_team_id && participant.role !== 'REFEREE'
+      ? getDerivedClubTeamId(periodsByPerson.get(participant.person_id) ?? [], match.match_date)
+      : null
+
+    return {
+      id: participant.id,
+      team_id: participant.team_id,
+      person_id: participant.person_id,
+      person_name: buildPersonDisplayName(person),
+      birth_date: person.birth_date,
+      role: participant.role,
+      is_starting: participant.is_starting,
+      player_position: participant.player_position,
+      club_team_id: participant.club_team_id,
+      club_team_name: participant.club_team_id
+        ? (clubTeamNameMap.get(participant.club_team_id) ?? '—')
+        : null,
+      derived_club_team_name: derivedClubTeamId
+        ? (clubTeamNameMap.get(derivedClubTeamId) ?? '—')
+        : null,
+      country_code: participant.role === 'REFEREE' || participant.role === 'COACH'
+        ? personCountryMap.get(participant.person_id) ?? undefined
+        : undefined,
+    } satisfies AdminMatchParticipant
+  })
 
       return {
         homeParticipants: sortTeamParticipants(
@@ -1887,7 +1959,7 @@ export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 
           .sort((a, b) => a.label.localeCompare(b.label, 'pl')),
       }
     },
-    ['public-match-participants', match.id],
+    cacheKey,
     {
       revalidate: 86400,
       tags: [`public-match:${match.id}`],
@@ -1896,12 +1968,190 @@ export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 
 }
 
 export async function getPublicMatchEvents(matchId: string): Promise<AdminMatchEvent[]> {
+  const cacheKey = await getPublicCacheKey('public-match-events', matchId)
   return unstable_cache(
     async () => getAdminMatchEvents(matchId),
-    ['public-match-events', matchId],
+    cacheKey,
     {
       revalidate: 86400,
       tags: [`public-match:${matchId}`],
+    }
+  )()
+}
+
+export async function getPublicPolandPlayerMiniStats(match: Pick<AdminMatchDetails, 'id' | 'match_date' | 'home_team_id' | 'away_team_id'>): Promise<Record<string, PublicPolandPlayerMiniStats>> {
+  const cacheKey = await getPublicCacheKey('public-match-poland-mini-stats', match.id)
+  return unstable_cache(
+    async () => {
+      const supabase = createServiceRoleClient()
+
+      const { data: polandByCode } = await supabase
+        .from('tbl_Countries')
+        .select('id')
+        .eq('fifa_code', 'POL')
+        .maybeSingle()
+
+      const { data: polandByName } = polandByCode
+        ? { data: null }
+        : await supabase
+            .from('tbl_Countries')
+            .select('id')
+            .ilike('name', 'Polska')
+            .maybeSingle()
+
+      const polandCountryId = (polandByCode?.id ?? polandByName?.id) as string | undefined
+      if (!polandCountryId) return {}
+
+      const { data: matchTeams, error: matchTeamsError } = await supabase
+        .from('tbl_Teams')
+        .select('id, country_id')
+        .in('id', [match.home_team_id, match.away_team_id])
+
+      if (matchTeamsError) throw new Error(`tbl_Teams (current match teams): ${matchTeamsError.message}`)
+
+      const currentPolandTeamIds = new Set(
+        ((matchTeams ?? []) as Array<{ id: string; country_id: string | null }>)
+          .filter((row) => row.country_id === polandCountryId)
+          .map((row) => row.id)
+      )
+      if (!currentPolandTeamIds.size) return {}
+
+      const currentPolandTeamIdsArray = [...currentPolandTeamIds]
+      const { data: currentPlayers, error: currentPlayersError } = await supabase
+        .from('tbl_Match_Participants')
+        .select('person_id')
+        .eq('match_id', match.id)
+        .eq('role', 'PLAYER')
+        .in('team_id', currentPolandTeamIdsArray)
+
+      if (currentPlayersError) throw new Error(`tbl_Match_Participants (current Poland players): ${currentPlayersError.message}`)
+
+      const personIds = [...new Set(((currentPlayers ?? []) as Array<{ person_id: string }>).map((row) => row.person_id))]
+      if (!personIds.length) return {}
+
+      const { data: allPolandTeams, error: allPolandTeamsError } = await supabase
+        .from('tbl_Teams')
+        .select('id')
+        .eq('country_id', polandCountryId)
+
+      if (allPolandTeamsError) throw new Error(`tbl_Teams (all Poland teams): ${allPolandTeamsError.message}`)
+
+      const allPolandTeamIds = ((allPolandTeams ?? []) as Array<{ id: string }>).map((row) => row.id)
+      if (!allPolandTeamIds.length) return {}
+
+      const { data: playerParticipations, error: participationsError } = await supabase
+        .from('tbl_Match_Participants')
+        .select('person_id, match_id, is_starting')
+        .eq('role', 'PLAYER')
+        .in('person_id', personIds)
+        .in('team_id', allPolandTeamIds)
+
+      if (participationsError) throw new Error(`tbl_Match_Participants (Poland history): ${participationsError.message}`)
+
+      const participations = (playerParticipations ?? []) as Array<{ person_id: string; match_id: string; is_starting: boolean | null }>
+      const participationMatchIds = [...new Set(participations.map((row) => row.match_id))]
+
+      const matchMetaById = new Map<string, { match_date: string; result_type: ResultType | null }>()
+      for (let i = 0; i < participationMatchIds.length; i += CHUNK_SIZE) {
+        const batch = participationMatchIds.slice(i, i + CHUNK_SIZE)
+        const { data: matches, error: matchesError } = await supabase
+          .from('tbl_Matches')
+          .select('id, match_date, result_type')
+          .in('id', batch)
+
+        if (matchesError) throw new Error(`tbl_Matches (Poland history): ${matchesError.message}`)
+
+        for (const row of (matches ?? []) as Array<{ id: string; match_date: string; result_type: ResultType | null }>) {
+          matchMetaById.set(row.id, { match_date: row.match_date, result_type: row.result_type })
+        }
+      }
+
+      const validPreviousMatchIds = new Set<string>()
+      for (const [matchId, meta] of matchMetaById.entries()) {
+        if (meta.result_type === 'WALKOVER') continue
+        if (meta.match_date >= match.match_date) continue
+        validPreviousMatchIds.add(matchId)
+      }
+
+      const subEnteredPairs = new Set<string>()
+      for (let i = 0; i < participationMatchIds.length; i += CHUNK_SIZE) {
+        const batch = participationMatchIds.slice(i, i + CHUNK_SIZE)
+        const { data: subEvents, error: subEventsError } = await supabase
+          .from('tbl_Match_Events')
+          .select('match_id, secondary_person_id')
+          .eq('event_type', 'SUBSTITUTION')
+          .in('match_id', batch)
+          .in('secondary_person_id', personIds)
+
+        if (subEventsError) throw new Error(`tbl_Match_Events (Poland sub-ons history): ${subEventsError.message}`)
+
+        for (const event of (subEvents ?? []) as Array<{ match_id: string; secondary_person_id: string | null }>) {
+          if (!event.secondary_person_id) continue
+          subEnteredPairs.add(`${event.secondary_person_id}:${event.match_id}`)
+        }
+      }
+
+      const capsBeforeByPerson = new Map<string, number>()
+      const uniquePairs = new Set<string>()
+      for (const row of participations) {
+        if (!validPreviousMatchIds.has(row.match_id)) continue
+        const didPlay = Boolean(row.is_starting) || subEnteredPairs.has(`${row.person_id}:${row.match_id}`)
+        if (!didPlay) continue
+        const pairKey = `${row.person_id}:${row.match_id}`
+        if (uniquePairs.has(pairKey)) continue
+        uniquePairs.add(pairKey)
+        capsBeforeByPerson.set(row.person_id, (capsBeforeByPerson.get(row.person_id) ?? 0) + 1)
+      }
+
+      const { data: goalEvents, error: goalEventsError } = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, primary_person_id, team_id')
+        .in('event_type', ['GOAL', 'PENALTY_GOAL'])
+        .in('primary_person_id', personIds)
+        .in('team_id', allPolandTeamIds)
+
+      if (goalEventsError) throw new Error(`tbl_Match_Events (Poland goals history): ${goalEventsError.message}`)
+
+      const goalsBeforeByPerson = new Map<string, number>()
+      for (const event of (goalEvents ?? []) as Array<{ match_id: string; primary_person_id: string | null; team_id: string | null }>) {
+        if (!event.primary_person_id) continue
+        if (!validPreviousMatchIds.has(event.match_id)) continue
+        goalsBeforeByPerson.set(event.primary_person_id, (goalsBeforeByPerson.get(event.primary_person_id) ?? 0) + 1)
+      }
+
+      const { data: currentGoals, error: currentGoalsError } = await supabase
+        .from('tbl_Match_Events')
+        .select('primary_person_id')
+        .eq('match_id', match.id)
+        .in('event_type', ['GOAL', 'PENALTY_GOAL'])
+        .in('team_id', currentPolandTeamIdsArray)
+
+      if (currentGoalsError) throw new Error(`tbl_Match_Events (current Poland goals): ${currentGoalsError.message}`)
+
+      const currentScorers = new Set(
+        ((currentGoals ?? []) as Array<{ primary_person_id: string | null }>)
+          .map((row) => row.primary_person_id)
+          .filter((personId): personId is string => Boolean(personId))
+      )
+
+      const result: Record<string, PublicPolandPlayerMiniStats> = {}
+      for (const personId of personIds) {
+        const capsBeforeMatch = capsBeforeByPerson.get(personId) ?? 0
+        const goalsBeforeMatch = goalsBeforeByPerson.get(personId) ?? 0
+        result[personId] = {
+          capsBeforeMatch,
+          goalsBeforeMatch,
+          isDebut: capsBeforeMatch === 0,
+          isFirstGoal: goalsBeforeMatch === 0 && currentScorers.has(personId),
+        }
+      }
+
+      return result
+    },
+    cacheKey,
+    {
+      revalidate: 86400,
+      tags: [`public-match:${match.id}`],
     }
   )()
 }
@@ -1928,7 +2178,7 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
   const { data: people, error: peopleError } = personIds.length
     ? await supabase
         .from('tbl_People')
-        .select('id, first_name, last_name, nickname')
+        .select('id, first_name, last_name, nickname, birth_date')
         .in('id', personIds)
     : { data: [] as MatchParticipantPersonRow[], error: null }
 
@@ -2046,6 +2296,7 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
       team_id: participant.team_id,
       person_id: participant.person_id,
       person_name: personNameMap.get(participant.person_id) ?? '—',
+      birth_date: peopleRows.find((person) => person.id === participant.person_id)?.birth_date ?? null,
       role: participant.role,
       is_starting: participant.is_starting,
       player_position: participant.player_position,

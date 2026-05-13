@@ -1,6 +1,7 @@
 import { unstable_cache } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
+import { getPublicCacheKey } from '@/lib/db/publicCache'
 
 type CityCountryPeriod = {
   city_id: string
@@ -2479,9 +2480,10 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
 }
 
 export async function getPublicPeople(): Promise<AdminPersonListItem[]> {
+  const cacheKey = await getPublicCacheKey('public-people')
   return unstable_cache(
     async () => getAdminPeople(),
-    ['public-people'],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-people'],
@@ -2629,9 +2631,10 @@ export async function getAdminPeoplePage(
 }
 
 export async function getPublicPersonDetails(id: string): Promise<AdminPersonDetails | null> {
+  const cacheKey = await getPublicCacheKey('public-person-details', id)
   return unstable_cache(
     async () => getAdminPersonDetails(id),
-    ['public-person-details', id],
+    cacheKey,
     {
       revalidate: 3600,
       tags: ['public-people', `public-person:${id}`],

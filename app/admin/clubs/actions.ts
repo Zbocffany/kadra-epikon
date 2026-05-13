@@ -1,5 +1,6 @@
 ﻿'use server'
 
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import type { InlineCreateState } from '@/lib/types/admin'
@@ -142,6 +143,29 @@ export async function updateClub(formData: FormData): Promise<void> {
     redirectWithError(`/admin/clubs/${id}`, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
+  const { data: team } = await supabase
+    .from('tbl_Teams')
+    .select('id')
+    .eq('club_id', id)
+    .maybeSingle()
+
+  if (team?.id) {
+    const { data: matches } = await supabase
+      .from('tbl_Matches')
+      .select('id')
+      .or(`home_team_id.eq.${team.id},away_team_id.eq.${team.id}`)
+
+    const matchIds = [...new Set((matches ?? []).map((match) => match.id).filter(Boolean))]
+    for (const matchId of matchIds) {
+      revalidateTag(`public-match:${matchId}`, 'max')
+    }
+  }
+
+  revalidatePath('/admin/clubs')
+  revalidatePath(`/admin/clubs/${id}`)
+  revalidateTag('public-clubs', 'max')
+  revalidateTag(`public-club:${id}`, 'max')
+
   redirectWithSaved(`/admin/clubs/${id}`)
 }
 
@@ -235,6 +259,22 @@ export async function deleteClub(formData: FormData): Promise<void> {
       `/admin/clubs/${id}`,
       'Wystąpił błąd bazy danych podczas usuwania klubu. Spróbuj ponownie.'
     )
+  }
+
+  revalidatePath('/admin/clubs')
+  revalidatePath(`/admin/clubs/${id}`)
+  revalidateTag('public-clubs', 'max')
+  revalidateTag(`public-club:${id}`, 'max')
+  if (team?.id) {
+    const { data: matches } = await supabase
+      .from('tbl_Matches')
+      .select('id')
+      .or(`home_team_id.eq.${team.id},away_team_id.eq.${team.id}`)
+
+    const matchIds = [...new Set((matches ?? []).map((match) => match.id).filter(Boolean))]
+    for (const matchId of matchIds) {
+      revalidateTag(`public-match:${matchId}`, 'max')
+    }
   }
 
   redirectWithAdded('/admin/clubs', `Usunięto klub: ${club?.name ?? id}`)
