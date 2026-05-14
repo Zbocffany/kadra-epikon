@@ -1,7 +1,7 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
 
 const PUBLIC_CACHE_KEY = 'global'
-const VERSION_TTL_MS = 5_000 // odświeżamy lokalnie co 5s — szybkie i wystarczająco świeże
+const VERSION_TTL_MS = 1_000 // 1s lokalnego cache wersji — kompromis między ruchem do bazy a świeżością.
 
 type VersionState = {
   value: number

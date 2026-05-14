@@ -2678,7 +2678,6 @@ export async function getPlayerSuggestionsNearDate(
 export async function getMatchesYearStats(
   matchesInput: { id: string; match_date: string }[]
 ): Promise<MatchYearStatsData> {
-  noStore()
   const empty: MatchYearStatsData = { coaches: {}, topAppearances: {}, topScorers: {} }
   if (!matchesInput.length) return empty
 
@@ -2929,4 +2928,31 @@ export async function getMatchesYearStats(
   }
 
   return { coaches, topAppearances, topScorers }
+}
+
+/**
+ * Public-side cache wrapper for getMatchesYearStats.
+ * Wynik zależy wyłącznie od zbioru meczów + danych powiązanych w bazie.
+ * Wszystkie tabele wpływające na wynik (tbl_Matches, tbl_Match_Participants,
+ * tbl_Match_Events, tbl_Teams, tbl_Countries, tbl_People) mają trigger
+ * bump_public_cache_version, więc wpięcie do `getPublicCacheKey('public-matches-year-stats')`
+ * + tag 'public-matches' wystarcza do automatycznej inwalidacji.
+ *
+ * Klucz cache zawiera dodatkowo skrót zbioru wejściowego (count + skrajne ID),
+ * żeby różne wywołania (np. na podzbiorze) trafiały w osobne sloty cache.
+ */
+export async function getCachedPublicMatchesYearStats(
+  matchesInput: { id: string; match_date: string }[]
+): Promise<MatchYearStatsData> {
+  if (!matchesInput.length) {
+    return { coaches: {}, topAppearances: {}, topScorers: {} }
+  }
+  const sortedIds = matchesInput.map((m) => m.id).sort()
+  const inputKey = `${sortedIds.length}:${sortedIds[0]}:${sortedIds[sortedIds.length - 1]}`
+  const cacheKey = await getPublicCacheKey('public-matches-year-stats', inputKey)
+  return unstable_cache(
+    () => getMatchesYearStats(matchesInput),
+    cacheKey,
+    { revalidate: 1800, tags: ['public-matches'] }
+  )()
 }

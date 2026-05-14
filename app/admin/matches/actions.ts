@@ -2,6 +2,7 @@
 
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { invalidatePublicCacheVersion } from '@/lib/db/publicCache'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import {
   getTrimmedNullable,
@@ -1513,11 +1514,13 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
   revalidatePath(`/matches/${id}`)
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${id}`, 'max')
-  
+
   // Revalidate cache for all people involved (players, coaches, referees)
   for (const personId of personIds) {
     revalidateTag(`public-person:${personId}`, 'max')
   }
+
+  invalidatePublicCacheVersion()
 
   redirectWithSaved(`/admin/matches/${id}`)
 }
@@ -1574,6 +1577,7 @@ export async function createMatch(formData: FormData): Promise<void> {
   revalidatePath(`/matches/${payload.id as string}`)
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${payload.id as string}`, 'max')
+  invalidatePublicCacheVersion()
 
   redirectWithAdded('/admin/matches', `Dodano mecz z datą ${input.matchDate}`)
 }
@@ -1648,11 +1652,13 @@ export async function updateMatch(formData: FormData): Promise<void> {
   revalidatePath(`/matches/${id}`)
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${id}`, 'max')
-  
+
   // Revalidate cache for all people involved (players, coaches, referees)
   for (const personId of personIds) {
     revalidateTag(`public-person:${personId}`, 'max')
   }
+
+  invalidatePublicCacheVersion()
 
   redirectWithSaved(redirectPath)
 }
@@ -1707,6 +1713,7 @@ export async function deleteMatch(formData: FormData): Promise<void> {
   revalidatePath(`/matches/${id}`)
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${id}`, 'max')
+  invalidatePublicCacheVersion()
 
   const label = match?.match_date ?? id
   redirectWithAdded('/admin/matches', `Usunięto mecz: ${label}`)

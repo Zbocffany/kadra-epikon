@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCachedPublicMatches, getMatchesYearStats, type AdminMatch, type MatchYearStatsData } from '@/lib/db/matches'
+import { getCachedPublicMatches, getCachedPublicMatchesYearStats, type AdminMatch, type MatchYearStatsData } from '@/lib/db/matches'
 
 export type PublicMatchesApiResponse = {
   matches: AdminMatch[]
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<PublicMatchesA
     const matches = await getCachedPublicMatches({ status: 'SCHEDULED' })
     const allPublicMatches = await allPublicMatchesPromise
     const historyMatches = allPublicMatches.filter((m) => m.match_status !== 'SCHEDULED')
-    const yearStats = historyMatches.length > 0 ? await getMatchesYearStats(historyMatches) : null
+    const yearStats = historyMatches.length > 0 ? await getCachedPublicMatchesYearStats(historyMatches) : null
     return NextResponse.json({ matches, yearStats })
   }
 
@@ -30,7 +30,7 @@ export async function GET(req: NextRequest): Promise<NextResponse<PublicMatchesA
 
   const allPublicMatches = await allPublicMatchesPromise
   const historyMatches = allPublicMatches.filter((m) => m.match_status !== 'SCHEDULED')
-  const yearStats = historyMatches.length > 0 ? await getMatchesYearStats(historyMatches) : null
+  const yearStats = historyMatches.length > 0 ? await getCachedPublicMatchesYearStats(historyMatches) : null
 
   return NextResponse.json({ matches, yearStats })
 }

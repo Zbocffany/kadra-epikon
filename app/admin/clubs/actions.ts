@@ -3,6 +3,7 @@
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { requireAdminAccess } from '@/lib/auth/admin'
+import { invalidatePublicCacheVersion } from '@/lib/db/publicCache'
 import type { InlineCreateState } from '@/lib/types/admin'
 import {
   getTrimmedNullable,
@@ -165,6 +166,7 @@ export async function updateClub(formData: FormData): Promise<void> {
   revalidatePath(`/admin/clubs/${id}`)
   revalidateTag('public-clubs', 'max')
   revalidateTag(`public-club:${id}`, 'max')
+  invalidatePublicCacheVersion()
 
   redirectWithSaved(`/admin/clubs/${id}`)
 }
@@ -276,6 +278,7 @@ export async function deleteClub(formData: FormData): Promise<void> {
       revalidateTag(`public-match:${matchId}`, 'max')
     }
   }
+  invalidatePublicCacheVersion()
 
   redirectWithAdded('/admin/clubs', `Usunięto klub: ${club?.name ?? id}`)
 }

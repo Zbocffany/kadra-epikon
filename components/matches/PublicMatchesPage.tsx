@@ -3,7 +3,7 @@ import PublicMatchesClient from '@/components/matches/PublicMatchesClient'
 import {
   getCachedPublicMatchYearBounds,
   getCachedPublicMatches,
-  getMatchesYearStats,
+  getCachedPublicMatchesYearStats,
   type AdminMatch,
   type MatchYearStatsData,
 } from '@/lib/db/matches'
@@ -200,7 +200,7 @@ export default async function PublicMatchesPage({
     const historyMatches = allPublicMatches.filter((match) => match.match_status !== 'SCHEDULED')
     globalPolandStats = getPolandGlobalStats(historyMatches)
     if (historyMatches.length > 0) {
-      yearStats = await getMatchesYearStats(historyMatches)
+      yearStats = await getCachedPublicMatchesYearStats(historyMatches)
     }
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'

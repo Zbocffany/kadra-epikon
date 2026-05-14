@@ -2,12 +2,12 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
 import CountryFlag from '@/components/CountryFlag'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import type { AdminPersonListItem, CoachCompetitionFilterKey, CoachStageFilterKey, CoachPolandFilterMatch } from '@/lib/db/people'
 import { getPersonDisplayName } from '@/lib/db/people'
+import { FilterRibbon, RibbonSection } from '@/components/filters/FilterRibbon'
 import type { AdminCoachMatch, AdminCoachYearStats } from '@/lib/db/matches'
 import PitchIcon from '@/components/icons/PitchIcon'
 import ClockIcon from '@/components/icons/ClockIcon'
@@ -21,12 +21,26 @@ type PublicPlayerMode = 'poland' | 'rivals'
 type PublicCoachMode = 'poland' | 'rivals'
 type CoachDisplayMode = 'tenure' | 'stats'
 type VisibleCoachCompetitionFilter = Exclude<CoachCompetitionFilterKey, 'OTHER'>
-type CoachFilterHistoryState = {
-  competitionFilters: VisibleCoachCompetitionFilter[]
-  stageFilters: CoachStageFilterKey[]
-  coachDateFrom: string
-  coachDateTo: string
+
+type PublicPeopleViewState = {
+  query?: string
+  countryFilter?: string
+  playerMode?: PublicPlayerMode
+  coachMode?: PublicCoachMode
+  coachDisplayMode?: CoachDisplayMode
+  sortKey?: string
+  coachSortKey?: string
+  refereeSortKey?: string
+  competitionFilters?: VisibleCoachCompetitionFilter[]
+  stageFilters?: CoachStageFilterKey[]
+  coachDateFrom?: string
+  coachDateTo?: string
+  isCoachRibbonExpanded?: boolean
+  expandedPersonId?: string | null
+  visibleCount?: number
+  scrollY?: number
 }
+const VIEW_STATE_KEY = '__publicPeopleViewState'
 
 type CoachComputedStats = {
   coach_match_count: number
@@ -147,6 +161,13 @@ function getCoachTenureLabel(person: AdminPersonListItem): string {
   return `${from} - ${to}`
 }
 
+function isPolandCoachFilterRow(row: CoachPolandFilterMatch): boolean {
+  if ((row.coach_team_fifa_code ?? '').toUpperCase() === 'POL') return true
+  if (row.coach_is_home === null) return false
+  const coachedTeamName = row.coach_is_home ? row.home_team_name : row.away_team_name
+  return coachedTeamName === 'Polska'
+}
+
 export default function PublicPeopleSearchTable({
   people,
   basePath = '/people',
@@ -181,13 +202,10 @@ export default function PublicPeopleSearchTable({
   const [coachDateFrom, setCoachDateFrom] = useState('')
   const [coachDateTo, setCoachDateTo] = useState('')
   const [hasInitializedCoachDateRange, setHasInitializedCoachDateRange] = useState(false)
-  const [isCoachFilterPanelOpen, setIsCoachFilterPanelOpen] = useState(false)
-  const [coachFilterPanelPos, setCoachFilterPanelPos] = useState({ x: 24, y: 196 })
-  const [isDraggingCoachFilterPanel, setIsDraggingCoachFilterPanel] = useState(false)
-  const coachFilterPanelDragOffsetRef = useRef({ x: 0, y: 0 })
-  const pathname = usePathname()
-  const restoreCoachFiltersFromHistoryRef = useRef(false)
-  const previousPathnameRef = useRef(pathname)
+  const [isCoachRibbonExpanded, setIsCoachRibbonExpanded] = useState(true)
+  const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null)
+  const viewStateHydratedRef = useRef(false)
+  const skipNextCoachModeResetRef = useRef(false)
   const [visibleCount, setVisibleCount] = useState(50)
   const isPublicPlayersView = variant === 'players' && Boolean(publicPlayerMode)
   const isPublicCoachesView = variant === 'coaches' && Boolean(publicCoachMode)
@@ -195,83 +213,184 @@ export default function PublicPeopleSearchTable({
   const showCoachStats = !(isPolandCoachView && coachDisplayMode === 'tenure')
   const allCompetitionsActive = competitionFilters.length === 0
   const allStagesActive = stageFilters.length === 0
+  const areStageFiltersUnavailable = competitionFilters.length > 0 && competitionFilters.every((key) => key === 'FRIENDLY' || key === 'NATIONS_LEAGUE')
 
+  const initialPublicPlayerModeRef = useRef(publicPlayerMode)
   useEffect(() => {
-    if (publicPlayerMode) {
+    if (publicPlayerMode && publicPlayerMode !== initialPublicPlayerModeRef.current) {
+      initialPublicPlayerModeRef.current = publicPlayerMode
       setPlayerMode(publicPlayerMode)
     }
   }, [publicPlayerMode])
 
+  const initialPublicCoachModeRef = useRef(publicCoachMode)
   useEffect(() => {
-    if (publicCoachMode) {
+    if (publicCoachMode && publicCoachMode !== initialPublicCoachModeRef.current) {
+      initialPublicCoachModeRef.current = publicCoachMode
       setCoachMode(publicCoachMode)
+      setCoachDisplayMode(publicCoachMode === 'poland' ? 'tenure' : 'stats')
     }
   }, [publicCoachMode])
 
-  useEffect(() => {
-    if (!isPublicCoachesView) return
-    setCoachDisplayMode(coachMode === 'poland' ? 'tenure' : 'stats')
-  }, [coachMode, isPublicCoachesView])
+  const writeModeToUrl = (mode: PublicCoachMode | PublicPlayerMode | null, kind: 'coach' | 'player') => {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    const param = kind === 'coach' ? 'coachMode' : 'playerMode'
+    if (mode && mode !== 'poland') url.searchParams.set(param, mode)
+    else url.searchParams.delete(param)
+    const newUrl = url.pathname + (url.search ? url.search : '') + url.hash
+    window.history.replaceState(window.history.state, '', newUrl)
+  }
 
+  const handleSetCoachMode = (next: PublicCoachMode) => {
+    setCoachMode(next)
+    setCoachDisplayMode(next === 'poland' ? 'tenure' : 'stats')
+    writeModeToUrl(next, 'coach')
+  }
+
+  const handleSetPlayerMode = (next: PublicPlayerMode) => {
+    setPlayerMode(next)
+    writeModeToUrl(next, 'player')
+  }
+
+  // Hydrate full view state from history.state on mount and on browser Back/Forward.
   useEffect(() => {
-    const handlePopState = () => {
-      restoreCoachFiltersFromHistoryRef.current = true
+    const storageKey = `${VIEW_STATE_KEY}:${typeof window !== 'undefined' ? window.location.pathname : ''}`
+    const readSaved = (): PublicPeopleViewState | null => {
+      // Prefer history.state (per-entry, survives Back/Forward), fallback to sessionStorage
+      // (per-pathname, survives Next.js internal history rewrites that may drop our key).
+      const fromHistory = (window.history.state as { [VIEW_STATE_KEY]?: PublicPeopleViewState } | null)?.[VIEW_STATE_KEY]
+      if (fromHistory) return fromHistory
+      try {
+        const raw = window.sessionStorage.getItem(storageKey)
+        if (!raw) return null
+        return JSON.parse(raw) as PublicPeopleViewState
+      } catch {
+        return null
+      }
+    }
+    const applyState = () => {
+      const saved = readSaved()
+      // URL search params are authoritative for the active mode (Polska/Rywale),
+      // because the URL is reliably restored by the browser on Back/Forward.
+      const params = new URLSearchParams(window.location.search)
+      const urlCoachMode = params.get('coachMode') as PublicCoachMode | null
+      const urlPlayerMode = params.get('playerMode') as PublicPlayerMode | null
+      if (!saved && !urlCoachMode && !urlPlayerMode) {
+        viewStateHydratedRef.current = true
+        return
+      }
+      const merged: PublicPeopleViewState = { ...(saved ?? {}) }
+      if (urlCoachMode === 'poland' || urlCoachMode === 'rivals') merged.coachMode = urlCoachMode
+      if (urlPlayerMode === 'poland' || urlPlayerMode === 'rivals') merged.playerMode = urlPlayerMode
+      if (merged.query !== undefined) setQuery(merged.query)
+      if (merged.countryFilter !== undefined) setCountryFilter(merged.countryFilter)
+      if (merged.playerMode !== undefined) setPlayerMode(merged.playerMode)
+      if (merged.coachMode !== undefined) {
+        skipNextCoachModeResetRef.current = true
+        setCoachMode(merged.coachMode)
+      }
+      if (merged.coachDisplayMode !== undefined) setCoachDisplayMode(merged.coachDisplayMode)
+      else if (merged.coachMode !== undefined) setCoachDisplayMode(merged.coachMode === 'poland' ? 'tenure' : 'stats')
+      if (merged.sortKey !== undefined) setSortKey(merged.sortKey as PlayerSortKey)
+      if (merged.coachSortKey !== undefined) setCoachSortKey(merged.coachSortKey as CoachSortKey)
+      if (merged.refereeSortKey !== undefined) setRefereeSortKey(merged.refereeSortKey as RefereeSortKey)
+      if (merged.competitionFilters !== undefined) setCompetitionFilters(merged.competitionFilters)
+      if (merged.stageFilters !== undefined) setStageFilters(merged.stageFilters)
+      if (merged.coachDateFrom !== undefined) setCoachDateFrom(merged.coachDateFrom)
+      if (merged.coachDateTo !== undefined) setCoachDateTo(merged.coachDateTo)
+      if (merged.isCoachRibbonExpanded !== undefined) setIsCoachRibbonExpanded(merged.isCoachRibbonExpanded)
+      if (merged.expandedPersonId !== undefined) setExpandedPersonId(merged.expandedPersonId)
+      if (merged.visibleCount !== undefined) setVisibleCount(merged.visibleCount)
+      setHasInitializedCoachDateRange(true)
+      viewStateHydratedRef.current = true
+      if (typeof merged.scrollY === 'number') {
+        const targetY = merged.scrollY
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => window.scrollTo(0, targetY))
+        })
+      }
     }
 
+    applyState()
+
+    const handlePopState = () => {
+      viewStateHydratedRef.current = false
+      applyState()
+    }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
   }, [])
 
   useEffect(() => {
-    if (!isPolandCoachView) return
+    if (!isPublicCoachesView) return
+    if (skipNextCoachModeResetRef.current) {
+      skipNextCoachModeResetRef.current = false
+      return
+    }
     setCompetitionFilters([])
     setStageFilters([])
     setCoachDateFrom('')
     setCoachDateTo('')
     setHasInitializedCoachDateRange(false)
-  }, [isPolandCoachView])
+  }, [isPublicCoachesView, coachMode])
 
+  // Persist current view state to history.state on every change (debounced via microtask).
   useEffect(() => {
-    if (!isPolandCoachView || !showCoachStats) {
-      setIsCoachFilterPanelOpen(false)
+    if (!viewStateHydratedRef.current) return
+    const next: PublicPeopleViewState = {
+      query,
+      countryFilter,
+      playerMode,
+      coachMode,
+      coachDisplayMode,
+      sortKey,
+      coachSortKey,
+      refereeSortKey,
+      competitionFilters,
+      stageFilters,
+      coachDateFrom,
+      coachDateTo,
+      isCoachRibbonExpanded,
+      expandedPersonId,
+      visibleCount,
+      scrollY: typeof window !== 'undefined' ? window.scrollY : 0,
     }
-  }, [isPolandCoachView, showCoachStats])
+    const merged = { ...(window.history.state ?? {}), [VIEW_STATE_KEY]: next }
+    window.history.replaceState(merged, '')
+    try {
+      const storageKey = `${VIEW_STATE_KEY}:${window.location.pathname}`
+      window.sessionStorage.setItem(storageKey, JSON.stringify(next))
+    } catch {
+      // sessionStorage may be unavailable (private mode, quota) — ignore
+    }
+  }, [query, countryFilter, playerMode, coachMode, coachDisplayMode, sortKey, coachSortKey, refereeSortKey, competitionFilters, stageFilters, coachDateFrom, coachDateTo, isCoachRibbonExpanded, expandedPersonId, visibleCount])
 
+  // Persist scroll position separately (does not trigger React re-renders).
   useEffect(() => {
-    if (!isDraggingCoachFilterPanel) return
-
-    const onMouseMove = (event: MouseEvent) => {
-      const panelWidth = 360
-      const nextX = Math.max(16, Math.min(event.clientX - coachFilterPanelDragOffsetRef.current.x, window.innerWidth - panelWidth - 16))
-      const nextY = Math.max(84, Math.min(event.clientY - coachFilterPanelDragOffsetRef.current.y, window.innerHeight - 220))
-      setCoachFilterPanelPos({ x: nextX, y: nextY })
+    if (typeof window === 'undefined') return
+    let scheduled = false
+    const handleScroll = () => {
+      if (scheduled) return
+      scheduled = true
+      requestAnimationFrame(() => {
+        scheduled = false
+        if (!viewStateHydratedRef.current) return
+        const current = (window.history.state as { [VIEW_STATE_KEY]?: PublicPeopleViewState } | null)?.[VIEW_STATE_KEY] ?? {}
+        const updated = { ...current, scrollY: window.scrollY }
+        const merged = { ...(window.history.state ?? {}), [VIEW_STATE_KEY]: updated }
+        window.history.replaceState(merged, '')
+        try {
+          const storageKey = `${VIEW_STATE_KEY}:${window.location.pathname}`
+          window.sessionStorage.setItem(storageKey, JSON.stringify(updated))
+        } catch {
+          // ignore
+        }
+      })
     }
-
-    const onMouseUp = () => setIsDraggingCoachFilterPanel(false)
-
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
-    }
-  }, [isDraggingCoachFilterPanel])
-
-  useEffect(() => {
-    if (!isPolandCoachView) return
-
-    const nextHistoryState = {
-      ...(window.history.state ?? {}),
-      __publicCoachFilters: {
-        competitionFilters,
-        stageFilters,
-        coachDateFrom,
-        coachDateTo,
-      } satisfies CoachFilterHistoryState,
-    }
-
-    window.history.replaceState(nextHistoryState, '')
-  }, [competitionFilters, stageFilters, coachDateFrom, coachDateTo, isPolandCoachView])
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
 
   const countryOptions = useMemo(() => {
     if (isPublicPlayersView || isPublicCoachesView) return []
@@ -308,13 +427,15 @@ export default function PublicPeopleSearchTable({
   }, [isPublicPlayersView, isPublicCoachesView, people, playerMode, coachMode])
 
   const coachDateBounds = useMemo(() => {
-    if (!isPolandCoachView) return { firstYear: '', lastYear: '' }
+    if (!isPublicCoachesView) return { firstYear: '', lastYear: '' }
 
     let firstMatchDate: string | null = null
     let lastMatchDate: string | null = null
 
     for (const person of basePeople) {
       for (const row of person.coach_poland_filter_matches ?? []) {
+        const isPolandRow = isPolandCoachFilterRow(row)
+        if ((coachMode === 'poland' && !isPolandRow) || (coachMode === 'rivals' && isPolandRow)) continue
         if (!firstMatchDate || row.match_date < firstMatchDate) firstMatchDate = row.match_date
         if (!lastMatchDate || row.match_date > lastMatchDate) lastMatchDate = row.match_date
       }
@@ -324,81 +445,24 @@ export default function PublicPeopleSearchTable({
       firstYear: firstMatchDate ? firstMatchDate.slice(0, 4) : '',
       lastYear: lastMatchDate ? lastMatchDate.slice(0, 4) : '',
     }
-  }, [basePeople, isPolandCoachView])
+  }, [basePeople, isPublicCoachesView, coachMode])
 
   useEffect(() => {
-    if (!isPolandCoachView || hasInitializedCoachDateRange) return
-    if (!coachDateBounds.firstYear && !coachDateBounds.lastYear) return
+    if (!isPublicCoachesView || hasInitializedCoachDateRange) return
 
-    setCoachDateFrom(coachDateBounds.firstYear)
-    setCoachDateTo(coachDateBounds.lastYear)
+    setCoachDateFrom('')
+    setCoachDateTo('')
     setHasInitializedCoachDateRange(true)
-  }, [coachDateBounds, hasInitializedCoachDateRange, isPolandCoachView])
+  }, [coachDateBounds, hasInitializedCoachDateRange, isPublicCoachesView])
 
   useEffect(() => {
-    if (!isPolandCoachView) return
-    if (previousPathnameRef.current === pathname) return
-
-    previousPathnameRef.current = pathname
-
-    if (restoreCoachFiltersFromHistoryRef.current) {
-      const historyState = window.history.state as { __publicCoachFilters?: CoachFilterHistoryState } | null
-      const savedFilters = historyState?.__publicCoachFilters
-
-      if (savedFilters) {
-        setCompetitionFilters(savedFilters.competitionFilters)
-        setStageFilters(savedFilters.stageFilters)
-        setCoachDateFrom(savedFilters.coachDateFrom)
-        setCoachDateTo(savedFilters.coachDateTo)
-        setHasInitializedCoachDateRange(true)
-      } else {
-        setCompetitionFilters([])
-        setStageFilters([])
-        setCoachDateFrom(coachDateBounds.firstYear)
-        setCoachDateTo(coachDateBounds.lastYear)
-        setHasInitializedCoachDateRange(false)
-      }
-
-      restoreCoachFiltersFromHistoryRef.current = false
-      return
-    }
-
-    setCompetitionFilters([])
+    if (!areStageFiltersUnavailable || stageFilters.length === 0) return
     setStageFilters([])
-    setCoachDateFrom(coachDateBounds.firstYear)
-    setCoachDateTo(coachDateBounds.lastYear)
-    setHasInitializedCoachDateRange(false)
-    setIsCoachFilterPanelOpen(false)
-  }, [coachDateBounds.firstYear, coachDateBounds.lastYear, isPolandCoachView, pathname])
+  }, [areStageFiltersUnavailable, stageFilters])
 
-  useEffect(() => {
-    if (!isPolandCoachView) return
-
-    const handleDocumentClick = (event: MouseEvent) => {
-      const target = event.target as HTMLElement | null
-      const link = target?.closest('a[href]') as HTMLAnchorElement | null
-      if (!link || !link.href || link.target === '_blank') return
-      if (link.href.startsWith('mailto:') || link.href.startsWith('tel:')) return
-
-      const nextUrl = new URL(link.href, window.location.href)
-      if (nextUrl.origin !== window.location.origin) return
-      if (nextUrl.pathname === pathname) return
-
-      setCompetitionFilters([])
-      setStageFilters([])
-      setCoachDateFrom(coachDateBounds.firstYear)
-      setCoachDateTo(coachDateBounds.lastYear)
-      setCoachDisplayMode('tenure')
-      setIsCoachFilterPanelOpen(false)
-    }
-
-    document.addEventListener('click', handleDocumentClick, true)
-    return () => document.removeEventListener('click', handleDocumentClick, true)
-  }, [coachDateBounds.firstYear, coachDateBounds.lastYear, isPolandCoachView, pathname])
-
-  const filteredPolandCoachStatsByPersonId = useMemo(() => {
+  const filteredCoachStatsByPersonId = useMemo(() => {
     const map = new Map<string, CoachComputedStats>()
-    if (!isPolandCoachView || !showCoachStats) return map
+    if (!isPublicCoachesView || !showCoachStats) return map
 
     const activeCompetitionSet = new Set<VisibleCoachCompetitionFilter>(competitionFilters)
     const activeStageSet = new Set<CoachStageFilterKey>(stageFilters)
@@ -406,6 +470,8 @@ export default function PublicPeopleSearchTable({
     for (const person of basePeople) {
       const rows = person.coach_poland_filter_matches ?? []
       const filteredRows = rows.filter((row) => {
+        const isPolandRow = isPolandCoachFilterRow(row)
+        if ((coachMode === 'poland' && !isPolandRow) || (coachMode === 'rivals' && isPolandRow)) return false
         const competitionAllowed = allCompetitionsActive
           ? true
           : (row.competition_key !== 'OTHER' && activeCompetitionSet.has(row.competition_key))
@@ -445,11 +511,11 @@ export default function PublicPeopleSearchTable({
     }
 
     return map
-  }, [basePeople, competitionFilters, stageFilters, coachDateFrom, coachDateTo, allCompetitionsActive, allStagesActive, isPolandCoachView, showCoachStats])
+  }, [basePeople, competitionFilters, stageFilters, coachDateFrom, coachDateTo, allCompetitionsActive, allStagesActive, isPublicCoachesView, showCoachStats, coachMode])
 
   const getDisplayedCoachStatValue = (person: AdminPersonListItem, key: CoachSortKey): number => {
-    if (isPolandCoachView && showCoachStats) {
-      const stats = filteredPolandCoachStatsByPersonId.get(person.id)
+    if (isPublicCoachesView && showCoachStats) {
+      const stats = filteredCoachStatsByPersonId.get(person.id)
       if (!stats) return 0
       return stats[key]
     }
@@ -508,7 +574,7 @@ export default function PublicPeopleSearchTable({
       })
     }
     return [...base].sort((a, b) => (b[sortKey] as number) - (a[sortKey] as number))
-  }, [basePeople, query, sortKey, coachSortKey, refereeSortKey, countryFilter, variant, isPublicPlayersView, isPublicCoachesView, coachDisplayMode, isPolandCoachView, filteredPolandCoachStatsByPersonId])
+  }, [basePeople, query, sortKey, coachSortKey, refereeSortKey, countryFilter, variant, isPublicPlayersView, isPublicCoachesView, coachDisplayMode, isPolandCoachView, filteredCoachStatsByPersonId])
 
   useEffect(() => {
     setVisibleCount(50)
@@ -560,19 +626,6 @@ export default function PublicPeopleSearchTable({
     })
   }
 
-  function startCoachFilterPanelDrag(event: React.MouseEvent<HTMLDivElement>) {
-    if (window.innerWidth < 1024) return
-    const target = event.target as HTMLElement
-    if (target.closest('button, input, select, a, label')) return
-
-    const rect = event.currentTarget.getBoundingClientRect()
-    coachFilterPanelDragOffsetRef.current = {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    }
-    setIsDraggingCoachFilterPanel(true)
-  }
-
   function clearCoachDateFilters() {
     setCoachDateFrom('')
     setCoachDateTo('')
@@ -610,156 +663,162 @@ export default function PublicPeopleSearchTable({
   const activeCoachFilterCount = competitionFilters.length + stageFilters.length + (coachDateFrom ? 1 : 0) + (coachDateTo ? 1 : 0)
 
   const coachFilterControls = (
-    <div className="space-y-2">
-      <div className="rounded-md border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-2">
-        <div className="mb-2 inline-flex rounded border border-emerald-200/30 bg-emerald-900/28 px-1.5 py-[1px] text-[10px] uppercase tracking-[0.14em] text-emerald-100/80">
-          Rozgrywki
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={() => setCompetitionFilters([])}
-            aria-pressed={allCompetitionsActive}
-            className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${allCompetitionsActive
-              ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
-              : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
-            }`}
-          >
-            Wszystkie
-          </button>
-          {([
-            ['WORLD_CUP', 'MŚ'],
-            ['EURO', 'ME'],
-            ['FRIENDLY', 'T'],
-            ['NATIONS_LEAGUE', 'LN'],
-          ] as Array<[VisibleCoachCompetitionFilter, string]>).map(([key, label]) => {
-            const active = competitionFilters.includes(key)
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => toggleCompetitionFilter(key)}
-                aria-pressed={active}
-                className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${active
-                  ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
-                  : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
-                }`}
-              >
-                {label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="rounded-md border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-2">
-        <div className="mb-2 inline-flex rounded border border-emerald-200/30 bg-emerald-900/28 px-1.5 py-[1px] text-[10px] uppercase tracking-[0.14em] text-emerald-100/80">
-          Etap
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            type="button"
-            onClick={() => setStageFilters([])}
-            aria-pressed={allStagesActive}
-            className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${allStagesActive
-              ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
-              : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
-            }`}
-          >
-            Wszystkie
-          </button>
-          {([
-            ['TOURNAMENT', 'Turniej'],
-            ['QUALIFIERS', 'El.'],
-            ['PLAYOFFS', 'Baraże'],
-          ] as Array<[CoachStageFilterKey, string]>).map(([key, label]) => {
-            const active = stageFilters.includes(key)
-            return (
-              <button
-                key={key}
-                type="button"
-                onClick={() => toggleStageFilter(key)}
-                aria-pressed={active}
-                className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${active
-                  ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
-                  : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
-                }`}
-              >
-                {label}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="rounded-md border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-2">
-        <div className="mb-2 inline-flex rounded border border-emerald-200/30 bg-emerald-900/28 px-1.5 py-[1px] text-[10px] uppercase tracking-[0.14em] text-emerald-100/80">
-          Daty
-        </div>
-        <div className="space-y-2">
-          <div className="grid grid-cols-[4.25rem_4.25rem_auto] grid-rows-2 justify-start gap-1.5">
-            <input
-              type="text"
-              value={coachDateFrom}
-              onChange={(event) => setCoachDateFrom(event.target.value.replace(/\D/g, '').slice(0, 4))}
-              inputMode="numeric"
-              maxLength={4}
-              placeholder="Od"
-              className="h-7 w-[4.25rem] rounded-md border border-emerald-700/75 bg-emerald-950/45 px-2 text-center text-[11px] font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_2px_rgba(0,0,0,0.28)] placeholder:text-emerald-200/55 focus:border-emerald-300/80 focus:outline-none"
-              aria-label="Rok od"
-            />
-            <input
-              type="text"
-              value={coachDateTo}
-              onChange={(event) => setCoachDateTo(event.target.value.replace(/\D/g, '').slice(0, 4))}
-              inputMode="numeric"
-              maxLength={4}
-              placeholder="Do"
-              className="h-7 w-[4.25rem] rounded-md border border-emerald-700/75 bg-emerald-950/45 px-2 text-center text-[11px] font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_2px_rgba(0,0,0,0.28)] placeholder:text-emerald-200/55 focus:border-emerald-300/80 focus:outline-none"
-              aria-label="Rok do"
-            />
+    <>
+      <RibbonSection title="Rozgrywki" className="min-w-[8.2rem]">
+        <div className="space-y-1">
+          <div className="flex">
             <button
               type="button"
-              onClick={() => {
-                setCoachDateFrom(coachDateBounds.firstYear)
-                setCoachDateTo(coachDateBounds.lastYear)
-              }}
-              className="row-span-2 self-center inline-flex h-7 items-center justify-center rounded-md border border-emerald-500/65 bg-[linear-gradient(180deg,rgba(89,190,131,0.9)_0%,rgba(48,150,97,0.86)_44%,rgba(23,91,60,0.92)_100%)] px-2 text-[11px] font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] transition-colors hover:border-emerald-300/80 hover:brightness-105"
-              aria-label="Cały okres"
-            >
-              Cały okres
-            </button>
-            <button
-              type="button"
-              onClick={() => setCoachCenturyRange('XX')}
-              aria-pressed={isTwentiethCenturyActive}
-              className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${isTwentiethCenturyActive
+              onClick={() => setCompetitionFilters([])}
+              aria-pressed={allCompetitionsActive}
+              className={`inline-flex h-5 w-full items-center justify-center whitespace-nowrap rounded-md border px-1.5 !text-[10.1px] font-semibold leading-none transition-colors ${allCompetitionsActive
                 ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
                 : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
               }`}
             >
-              XX w.
-            </button>
-            <button
-              type="button"
-              onClick={() => setCoachCenturyRange('XXI')}
-              aria-pressed={isTwentyFirstCenturyActive}
-              className={`inline-flex h-7 items-center justify-center rounded-md border px-2 text-xs font-semibold transition-colors ${isTwentyFirstCenturyActive
-                ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
-                : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
-              }`}
-            >
-              XXI w.
+              Wszystkie
             </button>
           </div>
+          <div className="flex flex-wrap items-center gap-1">
+            {([
+              ['WORLD_CUP', 'MŚ'],
+              ['EURO', 'ME'],
+              ['FRIENDLY', 'T'],
+              ['NATIONS_LEAGUE', 'LN'],
+            ] as Array<[VisibleCoachCompetitionFilter, string]>).map(([key, label]) => {
+              const active = competitionFilters.includes(key)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleCompetitionFilter(key)}
+                  aria-pressed={active}
+                  className={`inline-flex h-5 items-center justify-center whitespace-nowrap rounded-md border px-1.5 !text-[10.1px] font-semibold leading-none transition-colors ${active
+                    ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
+                    : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
         </div>
-      </div>
-    </div>
+      </RibbonSection>
+
+      <RibbonSection title="Faza" className="min-w-[7.2rem]">
+        <div className="space-y-1">
+          <div className="flex">
+            <button
+              type="button"
+              onClick={() => setStageFilters([])}
+              aria-pressed={allStagesActive}
+              disabled={areStageFiltersUnavailable}
+              className={`inline-flex h-5 w-full items-center justify-center whitespace-nowrap rounded-md border px-1.5 !text-[10.1px] font-semibold leading-none transition-colors ${areStageFiltersUnavailable
+                ? 'cursor-not-allowed border-emerald-900/70 bg-emerald-950/35 text-emerald-200/35 shadow-none'
+                : allStagesActive
+                  ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
+                  : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
+              }`}
+            >
+              Wszystkie
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            {([
+              ['TOURNAMENT', 'Turniej'],
+              ['QUALIFIERS', 'El.'],
+              ['PLAYOFFS', 'Baraże'],
+            ] as Array<[CoachStageFilterKey, string]>).map(([key, label]) => {
+              const active = stageFilters.includes(key)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleStageFilter(key)}
+                  aria-pressed={active}
+                  disabled={areStageFiltersUnavailable}
+                  className={`inline-flex h-5 items-center justify-center whitespace-nowrap rounded-md border px-1.5 !text-[10.1px] font-semibold leading-none transition-colors ${areStageFiltersUnavailable
+                    ? 'cursor-not-allowed border-emerald-900/70 bg-emerald-950/35 text-emerald-200/35 shadow-none'
+                    : active
+                      ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
+                      : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </RibbonSection>
+
+      <RibbonSection title="Okres" className="min-w-[10.2rem]">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setCoachDateFrom(coachDateBounds.firstYear)
+              setCoachDateTo(coachDateBounds.lastYear)
+            }}
+            className="inline-flex h-5 items-center justify-center whitespace-nowrap rounded-md border border-emerald-500/65 bg-[linear-gradient(180deg,rgba(89,190,131,0.9)_0%,rgba(48,150,97,0.86)_44%,rgba(23,91,60,0.92)_100%)] px-1.5 !text-[10.1px] font-semibold leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] transition-colors hover:border-emerald-300/80 hover:brightness-105"
+            aria-label="Cały okres"
+          >
+            Cały okres
+          </button>
+          <button
+            type="button"
+            onClick={() => setCoachCenturyRange('XX')}
+            aria-pressed={isTwentiethCenturyActive}
+            className={`inline-flex h-5 items-center justify-center whitespace-nowrap rounded-md border px-1.5 !text-[10.1px] font-semibold leading-none transition-colors ${isTwentiethCenturyActive
+              ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
+              : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
+            }`}
+          >
+            XX w.
+          </button>
+          <button
+            type="button"
+            onClick={() => setCoachCenturyRange('XXI')}
+            aria-pressed={isTwentyFirstCenturyActive}
+            className={`inline-flex h-5 items-center justify-center whitespace-nowrap rounded-md border px-1.5 !text-[10.1px] font-semibold leading-none transition-colors ${isTwentyFirstCenturyActive
+              ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
+              : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
+            }`}
+          >
+            XXI w.
+          </button>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="text-[9px] font-semibold text-emerald-100/70 whitespace-nowrap">Zakres lat</div>
+          <input
+            type="text"
+            value={coachDateFrom}
+            onChange={(event) => setCoachDateFrom(event.target.value.replace(/\D/g, '').slice(0, 4))}
+            inputMode="numeric"
+            maxLength={4}
+            placeholder="Od"
+            className="h-5 w-[3.25rem] rounded-md border border-emerald-700/75 bg-emerald-950/45 px-1.5 text-center !text-[10.1px] font-semibold leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_2px_rgba(0,0,0,0.28)] placeholder:text-emerald-200/55 focus:border-emerald-300/80 focus:outline-none"
+            aria-label="Rok od"
+          />
+          <input
+            type="text"
+            value={coachDateTo}
+            onChange={(event) => setCoachDateTo(event.target.value.replace(/\D/g, '').slice(0, 4))}
+            inputMode="numeric"
+            maxLength={4}
+            placeholder="Do"
+            className="h-5 w-[3.25rem] rounded-md border border-emerald-700/75 bg-emerald-950/45 px-1.5 text-center !text-[10.1px] font-semibold leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_2px_rgba(0,0,0,0.28)] placeholder:text-emerald-200/55 focus:border-emerald-300/80 focus:outline-none"
+            aria-label="Rok do"
+          />
+          </div>
+        </div>
+      </RibbonSection>
+    </>
   )
 
   const displayed = filtered.slice(0, visibleCount)
-
-  const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null)
 
   function getFilteredMatchesForCoach(person: AdminPersonListItem): AdminCoachMatch[] {
     const rows = person.coach_poland_filter_matches ?? []
@@ -767,6 +826,8 @@ export default function PublicPeopleSearchTable({
     const activeStageSet = new Set<CoachStageFilterKey>(stageFilters)
 
     const filteredRows = rows.filter((row: CoachPolandFilterMatch) => {
+      const isPolandRow = isPolandCoachFilterRow(row)
+      if ((coachMode === 'poland' && !isPolandRow) || (coachMode === 'rivals' && isPolandRow)) return false
       const competitionAllowed = allCompetitionsActive
         ? true
         : (row.competition_key !== 'OTHER' && activeCompetitionSet.has(row.competition_key as VisibleCoachCompetitionFilter))
@@ -888,14 +949,14 @@ export default function PublicPeopleSearchTable({
           </button>
         ) : null}
 
-        {isPolandCoachView && showCoachStats ? (
+        {isPublicCoachesView && showCoachStats ? (
           <button
             type="button"
-            onClick={() => setIsCoachFilterPanelOpen((current) => !current)}
-            title="Filtruj"
+            onClick={() => setIsCoachRibbonExpanded((current) => !current)}
+            title={isCoachRibbonExpanded ? 'Zwiń wstążkę filtrów' : 'Rozwiń wstążkę filtrów'}
             aria-label="Filtruj"
-            aria-pressed={isCoachFilterPanelOpen}
-            className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${isCoachFilterPanelOpen
+            aria-pressed={isCoachRibbonExpanded}
+            className={`relative inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border transition-colors ${isCoachRibbonExpanded
               ? 'border-emerald-300/80 bg-emerald-700/55 text-emerald-50 shadow-[0_0_0_1px_rgba(110,231,183,0.2)]'
               : 'border-emerald-700/60 bg-emerald-950/50 text-emerald-200/80 hover:border-emerald-400/70 hover:text-emerald-50'
             }`}
@@ -922,7 +983,7 @@ export default function PublicPeopleSearchTable({
           <div className="grid w-full grid-cols-2 gap-2 sm:w-72">
             <button
               type="button"
-              onClick={() => setPlayerMode('poland')}
+              onClick={() => handleSetPlayerMode('poland')}
               aria-pressed={playerMode === 'poland'}
               className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${playerMode === 'poland'
                 ? 'border-emerald-300/80 bg-emerald-700/55 text-emerald-50 shadow-[0_0_0_1px_rgba(110,231,183,0.2)]'
@@ -933,7 +994,7 @@ export default function PublicPeopleSearchTable({
             </button>
             <button
               type="button"
-              onClick={() => setPlayerMode('rivals')}
+              onClick={() => handleSetPlayerMode('rivals')}
               aria-pressed={playerMode === 'rivals'}
               className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${playerMode === 'rivals'
                 ? 'border-emerald-300/80 bg-emerald-700/55 text-emerald-50 shadow-[0_0_0_1px_rgba(110,231,183,0.2)]'
@@ -948,7 +1009,7 @@ export default function PublicPeopleSearchTable({
             <div className="grid w-full grid-cols-2 gap-2 sm:w-72">
             <button
               type="button"
-              onClick={() => setCoachMode('poland')}
+              onClick={() => handleSetCoachMode('poland')}
               aria-pressed={coachMode === 'poland'}
               className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${coachMode === 'poland'
                 ? 'border-emerald-300/80 bg-emerald-700/55 text-emerald-50 shadow-[0_0_0_1px_rgba(110,231,183,0.2)]'
@@ -959,7 +1020,7 @@ export default function PublicPeopleSearchTable({
             </button>
             <button
               type="button"
-              onClick={() => setCoachMode('rivals')}
+              onClick={() => handleSetCoachMode('rivals')}
               aria-pressed={coachMode === 'rivals'}
               className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${coachMode === 'rivals'
                 ? 'border-emerald-300/80 bg-emerald-700/55 text-emerald-50 shadow-[0_0_0_1px_rgba(110,231,183,0.2)]'
@@ -988,67 +1049,18 @@ export default function PublicPeopleSearchTable({
         )}
       </div>
 
-      {isPolandCoachView && showCoachStats && isCoachFilterPanelOpen ? (
-        <>
-          <div
-            className="fixed inset-0 z-40 bg-black/35 backdrop-blur-[1px] lg:hidden"
-            onClick={() => setIsCoachFilterPanelOpen(false)}
-            aria-hidden="true"
-          />
-
-          <div
-            className={`fixed z-50 hidden w-[19.5rem] origin-top-left scale-90 rounded-xl border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.2),0_8px_18px_rgba(0,0,0,0.2)] lg:block ${isDraggingCoachFilterPanel ? 'cursor-grabbing' : 'cursor-grab'}`}
-            style={{ left: `${coachFilterPanelPos.x}px`, top: `${coachFilterPanelPos.y}px` }}
-            onMouseDown={startCoachFilterPanelDrag}
-          >
-            <div className="mb-2 flex items-center justify-end gap-1.5">
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={resetCoachFilters}
-                  className="stat-badge inline-flex h-6 items-center rounded border border-emerald-500/60 bg-[linear-gradient(180deg,rgba(89,190,131,0.9)_0%,rgba(48,150,97,0.86)_44%,rgba(23,91,60,0.92)_100%)] px-2 font-barlow text-[0.72rem] font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] transition-colors hover:border-emerald-300/80 hover:brightness-105"
-                >
-                  Wyczyść
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsCoachFilterPanelOpen(false)}
-                  className="stat-badge inline-flex h-6 min-w-6 items-center justify-center rounded border border-emerald-500/60 bg-[linear-gradient(180deg,rgba(89,190,131,0.9)_0%,rgba(48,150,97,0.86)_44%,rgba(23,91,60,0.92)_100%)] px-1 font-barlow text-[0.76rem] font-semibold leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] transition-colors hover:border-emerald-300/80 hover:brightness-105"
-                  aria-label="Zamknij panel filtrów"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            {coachFilterControls}
-          </div>
-
-          <div className="fixed left-1/2 top-20 z-50 w-[19.5rem] max-w-[calc(100vw-1.5rem)] -translate-x-1/2 origin-top scale-90 rounded-xl border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.2),0_8px_18px_rgba(0,0,0,0.2)] lg:hidden">
-            <div className="mb-2 flex items-center justify-end gap-1.5">
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={resetCoachFilters}
-                  className="stat-badge inline-flex h-6 items-center rounded border border-emerald-500/60 bg-[linear-gradient(180deg,rgba(89,190,131,0.9)_0%,rgba(48,150,97,0.86)_44%,rgba(23,91,60,0.92)_100%)] px-2 font-barlow text-[0.72rem] font-semibold text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] transition-colors hover:border-emerald-300/80 hover:brightness-105"
-                >
-                  Wyczyść
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIsCoachFilterPanelOpen(false)}
-                  className="stat-badge inline-flex h-6 min-w-6 items-center justify-center rounded border border-emerald-500/60 bg-[linear-gradient(180deg,rgba(89,190,131,0.9)_0%,rgba(48,150,97,0.86)_44%,rgba(23,91,60,0.92)_100%)] px-1 font-barlow text-[0.76rem] font-semibold leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] transition-colors hover:border-emerald-300/80 hover:brightness-105"
-                  aria-label="Zamknij panel filtrów"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            {coachFilterControls}
-          </div>
-        </>
+      {isPublicCoachesView && showCoachStats ? (
+        <FilterRibbon
+          title="Filtry"
+          expanded={isCoachRibbonExpanded}
+          onToggle={() => setIsCoachRibbonExpanded((current) => !current)}
+          activeCount={activeCoachFilterCount}
+          onReset={resetCoachFilters}
+        >
+          {coachFilterControls}
+        </FilterRibbon>
       ) : null}
 
-      {/* People table */}
       <div className="overflow-hidden rounded-xl border border-neutral-800">
         <table className="w-full border-collapse text-sm table-auto">
           <colgroup>
@@ -1177,13 +1189,14 @@ export default function PublicPeopleSearchTable({
               </tr>
             ) : (
               displayed.map((person, i) => {
-                const isExpanded = isPolandCoachView && expandedPersonId === person.id
+                const canExpandCoachRow = isPublicCoachesView && showCoachStats
+                const isExpanded = canExpandCoachRow && expandedPersonId === person.id
                 const colSpanCount = variant === 'coaches' ? (showCoachStats ? 9 : 2) : variant === 'referees' ? 8 : 9
                 return (
                 <Fragment key={person.id}>
                 <tr
-                  className={`table-data-row border-b border-neutral-800 last:border-b-0 bg-neutral-950 transition-colors hover:bg-neutral-900/60${isPolandCoachView ? ' cursor-pointer select-none' : ''}`}
-                  onClick={isPolandCoachView ? () => setExpandedPersonId((prev) => prev === person.id ? null : person.id) : undefined}
+                  className={`table-data-row border-b border-neutral-800 last:border-b-0 bg-neutral-950 transition-colors hover:bg-neutral-900/60${canExpandCoachRow ? ' cursor-pointer select-none' : ''}`}
+                  onClick={canExpandCoachRow ? () => setExpandedPersonId((prev) => prev === person.id ? null : person.id) : undefined}
                 >
                   <td className="pl-4 pr-1 py-3 text-neutral-500 text-sm">{i + 1}</td>
                   <td className="pl-1 pr-4 py-3">

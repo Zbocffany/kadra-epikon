@@ -1106,14 +1106,14 @@ async function getCoachPolandFilterMatchesByPersonId(
   }
 
   const matchPolandTeamIdMap = await getPolandTeamIdByMatchId(supabase, filteredMatchIds)
-  const coachedPolandParticipations = filteredParticipations.filter((p) => {
+  const coachPolandContextParticipations = filteredParticipations.filter((p) => {
     const polandTeamId = matchPolandTeamIdMap.get(p.match_id)
-    return Boolean(polandTeamId && p.team_id && p.team_id === polandTeamId)
+    return Boolean(polandTeamId && p.team_id)
   })
-  if (!coachedPolandParticipations.length) return new Map()
+  if (!coachPolandContextParticipations.length) return new Map()
 
   const competitionIds = [...new Set(
-    coachedPolandParticipations
+    coachPolandContextParticipations
       .map((p) => matchDataById.get(p.match_id)?.competition_id ?? null)
       .filter((id): id is string => Boolean(id))
   )]
@@ -1132,7 +1132,7 @@ async function getCoachPolandFilterMatchesByPersonId(
   }
 
   const levelIds = [...new Set(
-    coachedPolandParticipations
+    coachPolandContextParticipations
       .map((p) => matchDataById.get(p.match_id)?.match_level_id ?? null)
       .filter((id): id is string => Boolean(id))
   )]
@@ -1264,7 +1264,7 @@ async function getCoachPolandFilterMatchesByPersonId(
   }
 
   const result = new Map<string, CoachPolandFilterMatch[]>()
-  for (const { person_id, match_id, team_id: coachedTeamId } of coachedPolandParticipations) {
+  for (const { person_id, match_id, team_id: coachedTeamId } of coachPolandContextParticipations) {
     if (!coachedTeamId) continue
     const matchData = matchDataById.get(match_id)
     if (!matchData) continue
