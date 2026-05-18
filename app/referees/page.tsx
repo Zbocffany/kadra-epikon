@@ -18,6 +18,7 @@ export default async function PublicRefereesPage() {
 								people={referees}
 								basePath="/people"
 								variant="referees"
+								publicRefereesView
 							/>
 						</div>
 					</section>

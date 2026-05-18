@@ -63,6 +63,47 @@ export default function CountriesSearchTable({
 
   return (
     <div className="space-y-3">
+      {/* Separate internal Poland list (single row) placed above search */}
+      {poland ? (
+        <div className="overflow-hidden rounded-xl border border-emerald-900/70">
+          <table className="w-full border-collapse text-sm table-auto">
+            <colgroup><col className="w-8" /><col className="min-w-[440px]" />{STAT_COLS.map((c) => <col key={c.key} className="w-[4.5rem]" />)}</colgroup>
+            <thead>
+              <tr className="border-b border-neutral-800 bg-neutral-900 text-left">
+                <th className="px-4 py-3 font-medium text-neutral-400" />
+                <th className="px-4 py-3 font-medium text-neutral-400" />
+                {STAT_COLS.map((c) => (
+                  <th key={c.key} className="px-1 py-3 text-center font-medium text-neutral-400">
+                    {c.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-emerald-900/70 bg-[linear-gradient(180deg,#1d5c3c_0%,#184c32_18%,#113825_52%,#0a2418_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.45),0_6px_14px_rgba(0,0,0,0.18)]">
+                <td className="px-4 py-3 text-neutral-500" />
+                <td className="px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <CountryFlag fifaCode={poland.fifa_code} countryName={poland.name} className="h-3.5 w-[21px] shrink-0" />
+                    <SmartPrefetchLink
+                      href={`/countries/${poland.id}`}
+                      className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
+                    >
+                      {poland.name}
+                    </SmartPrefetchLink>
+                  </div>
+                </td>
+                {STAT_COLS.map((c) => (
+                  <td key={c.key} className="px-1 py-3 text-center">
+                    <StatBadge value={poland[c.key]} />
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
       {/* Search bar — blends with green card */}
       <div className="flex items-center gap-2">
         <input
@@ -74,48 +115,10 @@ export default function CountriesSearchTable({
         />
       </div>
 
-      {/* Shared table — Poland block + countries list, one colgroup */}
+      {/* Countries list */}
       <div className="overflow-hidden rounded-xl border border-neutral-800">
         <table className="w-full border-collapse text-sm table-auto">
           <colgroup><col className="w-8" /><col className="min-w-[440px]" />{STAT_COLS.map((c) => <col key={c.key} className="w-[4.5rem]" />)}</colgroup>
-
-          {/* Poland header + row */}
-          {poland ? (
-            <>
-              <thead>
-                <tr className="border-b border-neutral-800 bg-neutral-900 text-left">
-                  <th className="px-4 py-3 font-medium text-neutral-400" />
-                  <th className="px-4 py-3 font-medium text-neutral-400" />
-                  {STAT_COLS.map((c) => (
-                    <th key={c.key} className="px-1 py-3 text-center font-medium text-neutral-400">
-                      {c.label}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-emerald-900/70 bg-[linear-gradient(180deg,#1d5c3c_0%,#184c32_18%,#113825_52%,#0a2418_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_0_rgba(0,0,0,0.45),0_6px_14px_rgba(0,0,0,0.18)]">
-                  <td className="px-4 py-3 text-neutral-500" />
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <CountryFlag fifaCode={poland.fifa_code} countryName={poland.name} className="h-3.5 w-[21px] shrink-0" />
-                      <SmartPrefetchLink
-                        href={`/countries/${poland.id}`}
-                        className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"
-                      >
-                        {poland.name}
-                      </SmartPrefetchLink>
-                    </div>
-                  </td>
-                  {STAT_COLS.map((c) => (
-                    <td key={c.key} className="px-1 py-3 text-center">
-                      <StatBadge value={poland[c.key]} />
-                    </td>
-                  ))}
-                </tr>
-              </tbody>
-            </>
-          ) : null}
 
           {/* Countries header + rows */}
           <thead>

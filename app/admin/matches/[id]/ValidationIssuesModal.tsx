@@ -7,9 +7,11 @@ import { useState } from 'react'
 export default function ValidationIssuesModal({
   errors,
   exitHref,
+  onAcknowledge,
 }: {
   errors: string[]
   exitHref: string
+  onAcknowledge?: () => void
 }) {
   const [isOpen, setIsOpen] = useState(true)
   const router = useRouter()
@@ -21,6 +23,11 @@ export default function ValidationIssuesModal({
   }
 
   function handleAcknowledge() {
+    if (onAcknowledge) {
+      setIsOpen(false)
+      onAcknowledge()
+      return
+    }
     const params = new URLSearchParams(searchParams.toString())
     params.delete('error')
 

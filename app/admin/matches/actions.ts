@@ -1525,6 +1525,65 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
   redirectWithSaved(`/admin/matches/${id}`)
 }
 
+// State-returning wrapper for the match-edit form. Internally delegates to
+// saveMatchFull so DB save / validation / cache invalidation stay untouched.
+// On a Next.js error-redirect (validation, constraint, etc.) the redirect is
+// intercepted and the error(s) are returned to the client instead, so the
+// in-memory form state (added players, events, etc.) is NOT lost. Success
+// redirects (saved=1) and the delete flow continue to redirect normally.
+export type SaveMatchFullState = {
+  errors: string[]
+  plainError: string | null
+} | null
+
+export async function saveMatchFullWithState(
+  _prev: SaveMatchFullState,
+  formData: FormData,
+): Promise<SaveMatchFullState> {
+  try {
+    await saveMatchFull(formData)
+    return null
+  } catch (err) {
+    if (!isNextRedirectError(err)) throw err
+    const url = extractRedirectUrl(err)
+    if (!url) throw err
+    const errorParam = extractErrorParam(url)
+    if (errorParam === null) throw err // success redirect — let Next.js handle it
+    if (errorParam.startsWith('VALIDATION_LIST::')) {
+      const list = errorParam
+        .slice('VALIDATION_LIST::'.length)
+        .split('||')
+        .map((item) => item.trim())
+        .filter(Boolean)
+      return { errors: list, plainError: null }
+    }
+    return { errors: [], plainError: errorParam }
+  }
+}
+
+function isNextRedirectError(err: unknown): err is { digest: string } {
+  return (
+    !!err &&
+    typeof err === 'object' &&
+    'digest' in err &&
+    typeof (err as { digest: unknown }).digest === 'string' &&
+    (err as { digest: string }).digest.startsWith('NEXT_REDIRECT')
+  )
+}
+
+function extractRedirectUrl(err: { digest: string }): string | null {
+  // Digest format: NEXT_REDIRECT;<type>;<url>;<status>;[...]
+  const parts = err.digest.split(';')
+  return parts[2] ?? null
+}
+
+function extractErrorParam(url: string): string | null {
+  const qIdx = url.indexOf('?')
+  if (qIdx < 0) return null
+  const params = new URLSearchParams(url.slice(qIdx + 1))
+  return params.get('error')
+}
+
 export async function createMatch(formData: FormData): Promise<void> {
   await requireAdminAccess()
   const input = readMatchInput(formData, '/admin/matches', { requireStatuses: false })

@@ -1,11 +1,12 @@
 'use client'
 
-import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import CountryFlag from '@/components/CountryFlag'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
-import type { AdminPersonListItem, CoachCompetitionFilterKey, CoachStageFilterKey, CoachPolandFilterMatch } from '@/lib/db/people'
+import type { AdminPersonListItem, CoachCompetitionFilterKey, CoachStageFilterKey, CoachPolandFilterMatch, RefereeFilterMatch } from '@/lib/db/people'
 import { getPersonDisplayName } from '@/lib/db/people'
 import { FilterRibbon, RibbonSection } from '@/components/filters/FilterRibbon'
 import type { AdminCoachMatch, AdminCoachYearStats } from '@/lib/db/matches'
@@ -21,6 +22,7 @@ type PublicPlayerMode = 'poland' | 'rivals'
 type PublicCoachMode = 'poland' | 'rivals'
 type CoachDisplayMode = 'tenure' | 'stats'
 type VisibleCoachCompetitionFilter = Exclude<CoachCompetitionFilterKey, 'OTHER'>
+type VenueType = 'HOME' | 'AWAY' | 'NEUTRAL'
 
 type PublicPeopleViewState = {
   query?: string
@@ -36,6 +38,11 @@ type PublicPeopleViewState = {
   coachDateFrom?: string
   coachDateTo?: string
   isCoachRibbonExpanded?: boolean
+  venueTypeFilters?: VenueType[]
+  venueCountryId?: string | null
+  venueCityId?: string | null
+  venueStadiumId?: string | null
+  isVenueExtraExpanded?: boolean
   expandedPersonId?: string | null
   visibleCount?: number
   scrollY?: number
@@ -50,6 +57,15 @@ type CoachComputedStats = {
   coach_goals_scored: number
   coach_goals_conceded: number
   coach_points_per_match: number
+}
+
+type RefereeComputedStats = {
+  referee_match_count: number
+  referee_wins: number
+  referee_draws: number
+  referee_losses: number
+  referee_goals_scored: number
+  referee_goals_conceded: number
 }
 
 function formatDate(dateStr: string) {
@@ -168,12 +184,128 @@ function isPolandCoachFilterRow(row: CoachPolandFilterMatch): boolean {
   return coachedTeamName === 'Polska'
 }
 
+// Custom dropdown for the Lokalizacja ribbon — the trigger fits the narrow section width,
+// but the popup panel can be wider than the trigger to fit long country/city/stadium names.
+// Visual palette is intentionally darker/neutral so values are easier to read against the
+// ribbon's bright green and consistent with the darker public sub-pages.
+function VenueDropdown({
+  value,
+  options,
+  placeholder,
+  onChange,
+  ariaLabel,
+}: {
+  value: string | null
+  options: Array<{ id: string; name: string }>
+  placeholder: string
+  onChange: (id: string | null) => void
+  ariaLabel: string
+}) {
+  const [open, setOpen] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  const [popupRect, setPopupRect] = useState<{ left: number; top: number; width: number } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const popupRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => { setMounted(true) }, [])
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return
+    const update = () => {
+      const r = triggerRef.current?.getBoundingClientRect()
+      if (!r) return
+      setPopupRect({ left: r.left, top: r.bottom + 4, width: r.width })
+    }
+    update()
+    window.addEventListener('scroll', update, true)
+    window.addEventListener('resize', update)
+    return () => {
+      window.removeEventListener('scroll', update, true)
+      window.removeEventListener('resize', update)
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const handleClickOutside = (event: MouseEvent) => {
+      const t = event.target as Node
+      if (triggerRef.current?.contains(t)) return
+      if (popupRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    const handleEsc = (event: KeyboardEvent) => { if (event.key === 'Escape') setOpen(false) }
+    document.addEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleEsc)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleEsc)
+    }
+  }, [open])
+
+  const selected = options.find((o) => o.id === value) ?? null
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={ariaLabel}
+        title={selected?.name ?? placeholder}
+        className="flex h-5 w-full items-center justify-between gap-1 rounded-md border border-emerald-700/75 bg-emerald-950/45 px-1.5 !text-[10.1px] font-semibold leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),inset_0_-1px_2px_rgba(0,0,0,0.28)] transition-colors placeholder:text-emerald-200/55 hover:border-emerald-500/85 focus:border-emerald-300/80 focus:outline-none"
+      >
+        <span className={`truncate ${selected ? '' : 'text-emerald-200/55'}`}>{selected?.name ?? placeholder}</span>
+        <svg viewBox="0 0 12 12" className={`h-2.5 w-2.5 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden="true">
+          <path d="M2 4.5l4 3 4-3" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && mounted && popupRect ? createPortal(
+        <div
+          ref={popupRef}
+          role="listbox"
+          style={{ position: 'fixed', left: popupRect.left, top: popupRect.top, minWidth: popupRect.width, zIndex: 1000 }}
+          className="max-h-64 w-max max-w-[20rem] overflow-y-auto rounded-md border border-neutral-600/85 bg-neutral-900 shadow-[0_10px_22px_rgba(0,0,0,0.55)] [scrollbar-color:#525252_#171717] [scrollbar-width:thin]"
+        >
+          <button
+            type="button"
+            role="option"
+            aria-selected={value === null}
+            onClick={() => { onChange(null); setOpen(false) }}
+            className={`flex h-5 w-full items-center whitespace-nowrap px-2 text-left !text-[10.1px] font-semibold leading-none transition-colors ${value === null ? 'bg-neutral-700/80 text-neutral-50' : 'text-neutral-200 hover:bg-neutral-800'}`}
+          >
+            {placeholder}
+          </button>
+          {options.map((o) => (
+            <button
+              key={o.id}
+              type="button"
+              role="option"
+              aria-selected={value === o.id}
+              onClick={() => { onChange(o.id); setOpen(false) }}
+              className={`flex h-5 w-full items-center whitespace-nowrap px-2 text-left !text-[10.1px] font-semibold leading-none transition-colors ${value === o.id ? 'bg-neutral-700/80 text-neutral-50' : 'text-neutral-200 hover:bg-neutral-800'}`}
+            >
+              {o.name}
+            </button>
+          ))}
+          {options.length === 0 ? (
+            <div className="px-2 py-1 !text-[10.1px] italic leading-none text-neutral-400">Brak opcji</div>
+          ) : null}
+        </div>,
+        document.body,
+      ) : null}
+    </>
+  )
+}
+
 export default function PublicPeopleSearchTable({
   people,
   basePath = '/people',
   variant = 'players',
   publicPlayerMode,
   publicCoachMode,
+  publicRefereesView,
   defaultCountryFilter,
 }: {
   people: AdminPersonListItem[]
@@ -181,6 +313,7 @@ export default function PublicPeopleSearchTable({
   variant?: PeopleCardVariant
   publicPlayerMode?: PublicPlayerMode
   publicCoachMode?: PublicCoachMode
+  publicRefereesView?: boolean
   defaultCountryFilter?: string
 }) {
   type PlayerSortKey = 'appearance_count' | 'goal_count' | 'assist_count' | 'yellow_card_count' | 'red_card_count' | 'minute_count' | 'bench_count'
@@ -202,15 +335,22 @@ export default function PublicPeopleSearchTable({
   const [coachDateFrom, setCoachDateFrom] = useState('')
   const [coachDateTo, setCoachDateTo] = useState('')
   const [hasInitializedCoachDateRange, setHasInitializedCoachDateRange] = useState(false)
-  const [isCoachRibbonExpanded, setIsCoachRibbonExpanded] = useState(true)
+  const [isCoachRibbonExpanded, setIsCoachRibbonExpanded] = useState(false)
+  const [venueTypeFilters, setVenueTypeFilters] = useState<VenueType[]>([])
+  const [venueCountryId, setVenueCountryId] = useState<string | null>(null)
+  const [venueCityId, setVenueCityId] = useState<string | null>(null)
+  const [venueStadiumId, setVenueStadiumId] = useState<string | null>(null)
+  const [isVenueExtraExpanded, setIsVenueExtraExpanded] = useState(false)
   const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null)
   const viewStateHydratedRef = useRef(false)
   const skipNextCoachModeResetRef = useRef(false)
   const [visibleCount, setVisibleCount] = useState(50)
   const isPublicPlayersView = variant === 'players' && Boolean(publicPlayerMode)
   const isPublicCoachesView = variant === 'coaches' && Boolean(publicCoachMode)
+  const isPublicRefereesView = variant === 'referees' && Boolean(publicRefereesView)
   const isPolandCoachView = isPublicCoachesView && coachMode === 'poland'
   const showCoachStats = !(isPolandCoachView && coachDisplayMode === 'tenure')
+  const isFilterableView = isPublicCoachesView ? showCoachStats : isPublicRefereesView
   const allCompetitionsActive = competitionFilters.length === 0
   const allStagesActive = stageFilters.length === 0
   const areStageFiltersUnavailable = competitionFilters.length > 0 && competitionFilters.every((key) => key === 'FRIENDLY' || key === 'NATIONS_LEAGUE')
@@ -256,11 +396,12 @@ export default function PublicPeopleSearchTable({
   // Hydrate full view state from history.state on mount and on browser Back/Forward.
   useEffect(() => {
     const storageKey = `${VIEW_STATE_KEY}:${typeof window !== 'undefined' ? window.location.pathname : ''}`
-    const readSaved = (): PublicPeopleViewState | null => {
+    const readSaved = (allowSessionFallback: boolean): PublicPeopleViewState | null => {
       // Prefer history.state (per-entry, survives Back/Forward), fallback to sessionStorage
       // (per-pathname, survives Next.js internal history rewrites that may drop our key).
       const fromHistory = (window.history.state as { [VIEW_STATE_KEY]?: PublicPeopleViewState } | null)?.[VIEW_STATE_KEY]
       if (fromHistory) return fromHistory
+      if (!allowSessionFallback) return null
       try {
         const raw = window.sessionStorage.getItem(storageKey)
         if (!raw) return null
@@ -269,8 +410,8 @@ export default function PublicPeopleSearchTable({
         return null
       }
     }
-    const applyState = () => {
-      const saved = readSaved()
+    const applyState = (allowSessionFallback: boolean) => {
+      const saved = readSaved(allowSessionFallback)
       // URL search params are authoritative for the active mode (Polska/Rywale),
       // because the URL is reliably restored by the browser on Back/Forward.
       const params = new URLSearchParams(window.location.search)
@@ -300,6 +441,11 @@ export default function PublicPeopleSearchTable({
       if (merged.coachDateFrom !== undefined) setCoachDateFrom(merged.coachDateFrom)
       if (merged.coachDateTo !== undefined) setCoachDateTo(merged.coachDateTo)
       if (merged.isCoachRibbonExpanded !== undefined) setIsCoachRibbonExpanded(merged.isCoachRibbonExpanded)
+      if (merged.venueTypeFilters !== undefined) setVenueTypeFilters(merged.venueTypeFilters)
+      if (merged.venueCountryId !== undefined) setVenueCountryId(merged.venueCountryId)
+      if (merged.venueCityId !== undefined) setVenueCityId(merged.venueCityId)
+      if (merged.venueStadiumId !== undefined) setVenueStadiumId(merged.venueStadiumId)
+      if (merged.isVenueExtraExpanded !== undefined) setIsVenueExtraExpanded(merged.isVenueExtraExpanded)
       if (merged.expandedPersonId !== undefined) setExpandedPersonId(merged.expandedPersonId)
       if (merged.visibleCount !== undefined) setVisibleCount(merged.visibleCount)
       setHasInitializedCoachDateRange(true)
@@ -312,11 +458,13 @@ export default function PublicPeopleSearchTable({
       }
     }
 
-    applyState()
+    const navigationEntry = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
+    const isBackForwardNavigation = navigationEntry?.type === 'back_forward'
+    applyState(isBackForwardNavigation)
 
     const handlePopState = () => {
       viewStateHydratedRef.current = false
-      applyState()
+      applyState(true)
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
@@ -333,6 +481,11 @@ export default function PublicPeopleSearchTable({
     setCoachDateFrom('')
     setCoachDateTo('')
     setHasInitializedCoachDateRange(false)
+    setVenueTypeFilters([])
+    setVenueCountryId(null)
+    setVenueCityId(null)
+    setVenueStadiumId(null)
+    setIsVenueExtraExpanded(false)
   }, [isPublicCoachesView, coachMode])
 
   // Persist current view state to history.state on every change (debounced via microtask).
@@ -352,6 +505,11 @@ export default function PublicPeopleSearchTable({
       coachDateFrom,
       coachDateTo,
       isCoachRibbonExpanded,
+      venueTypeFilters,
+      venueCountryId,
+      venueCityId,
+      venueStadiumId,
+      isVenueExtraExpanded,
       expandedPersonId,
       visibleCount,
       scrollY: typeof window !== 'undefined' ? window.scrollY : 0,
@@ -364,7 +522,7 @@ export default function PublicPeopleSearchTable({
     } catch {
       // sessionStorage may be unavailable (private mode, quota) — ignore
     }
-  }, [query, countryFilter, playerMode, coachMode, coachDisplayMode, sortKey, coachSortKey, refereeSortKey, competitionFilters, stageFilters, coachDateFrom, coachDateTo, isCoachRibbonExpanded, expandedPersonId, visibleCount])
+  }, [query, countryFilter, playerMode, coachMode, coachDisplayMode, sortKey, coachSortKey, refereeSortKey, competitionFilters, stageFilters, coachDateFrom, coachDateTo, isCoachRibbonExpanded, venueTypeFilters, venueCountryId, venueCityId, venueStadiumId, isVenueExtraExpanded, expandedPersonId, visibleCount])
 
   // Persist scroll position separately (does not trigger React re-renders).
   useEffect(() => {
@@ -427,17 +585,26 @@ export default function PublicPeopleSearchTable({
   }, [isPublicPlayersView, isPublicCoachesView, people, playerMode, coachMode])
 
   const coachDateBounds = useMemo(() => {
-    if (!isPublicCoachesView) return { firstYear: '', lastYear: '' }
+    if (!isPublicCoachesView && !isPublicRefereesView) return { firstYear: '', lastYear: '' }
 
     let firstMatchDate: string | null = null
     let lastMatchDate: string | null = null
 
-    for (const person of basePeople) {
-      for (const row of person.coach_poland_filter_matches ?? []) {
-        const isPolandRow = isPolandCoachFilterRow(row)
-        if ((coachMode === 'poland' && !isPolandRow) || (coachMode === 'rivals' && isPolandRow)) continue
-        if (!firstMatchDate || row.match_date < firstMatchDate) firstMatchDate = row.match_date
-        if (!lastMatchDate || row.match_date > lastMatchDate) lastMatchDate = row.match_date
+    if (isPublicCoachesView) {
+      for (const person of basePeople) {
+        for (const row of person.coach_poland_filter_matches ?? []) {
+          const isPolandRow = isPolandCoachFilterRow(row)
+          if ((coachMode === 'poland' && !isPolandRow) || (coachMode === 'rivals' && isPolandRow)) continue
+          if (!firstMatchDate || row.match_date < firstMatchDate) firstMatchDate = row.match_date
+          if (!lastMatchDate || row.match_date > lastMatchDate) lastMatchDate = row.match_date
+        }
+      }
+    } else {
+      for (const person of basePeople) {
+        for (const row of person.referee_filter_matches ?? []) {
+          if (!firstMatchDate || row.match_date < firstMatchDate) firstMatchDate = row.match_date
+          if (!lastMatchDate || row.match_date > lastMatchDate) lastMatchDate = row.match_date
+        }
       }
     }
 
@@ -445,15 +612,15 @@ export default function PublicPeopleSearchTable({
       firstYear: firstMatchDate ? firstMatchDate.slice(0, 4) : '',
       lastYear: lastMatchDate ? lastMatchDate.slice(0, 4) : '',
     }
-  }, [basePeople, isPublicCoachesView, coachMode])
+  }, [basePeople, isPublicCoachesView, isPublicRefereesView, coachMode])
 
   useEffect(() => {
-    if (!isPublicCoachesView || hasInitializedCoachDateRange) return
+    if ((!isPublicCoachesView && !isPublicRefereesView) || hasInitializedCoachDateRange) return
 
     setCoachDateFrom('')
     setCoachDateTo('')
     setHasInitializedCoachDateRange(true)
-  }, [coachDateBounds, hasInitializedCoachDateRange, isPublicCoachesView])
+  }, [coachDateBounds, hasInitializedCoachDateRange, isPublicCoachesView, isPublicRefereesView])
 
   useEffect(() => {
     if (!areStageFiltersUnavailable || stageFilters.length === 0) return
@@ -481,7 +648,8 @@ export default function PublicPeopleSearchTable({
           ? true
           : (!isPhaselesCompetition && activeStageSet.has(row.stage_key))
         const dateAllowed = isCoachMatchWithinDateRange(row.match_date)
-        return competitionAllowed && stageAllowed && dateAllowed
+        const venueAllowed = isMatchVenueAllowed(row)
+        return competitionAllowed && stageAllowed && dateAllowed && venueAllowed
       })
 
       let wins = 0
@@ -511,7 +679,7 @@ export default function PublicPeopleSearchTable({
     }
 
     return map
-  }, [basePeople, competitionFilters, stageFilters, coachDateFrom, coachDateTo, allCompetitionsActive, allStagesActive, isPublicCoachesView, showCoachStats, coachMode])
+  }, [basePeople, competitionFilters, stageFilters, coachDateFrom, coachDateTo, allCompetitionsActive, allStagesActive, isPublicCoachesView, showCoachStats, coachMode, venueTypeFilters, venueCountryId, venueCityId, venueStadiumId])
 
   const getDisplayedCoachStatValue = (person: AdminPersonListItem, key: CoachSortKey): number => {
     if (isPublicCoachesView && showCoachStats) {
@@ -520,6 +688,64 @@ export default function PublicPeopleSearchTable({
       return stats[key]
     }
     return getCoachStatValue(person, key)
+  }
+
+  const filteredRefereeStatsByPersonId = useMemo(() => {
+    const map = new Map<string, RefereeComputedStats>()
+    if (!isPublicRefereesView) return map
+
+    const activeCompetitionSet = new Set<VisibleCoachCompetitionFilter>(competitionFilters)
+    const activeStageSet = new Set<CoachStageFilterKey>(stageFilters)
+
+    for (const person of basePeople) {
+      const rows = person.referee_filter_matches ?? []
+      const filteredRows = rows.filter((row) => {
+        const competitionAllowed = allCompetitionsActive
+          ? true
+          : (row.competition_key !== 'OTHER' && activeCompetitionSet.has(row.competition_key as VisibleCoachCompetitionFilter))
+        const isPhaselesCompetition = row.competition_key === 'FRIENDLY' || row.competition_key === 'NATIONS_LEAGUE'
+        const stageAllowed = allStagesActive
+          ? true
+          : (!isPhaselesCompetition && activeStageSet.has(row.stage_key))
+        const dateAllowed = isCoachMatchWithinDateRange(row.match_date)
+        const venueAllowed = isMatchVenueAllowed(row)
+        return competitionAllowed && stageAllowed && dateAllowed && venueAllowed
+      })
+
+      let wins = 0
+      let draws = 0
+      let losses = 0
+      let goalsScored = 0
+      let goalsConceded = 0
+      for (const row of filteredRows) {
+        if (row.match_status !== 'FINISHED') continue
+        goalsScored += row.goals_for
+        goalsConceded += row.goals_against
+        if (row.outcome === 'W') wins += 1
+        else if (row.outcome === 'D') draws += 1
+        else if (row.outcome === 'L') losses += 1
+      }
+
+      map.set(person.id, {
+        referee_match_count: filteredRows.length,
+        referee_wins: wins,
+        referee_draws: draws,
+        referee_losses: losses,
+        referee_goals_scored: goalsScored,
+        referee_goals_conceded: goalsConceded,
+      })
+    }
+
+    return map
+  }, [basePeople, competitionFilters, stageFilters, coachDateFrom, coachDateTo, allCompetitionsActive, allStagesActive, isPublicRefereesView, venueTypeFilters, venueCountryId, venueCityId, venueStadiumId])
+
+  const getDisplayedRefereeStatValue = (person: AdminPersonListItem, key: RefereeSortKey): number => {
+    if (isPublicRefereesView) {
+      const stats = filteredRefereeStatsByPersonId.get(person.id)
+      if (!stats) return 0
+      return stats[key]
+    }
+    return (person[key] as number) ?? 0
   }
 
   const filtered = useMemo(() => {
@@ -564,7 +790,7 @@ export default function PublicPeopleSearchTable({
       return [...base].sort((a, b) => getDisplayedCoachStatValue(b, coachSortKey) - getDisplayedCoachStatValue(a, coachSortKey))
     }
     if (variant === 'referees') {
-      return [...base].sort((a, b) => (b[refereeSortKey] as number) - (a[refereeSortKey] as number))
+      return [...base].sort((a, b) => getDisplayedRefereeStatValue(b, refereeSortKey) - getDisplayedRefereeStatValue(a, refereeSortKey))
     }
     if (variant !== 'players') {
       return [...base].sort((a, b) => {
@@ -574,11 +800,11 @@ export default function PublicPeopleSearchTable({
       })
     }
     return [...base].sort((a, b) => (b[sortKey] as number) - (a[sortKey] as number))
-  }, [basePeople, query, sortKey, coachSortKey, refereeSortKey, countryFilter, variant, isPublicPlayersView, isPublicCoachesView, coachDisplayMode, isPolandCoachView, filteredCoachStatsByPersonId])
+  }, [basePeople, query, sortKey, coachSortKey, refereeSortKey, countryFilter, variant, isPublicPlayersView, isPublicCoachesView, isPublicRefereesView, coachDisplayMode, isPolandCoachView, filteredCoachStatsByPersonId, filteredRefereeStatsByPersonId])
 
   useEffect(() => {
     setVisibleCount(50)
-  }, [query, countryFilter, sortKey, coachSortKey, refereeSortKey, variant, playerMode, coachMode, coachDisplayMode, competitionFilters, stageFilters, coachDateFrom, coachDateTo])
+  }, [query, countryFilter, sortKey, coachSortKey, refereeSortKey, variant, playerMode, coachMode, coachDisplayMode, competitionFilters, stageFilters, coachDateFrom, coachDateTo, venueTypeFilters, venueCountryId, venueCityId, venueStadiumId])
 
   function StatsBarsIcon({ className }: { className?: string }) {
     return (
@@ -635,6 +861,10 @@ export default function PublicPeopleSearchTable({
     setCompetitionFilters([])
     setStageFilters([])
     clearCoachDateFilters()
+    setVenueTypeFilters([])
+    setVenueCountryId(null)
+    setVenueCityId(null)
+    setVenueStadiumId(null)
   }
 
   function setCoachCenturyRange(century: 'XX' | 'XXI') {
@@ -658,9 +888,201 @@ export default function PublicPeopleSearchTable({
     return true
   }
 
+  type VenueRow = {
+    venue_type: 'HOME' | 'AWAY' | 'NEUTRAL' | null
+    venue_country_id: string | null
+    venue_city_id: string | null
+    venue_stadium_id: string | null
+  }
+  function isMatchVenueAllowed(row: VenueRow): boolean {
+    if (venueTypeFilters.length > 0) {
+      if (!row.venue_type || !venueTypeFilters.includes(row.venue_type)) return false
+    }
+    if (venueCountryId && row.venue_country_id !== venueCountryId) return false
+    if (venueCityId && row.venue_city_id !== venueCityId) return false
+    if (venueStadiumId && row.venue_stadium_id !== venueStadiumId) return false
+    return true
+  }
+
   const isTwentiethCenturyActive = coachDateFrom === '1901' && coachDateTo === '2000'
   const isTwentyFirstCenturyActive = coachDateFrom === '2001' && coachDateTo === '2100'
-  const activeCoachFilterCount = competitionFilters.length + stageFilters.length + (coachDateFrom ? 1 : 0) + (coachDateTo ? 1 : 0)
+  const activeCoachFilterCount = competitionFilters.length + stageFilters.length + (coachDateFrom ? 1 : 0) + (coachDateTo ? 1 : 0) + venueTypeFilters.length + (venueCountryId ? 1 : 0) + (venueCityId ? 1 : 0) + (venueStadiumId ? 1 : 0)
+
+  // Poland's venue_country_id, derived from any HOME row across the visible base set.
+  // Used to (a) auto-fill Poland when 'Dom' is the only venue-type filter,
+  // (b) exclude Poland from the Country dropdown when only AWAY/NEUTRAL are active.
+  const polandVenueCountryId = useMemo<string | null>(() => {
+    if (!isPublicCoachesView && !isPublicRefereesView) return null
+    for (const person of basePeople) {
+      const rows: Array<CoachPolandFilterMatch | RefereeFilterMatch> = isPublicCoachesView
+        ? (person.coach_poland_filter_matches ?? [])
+        : (person.referee_filter_matches ?? [])
+      for (const row of rows) {
+        if (row.venue_type === 'HOME' && row.venue_country_id) return row.venue_country_id
+      }
+    }
+    return null
+  }, [basePeople, isPublicCoachesView, isPublicRefereesView])
+
+  const venueExcludesPoland = venueTypeFilters.length > 0 && !venueTypeFilters.includes('HOME')
+
+  // Available venue options for the cascade — respects all non-cascade filters
+  // (competitions, stages, date, venue type) and the higher levels of cascade.
+  const venueOptions = useMemo(() => {
+    type Opt = { id: string; name: string }
+    const countries = new Map<string, Opt>()
+    const cities = new Map<string, Opt>()
+    const stadiums = new Map<string, Opt>()
+    if (!isPublicCoachesView && !isPublicRefereesView) {
+      return { countries: [], cities: [], stadiums: [] }
+    }
+    const activeCompetitionSet = new Set<VisibleCoachCompetitionFilter>(competitionFilters)
+    const activeStageSet = new Set<CoachStageFilterKey>(stageFilters)
+
+    type AnyRow = (CoachPolandFilterMatch | RefereeFilterMatch) & { _isPolandCoachRow?: boolean }
+
+    for (const person of basePeople) {
+      const rows: AnyRow[] = isPublicCoachesView
+        ? (person.coach_poland_filter_matches ?? []).map((r) => ({ ...r, _isPolandCoachRow: isPolandCoachFilterRow(r) } as AnyRow))
+        : (person.referee_filter_matches ?? []) as AnyRow[]
+      for (const row of rows) {
+        if (isPublicCoachesView) {
+          const isPolandRow = (row as { _isPolandCoachRow?: boolean })._isPolandCoachRow ?? false
+          if ((coachMode === 'poland' && !isPolandRow) || (coachMode === 'rivals' && isPolandRow)) continue
+        }
+        const competitionAllowed = allCompetitionsActive
+          ? true
+          : (row.competition_key !== 'OTHER' && activeCompetitionSet.has(row.competition_key as VisibleCoachCompetitionFilter))
+        const isPhaseless = row.competition_key === 'FRIENDLY' || row.competition_key === 'NATIONS_LEAGUE'
+        const stageAllowed = allStagesActive
+          ? true
+          : (!isPhaseless && activeStageSet.has(row.stage_key))
+        const dateAllowed = isCoachMatchWithinDateRange(row.match_date)
+        if (!competitionAllowed || !stageAllowed || !dateAllowed) continue
+        if (venueTypeFilters.length > 0) {
+          if (!row.venue_type || !venueTypeFilters.includes(row.venue_type)) continue
+        }
+        // When AWAY/NEUTRAL alone are active, drop Poland-located rows from the option pool too.
+        if (venueExcludesPoland && polandVenueCountryId && row.venue_country_id === polandVenueCountryId) continue
+        // Country options: from all matches passing the above
+        if (row.venue_country_id && row.venue_country_name && !countries.has(row.venue_country_id)) {
+          countries.set(row.venue_country_id, { id: row.venue_country_id, name: row.venue_country_name })
+        }
+        // City options: only from matches in selected country (if any)
+        if (!venueCountryId || row.venue_country_id === venueCountryId) {
+          if (row.venue_city_id && row.venue_city_name && !cities.has(row.venue_city_id)) {
+            cities.set(row.venue_city_id, { id: row.venue_city_id, name: row.venue_city_name })
+          }
+          // Stadium options: only from matches in selected city (if any) and country
+          if (!venueCityId || row.venue_city_id === venueCityId) {
+            if (row.venue_stadium_id && row.venue_stadium_name && !stadiums.has(row.venue_stadium_id)) {
+              stadiums.set(row.venue_stadium_id, { id: row.venue_stadium_id, name: row.venue_stadium_name })
+            }
+          }
+        }
+      }
+    }
+    const sortByName = (a: Opt, b: Opt) => a.name.localeCompare(b.name, 'pl')
+    return {
+      countries: [...countries.values()].sort(sortByName),
+      cities: [...cities.values()].sort(sortByName),
+      stadiums: [...stadiums.values()].sort(sortByName),
+    }
+  }, [basePeople, isPublicCoachesView, isPublicRefereesView, coachMode, competitionFilters, stageFilters, coachDateFrom, coachDateTo, venueTypeFilters, venueCountryId, venueCityId, allCompetitionsActive, allStagesActive, venueExcludesPoland, polandVenueCountryId])
+
+  // Helpers that mirror the cascade rules: selecting deeper auto-fills shallower;
+  // changing shallower clears incompatible deeper picks.
+  function handleSelectVenueCountry(nextId: string | null) {
+    setVenueCountryId(nextId)
+    if (!nextId) return
+    // If currently picked city/stadium don't belong to nextId, clear them.
+    if (venueCityId) {
+      // Find any row to know if city is in country
+      const cityStillValid = basePeople.some((p) => {
+        const rows: Array<CoachPolandFilterMatch | RefereeFilterMatch> = isPublicCoachesView
+          ? (p.coach_poland_filter_matches ?? [])
+          : (p.referee_filter_matches ?? [])
+        return rows.some((r) => r.venue_city_id === venueCityId && r.venue_country_id === nextId)
+      })
+      if (!cityStillValid) {
+        setVenueCityId(null)
+        setVenueStadiumId(null)
+      }
+    }
+  }
+
+  function handleSelectVenueCity(nextId: string | null) {
+    setVenueCityId(nextId)
+    if (!nextId) return
+    // Auto-fill country from the city
+    const cityRow = (() => {
+      for (const p of basePeople) {
+        const rows: Array<CoachPolandFilterMatch | RefereeFilterMatch> = isPublicCoachesView
+          ? (p.coach_poland_filter_matches ?? [])
+          : (p.referee_filter_matches ?? [])
+        const r = rows.find((row) => row.venue_city_id === nextId)
+        if (r) return r
+      }
+      return null
+    })()
+    if (cityRow?.venue_country_id) setVenueCountryId(cityRow.venue_country_id)
+    if (venueStadiumId) {
+      const stadiumStillValid = basePeople.some((p) => {
+        const rows: Array<CoachPolandFilterMatch | RefereeFilterMatch> = isPublicCoachesView
+          ? (p.coach_poland_filter_matches ?? [])
+          : (p.referee_filter_matches ?? [])
+        return rows.some((r) => r.venue_stadium_id === venueStadiumId && r.venue_city_id === nextId)
+      })
+      if (!stadiumStillValid) setVenueStadiumId(null)
+    }
+  }
+
+  function handleSelectVenueStadium(nextId: string | null) {
+    setVenueStadiumId(nextId)
+    if (!nextId) return
+    const stadiumRow = (() => {
+      for (const p of basePeople) {
+        const rows: Array<CoachPolandFilterMatch | RefereeFilterMatch> = isPublicCoachesView
+          ? (p.coach_poland_filter_matches ?? [])
+          : (p.referee_filter_matches ?? [])
+        const r = rows.find((row) => row.venue_stadium_id === nextId)
+        if (r) return r
+      }
+      return null
+    })()
+    if (stadiumRow?.venue_city_id) setVenueCityId(stadiumRow.venue_city_id)
+    if (stadiumRow?.venue_country_id) setVenueCountryId(stadiumRow.venue_country_id)
+  }
+
+  function toggleVenueTypeFilter(key: VenueType) {
+    setVenueTypeFilters((current) => {
+      const next = current.includes(key) ? current.filter((k) => k !== key) : [...current, key]
+      const hasHome = next.includes('HOME')
+      const hasNonHome = next.includes('AWAY') || next.includes('NEUTRAL')
+      // Only HOME → auto-fill Poland in Country and clear deeper picks if incompatible.
+      if (hasHome && !hasNonHome && polandVenueCountryId) {
+        if (venueCountryId !== polandVenueCountryId) {
+          setVenueCountryId(polandVenueCountryId)
+          setVenueCityId(null)
+          setVenueStadiumId(null)
+        }
+      }
+      // Only AWAY/NEUTRAL → Poland must be excluded; clear if currently picked.
+      if (!hasHome && hasNonHome && polandVenueCountryId && venueCountryId === polandVenueCountryId) {
+        setVenueCountryId(null)
+        setVenueCityId(null)
+        setVenueStadiumId(null)
+      }
+      return next
+    })
+  }
+
+  function resetVenueSection() {
+    setVenueTypeFilters([])
+    setVenueCountryId(null)
+    setVenueCityId(null)
+    setVenueStadiumId(null)
+  }
 
   const coachFilterControls = (
     <>
@@ -815,6 +1237,84 @@ export default function PublicPeopleSearchTable({
           </div>
         </div>
       </RibbonSection>
+
+      <RibbonSection title="Lokalizacja" className="relative min-w-[7.6rem]">
+        <div className="space-y-1">
+          <div className="flex">
+            <button
+              type="button"
+              onClick={resetVenueSection}
+              aria-pressed={venueTypeFilters.length === 0 && !venueCountryId && !venueCityId && !venueStadiumId}
+              className={`inline-flex h-5 w-full items-center justify-center whitespace-nowrap rounded-md border px-1.5 !text-[10.1px] font-semibold leading-none transition-colors ${venueTypeFilters.length === 0 && !venueCountryId && !venueCityId && !venueStadiumId
+                ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
+                : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
+              }`}
+            >
+              Wszystkie
+            </button>
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            {([
+              ['HOME', 'Dom'],
+              ['AWAY', 'Wyjazd'],
+              ['NEUTRAL', 'Neutralny'],
+            ] as Array<[VenueType, string]>).map(([key, label]) => {
+              const active = venueTypeFilters.includes(key)
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => toggleVenueTypeFilter(key)}
+                  aria-pressed={active}
+                  className={`inline-flex h-5 items-center justify-center whitespace-nowrap rounded-md border px-1.5 !text-[10.1px] font-semibold leading-none transition-colors ${active
+                    ? 'border-emerald-950/85 bg-[linear-gradient(180deg,rgba(30,120,78,0.95)_0%,rgba(22,93,63,0.94)_52%,rgba(14,63,45,0.97)_100%)] text-emerald-50 shadow-[inset_0_3px_6px_rgba(0,0,0,0.5),inset_0_1px_3px_rgba(0,0,0,0.35),inset_0_-1px_0_rgba(255,255,255,0.1),0_1px_2px_rgba(0,0,0,0.35)]'
+                    : 'border-emerald-500/65 bg-[linear-gradient(180deg,rgba(90,190,130,0.9)_0%,rgba(45,148,93,0.85)_42%,rgba(22,88,58,0.92)_100%)] text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_0_rgba(0,0,0,0.35),0_3px_6px_rgba(0,0,0,0.45),0_1px_2px_rgba(0,0,0,0.28)] hover:border-emerald-300/80 hover:brightness-105'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+          {isVenueExtraExpanded ? (
+            <div className="space-y-1 pt-1">
+              <VenueDropdown
+                value={venueCountryId}
+                options={venueOptions.countries}
+                placeholder="Kraj (wszystkie)"
+                onChange={handleSelectVenueCountry}
+                ariaLabel="Kraj"
+              />
+              <VenueDropdown
+                value={venueCityId}
+                options={venueOptions.cities}
+                placeholder="Miasto (wszystkie)"
+                onChange={handleSelectVenueCity}
+                ariaLabel="Miasto"
+              />
+              <VenueDropdown
+                value={venueStadiumId}
+                options={venueOptions.stadiums}
+                placeholder="Stadion (wszystkie)"
+                onChange={handleSelectVenueStadium}
+                ariaLabel="Stadion"
+              />
+            </div>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsVenueExtraExpanded((v) => !v)}
+          aria-expanded={isVenueExtraExpanded}
+          aria-label={isVenueExtraExpanded ? 'Zwiń pola lokalizacji' : 'Rozwiń pola lokalizacji'}
+          title={isVenueExtraExpanded ? 'Zwiń pola lokalizacji' : 'Rozwiń pola lokalizacji'}
+          className="absolute bottom-1 right-1 inline-flex h-4 w-4 items-center justify-center rounded border border-emerald-500/55 bg-emerald-900/50 text-emerald-100 transition-colors hover:border-emerald-300/80 hover:text-emerald-50"
+        >
+          <svg viewBox="0 0 12 12" className={`h-2.5 w-2.5 transition-transform ${isVenueExtraExpanded ? 'rotate-180' : 'rotate-0'}`} aria-hidden="true">
+            <path d="M2 4.5l4 3 4-3" stroke="currentColor" strokeWidth="1.6" fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </RibbonSection>
     </>
   )
 
@@ -836,7 +1336,8 @@ export default function PublicPeopleSearchTable({
         ? true
         : (!isPhaselesCompetition && activeStageSet.has(row.stage_key))
       const dateAllowed = isCoachMatchWithinDateRange(row.match_date)
-      return competitionAllowed && stageAllowed && dateAllowed
+      const venueAllowed = isMatchVenueAllowed(row)
+      return competitionAllowed && stageAllowed && dateAllowed && venueAllowed
     })
 
     return filteredRows
@@ -860,6 +1361,48 @@ export default function PublicPeopleSearchTable({
         coach_team_id: row.coach_team_id,
         coach_team_fifa_code: row.coach_team_fifa_code,
         coach_is_home: row.coach_is_home,
+      }))
+  }
+
+  function getFilteredMatchesForReferee(person: AdminPersonListItem): AdminCoachMatch[] {
+    const rows = person.referee_filter_matches ?? []
+    const activeCompetitionSet = new Set<VisibleCoachCompetitionFilter>(competitionFilters)
+    const activeStageSet = new Set<CoachStageFilterKey>(stageFilters)
+
+    const filteredRows = rows.filter((row: RefereeFilterMatch) => {
+      const competitionAllowed = allCompetitionsActive
+        ? true
+        : (row.competition_key !== 'OTHER' && activeCompetitionSet.has(row.competition_key as VisibleCoachCompetitionFilter))
+      const isPhaselesCompetition = row.competition_key === 'FRIENDLY' || row.competition_key === 'NATIONS_LEAGUE'
+      const stageAllowed = allStagesActive
+        ? true
+        : (!isPhaselesCompetition && activeStageSet.has(row.stage_key))
+      const dateAllowed = isCoachMatchWithinDateRange(row.match_date)
+      const venueAllowed = isMatchVenueAllowed(row)
+      return competitionAllowed && stageAllowed && dateAllowed && venueAllowed
+    })
+
+    return filteredRows
+      .sort((a: RefereeFilterMatch, b: RefereeFilterMatch) => a.match_date < b.match_date ? -1 : a.match_date > b.match_date ? 1 : 0)
+      .map((row: RefereeFilterMatch): AdminCoachMatch => ({
+        id: row.match_id,
+        match_date: row.match_date,
+        match_time: row.match_time,
+        match_status: row.match_status as AdminCoachMatch['match_status'],
+        result_type: row.result_type as AdminCoachMatch['result_type'],
+        walkover_winner_team_id: row.walkover_winner_team_id,
+        editorial_status: row.editorial_status as AdminCoachMatch['editorial_status'],
+        competition_name: row.competition_name,
+        match_level_name: row.match_level_name,
+        home_team_name: row.home_team_name,
+        away_team_name: row.away_team_name,
+        home_team_fifa_code: row.home_team_fifa_code,
+        away_team_fifa_code: row.away_team_fifa_code,
+        final_score: row.final_score,
+        shootout_score: row.shootout_score,
+        coach_team_id: row.poland_team_id,
+        coach_team_fifa_code: row.poland_team_fifa_code,
+        coach_is_home: row.poland_is_home,
       }))
   }
 
@@ -949,7 +1492,7 @@ export default function PublicPeopleSearchTable({
           </button>
         ) : null}
 
-        {isPublicCoachesView && showCoachStats ? (
+        {isFilterableView ? (
           <button
             type="button"
             onClick={() => setIsCoachRibbonExpanded((current) => !current)}
@@ -1049,7 +1592,7 @@ export default function PublicPeopleSearchTable({
         )}
       </div>
 
-      {isPublicCoachesView && showCoachStats ? (
+      {isFilterableView ? (
         <FilterRibbon
           title="Filtry"
           expanded={isCoachRibbonExpanded}
@@ -1189,14 +1732,14 @@ export default function PublicPeopleSearchTable({
               </tr>
             ) : (
               displayed.map((person, i) => {
-                const canExpandCoachRow = isPublicCoachesView && showCoachStats
-                const isExpanded = canExpandCoachRow && expandedPersonId === person.id
+                const canExpandRow = (isPublicCoachesView && showCoachStats) || isPublicRefereesView
+                const isExpanded = canExpandRow && expandedPersonId === person.id
                 const colSpanCount = variant === 'coaches' ? (showCoachStats ? 9 : 2) : variant === 'referees' ? 8 : 9
                 return (
                 <Fragment key={person.id}>
                 <tr
-                  className={`table-data-row border-b border-neutral-800 last:border-b-0 bg-neutral-950 transition-colors hover:bg-neutral-900/60${canExpandCoachRow ? ' cursor-pointer select-none' : ''}`}
-                  onClick={canExpandCoachRow ? () => setExpandedPersonId((prev) => prev === person.id ? null : person.id) : undefined}
+                  className={`table-data-row border-b border-neutral-800 last:border-b-0 bg-neutral-950 transition-colors hover:bg-neutral-900/60${canExpandRow ? ' cursor-pointer select-none' : ''}`}
+                  onClick={canExpandRow ? () => setExpandedPersonId((prev) => prev === person.id ? null : person.id) : undefined}
                 >
                   <td className="pl-4 pr-1 py-3 text-neutral-500 text-sm">{i + 1}</td>
                   <td className="pl-1 pr-4 py-3">
@@ -1339,22 +1882,22 @@ export default function PublicPeopleSearchTable({
                   ) : variant === 'referees' ? (
                     <>
                       <td className="px-1 py-3 text-center">
-                        {renderStatBadge(person.referee_match_count)}
+                        {renderStatBadge(getDisplayedRefereeStatValue(person, 'referee_match_count'))}
                       </td>
                       <td className="px-1 py-3 text-center">
-                        {renderStatBadge(person.referee_wins)}
+                        {renderStatBadge(getDisplayedRefereeStatValue(person, 'referee_wins'))}
                       </td>
                       <td className="px-1 py-3 text-center">
-                        {renderStatBadge(person.referee_draws)}
+                        {renderStatBadge(getDisplayedRefereeStatValue(person, 'referee_draws'))}
                       </td>
                       <td className="px-1 py-3 text-center">
-                        {renderStatBadge(person.referee_losses)}
+                        {renderStatBadge(getDisplayedRefereeStatValue(person, 'referee_losses'))}
                       </td>
                       <td className="px-1 py-3 text-center">
-                        {renderStatBadge(person.referee_goals_scored)}
+                        {renderStatBadge(getDisplayedRefereeStatValue(person, 'referee_goals_scored'))}
                       </td>
                       <td className="px-1 py-3 text-center">
-                        {renderStatBadge(person.referee_goals_conceded)}
+                        {renderStatBadge(getDisplayedRefereeStatValue(person, 'referee_goals_conceded'))}
                       </td>
                     </>
                   ) : (
@@ -1384,7 +1927,9 @@ export default function PublicPeopleSearchTable({
                   )}
                 </tr>
                 {isExpanded && (() => {
-                  const filteredMatches = getFilteredMatchesForCoach(person)
+                  const filteredMatches = isPublicRefereesView
+                    ? getFilteredMatchesForReferee(person)
+                    : getFilteredMatchesForCoach(person)
                   if (filteredMatches.length === 0) {
                     return (
                       <tr>

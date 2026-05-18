@@ -5,16 +5,16 @@ import MatchCoachesForm from './MatchCoachesForm'
 import type { MatchEventPersonOption } from './MatchEventsForm'
 import MatchSquadForm from './MatchSquadForm'
 import MatchEventsForm from './MatchEventsForm'
-import ValidationIssuesModal from './ValidationIssuesModal'
 import EditMatchFormWrapper from './EditMatchFormWrapper'
 import EditMatchLocationFields from './EditMatchLocationFields'
+import MatchEditFormShell from './MatchEditFormShell'
 import RefereePersonField from './RefereePersonField'
 import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
 import MatchReadOnlyPage from '@/components/matches/MatchReadOnlyPage'
 import { Icon, type AppIconName } from '@/components/icons'
-import { deleteMatch, saveMatchFull } from '../actions'
+import { deleteMatch } from '../actions'
 import { createClubInline } from '@/app/admin/clubs/actions'
 import { getMatchStatusLabel, MATCH_STATUS_OPTIONS } from '../matchStatusLabels'
 import { getResultTypeLabel, RESULT_TYPE_OPTIONS } from '../resultTypeLabels'
@@ -1226,7 +1226,11 @@ export default async function AdminMatchDetailsPage({
     return (
       <EditMatchFormWrapper>
         <DetailsPageContainer maxWidthClass="max-w-5xl">
-          <form action={saveMatchFull}>
+          <MatchEditFormShell
+            matchId={match.id}
+            initialErrors={validationErrors}
+            initialPlainError={plainError ?? null}
+          >
           <input type="hidden" name="id" value={match.id} />
 
           <div className="mb-6">
@@ -1253,12 +1257,6 @@ export default async function AdminMatchDetailsPage({
             {saved && (
               <div className="mt-6 rounded-lg border border-emerald-800 bg-emerald-950/50 px-5 py-4 text-sm text-emerald-300">
                 Zmiany zostały zapisane.
-              </div>
-            )}
-
-            {plainError && (
-              <div className="mt-6 rounded-lg border border-red-800 bg-red-950/50 px-5 py-4 text-sm text-red-300">
-                {plainError}
               </div>
             )}
 
@@ -1343,14 +1341,7 @@ export default async function AdminMatchDetailsPage({
               Zapisz
             </button>
           </div>
-        </form>
-
-        {validationErrors.length > 0 && (
-          <ValidationIssuesModal
-            errors={validationErrors}
-            exitHref={`/admin/matches/${match.id}`}
-          />
-        )}
+          </MatchEditFormShell>
       </DetailsPageContainer>
     </EditMatchFormWrapper>
     )
