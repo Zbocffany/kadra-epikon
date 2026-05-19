@@ -4,7 +4,7 @@ import PublicPeopleSearchTable from '@/app/admin/people/PublicPeopleSearchTable'
 export const dynamic = 'force-dynamic'
 
 export default async function PublicCoachesPage() {
-	const people = await getPublicPeople()
+	const people = await getPublicPeople('coaches')
 	const coaches = people.filter((person) => person.roles.includes('COACH'))
 
 	return (

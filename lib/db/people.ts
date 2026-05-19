@@ -3171,7 +3171,9 @@ async function getPlayerMinutes(
   return totalMinutes
 }
 
-export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
+export type PublicPeopleVariant = 'players' | 'coaches' | 'referees' | 'all' | 'lite'
+
+export async function getAdminPeople(variant: PublicPeopleVariant = 'all'): Promise<AdminPersonListItem[]> {
   const supabase = createServiceRoleClient()
 
   const { data: people, error: peopleError } = await supabase
@@ -3232,11 +3234,15 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
   const refereeIds = people
     .filter((p) => (rolesByPersonId.get(p.id) ?? []).includes('REFEREE'))
     .map((p) => p.id)
+  const wantPlayers = variant === 'all' || variant === 'players'
+  const wantCoaches = variant === 'all' || variant === 'coaches'
+  const wantReferees = variant === 'all' || variant === 'referees'
+
   const [statsByPersonId, coachResultStatsByPersonId, refereePolandFilterMatchesByPersonId, playerFilterMatchesByPersonId] = await Promise.all([
     getPersonStats(supabase, playerIds),
     getCoachResultStatsByPersonId(supabase, coachIds),
-    getRefereePolandFilterMatchesByPersonId(supabase, refereeIds),
-    getPlayerFilterMatchesByPersonId(supabase, playerIds),
+    wantReferees ? getRefereePolandFilterMatchesByPersonId(supabase, refereeIds) : Promise.resolve(new Map<string, RefereeFilterMatch[]>()),
+    wantPlayers ? getPlayerFilterMatchesByPersonId(supabase, playerIds) : Promise.resolve(new Map<string, PlayerFilterMatch[]>()),
   ])
   const [hasPlayedAgainstPolandByPersonId, hasRepresentedPolandByPersonId, hasCoachedPolandByPersonId, hasCoachedAgainstPolandByPersonId, coachPolandTenureByPersonId, coachPolandFilterMatchesByPersonId] = await Promise.all([
     getPlayedAgainstPolandByPersonId(supabase, playerIds),
@@ -3244,7 +3250,7 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
     getCoachedPolandByPersonId(supabase, coachIds),
     getCoachedAgainstPolandByPersonId(supabase, coachIds),
     getCoachPolandTenureRangeByPersonId(supabase, coachIds),
-    getCoachPolandFilterMatchesByPersonId(supabase, coachIds),
+    wantCoaches ? getCoachPolandFilterMatchesByPersonId(supabase, coachIds) : Promise.resolve(new Map<string, CoachPolandFilterMatch[]>()),
   ])
 
   return people
@@ -3356,16 +3362,45 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
     .sort((a, b) => buildDisplayName(a).localeCompare(buildDisplayName(b), 'pl'))
 }
 
-export async function getPublicPeople(): Promise<AdminPersonListItem[]> {
-  const cacheKey = await getPublicCacheKey('public-people')
-  return unstable_cache(
-    async () => getAdminPeople(),
-    cacheKey,
+export async function getPublicPeople(variant: PublicPeopleVariant = 'all'): Promise<AdminPersonListItem[]> {
+  // Cache only the "lite" payload (without large *_filter_matches arrays) to stay below
+  // Next.js unstable_cache 2MB per-entry limit. Filter matches are loaded per request
+  // (only the ones the current variant needs) and merged in.
+  const liteCacheKey = await getPublicCacheKey('public-people', 'lite')
+  const lite = await unstable_cache(
+    async () => getAdminPeople('lite'),
+    liteCacheKey,
     {
       revalidate: 3600,
       tags: ['public-people'],
     }
   )()
+
+  if (variant === 'lite') return lite
+
+  const supabase = createServiceRoleClient()
+  const playerIds = variant === 'all' || variant === 'players'
+    ? lite.filter((p) => p.roles.includes('PLAYER')).map((p) => p.id)
+    : []
+  const coachIds = variant === 'all' || variant === 'coaches'
+    ? lite.filter((p) => p.roles.includes('COACH')).map((p) => p.id)
+    : []
+  const refereeIds = variant === 'all' || variant === 'referees'
+    ? lite.filter((p) => p.roles.includes('REFEREE')).map((p) => p.id)
+    : []
+
+  const [playerFilterMatchesByPersonId, coachPolandFilterMatchesByPersonId, refereePolandFilterMatchesByPersonId] = await Promise.all([
+    playerIds.length ? getPlayerFilterMatchesByPersonId(supabase, playerIds) : Promise.resolve(new Map<string, PlayerFilterMatch[]>()),
+    coachIds.length ? getCoachPolandFilterMatchesByPersonId(supabase, coachIds) : Promise.resolve(new Map<string, CoachPolandFilterMatch[]>()),
+    refereeIds.length ? getRefereePolandFilterMatchesByPersonId(supabase, refereeIds) : Promise.resolve(new Map<string, RefereeFilterMatch[]>()),
+  ])
+
+  return lite.map((person) => ({
+    ...person,
+    player_filter_matches: playerFilterMatchesByPersonId.get(person.id) ?? person.player_filter_matches,
+    coach_poland_filter_matches: coachPolandFilterMatchesByPersonId.get(person.id) ?? person.coach_poland_filter_matches,
+    referee_filter_matches: refereePolandFilterMatchesByPersonId.get(person.id) ?? person.referee_filter_matches,
+  }))
 }
 
 export async function getAdminPeoplePage(
