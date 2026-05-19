@@ -87,6 +87,58 @@ export type RefereeFilterMatch = {
   venue_type: 'HOME' | 'AWAY' | 'NEUTRAL' | null
 }
 
+// Per-match row for the players filter ribbon. Each row represents a single match in
+// which Poland played, and in which the player participated (as starter or sub).
+// POV fields (goals_for/against, outcome, venue_type) are computed from the player's
+// team perspective. For mode='poland', player_team is Poland; for mode='rivals',
+// player_team is the opponent of Poland.
+export type PlayerFilterMatch = {
+  match_id: string
+  match_date: string
+  match_time: string | null
+  match_status: string | null
+  result_type: string | null
+  walkover_winner_team_id: string | null
+  editorial_status: string
+  competition_key: CoachCompetitionFilterKey
+  competition_name: string
+  stage_key: CoachStageFilterKey
+  match_level_name: string | null
+  home_team_name: string
+  away_team_name: string
+  home_team_fifa_code: string | null
+  away_team_fifa_code: string | null
+  poland_team_id: string | null
+  poland_team_fifa_code: string | null
+  poland_is_home: boolean | null
+  player_team_id: string | null
+  player_team_fifa_code: string | null
+  player_is_home: boolean | null
+  // True iff the player played for Poland in this match; false iff played against Poland.
+  is_poland_player: boolean
+  goals_for: number
+  goals_against: number
+  final_score: string | null
+  shootout_score: string | null
+  outcome: 'W' | 'D' | 'L' | null
+  venue_country_id: string | null
+  venue_country_name: string | null
+  venue_city_id: string | null
+  venue_city_name: string | null
+  venue_stadium_id: string | null
+  venue_stadium_name: string | null
+  venue_type: 'HOME' | 'AWAY' | 'NEUTRAL' | null
+  // Per-player per-match stats
+  is_starting: boolean | null
+  played: boolean
+  bench: boolean
+  goal_count: number
+  assist_count: number
+  yellow_card_count: number
+  red_card_count: number
+  minute_count: number
+}
+
 const ROLE_ORDER: Record<AdminPersonRole, number> = {
   PLAYER: 0,
   COACH: 1,
@@ -140,6 +192,7 @@ export type AdminPersonListItem = {
   coach_poland_last_match_date: string | null
   coach_poland_filter_matches: CoachPolandFilterMatch[]
   referee_filter_matches: RefereeFilterMatch[]
+  player_filter_matches: PlayerFilterMatch[]
   referee_match_count: number
   coach_wins: number
   coach_draws: number
@@ -2322,6 +2375,456 @@ async function getRefereePolandFilterMatchesByPersonId(
   return result
 }
 
+async function getPlayerFilterMatchesByPersonId(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  personIds: string[]
+): Promise<Map<string, PlayerFilterMatch[]>> {
+  if (!personIds.length) return new Map()
+
+  const CHUNK_SIZE = 80
+  const PAGE_SIZE = 1000
+
+  // 1. PLAYER participations (with team_id + is_starting)
+  type PlayerParticipantRow = {
+    person_id: string
+    match_id: string
+    team_id: string | null
+    is_starting: boolean | null
+  }
+  const allParticipants: PlayerParticipantRow[] = []
+  for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Participants')
+        .select('person_id, match_id, team_id, is_starting')
+        .eq('role', 'PLAYER')
+        .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Participants (player filter rows): ${error.message}`)
+      const rows = (data ?? []) as PlayerParticipantRow[]
+      allParticipants.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+  if (!allParticipants.length) return new Map()
+
+  // 2. Drop walkovers
+  const allMatchIds = [...new Set(allParticipants.map((p) => p.match_id))]
+  const nonWalkoverMatchIdsSet = await getNonWalkoverMatchIdSet(supabase, allMatchIds)
+  const nonWalkoverParticipants = allParticipants.filter((p) => nonWalkoverMatchIdsSet.has(p.match_id))
+  if (!nonWalkoverParticipants.length) return new Map()
+
+  // 3. Keep only matches where Poland played (mirrors coach/referee POV)
+  const candidateMatchIds = [...new Set(nonWalkoverParticipants.map((p) => p.match_id))]
+  const matchPolandTeamIdMap = await getPolandTeamIdByMatchId(supabase, candidateMatchIds)
+  const polandParticipants = nonWalkoverParticipants.filter((p) => matchPolandTeamIdMap.get(p.match_id))
+  if (!polandParticipants.length) return new Map()
+
+  const filteredMatchIds = [...new Set(polandParticipants.map((p) => p.match_id))]
+
+  // 4. Match data
+  type MatchRow = {
+    id: string
+    match_date: string
+    match_time: string | null
+    home_team_id: string
+    away_team_id: string
+    match_status: string | null
+    result_type: string | null
+    walkover_winner_team_id: string | null
+    editorial_status: string
+    competition_id: string | null
+    match_level_id: string | null
+    match_stadium_id: string | null
+    match_city_id: string | null
+  }
+  const matchDataById = new Map<string, MatchRow>()
+  for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Matches')
+      .select('id, match_date, match_time, home_team_id, away_team_id, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, match_level_id, match_stadium_id, match_city_id')
+      .in('id', filteredMatchIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Matches (player filter rows): ${error.message}`)
+    for (const row of (data ?? []) as MatchRow[]) matchDataById.set(row.id, row)
+  }
+
+  // 5. Competitions / levels
+  const competitionIds = [...new Set(
+    [...matchDataById.values()].map((m) => m.competition_id).filter((id): id is string => Boolean(id))
+  )]
+  const competitionNameById = new Map<string, string>()
+  for (let i = 0; i < competitionIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Competitions')
+      .select('id, name')
+      .in('id', competitionIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Competitions (player filter rows): ${error.message}`)
+    for (const row of (data ?? []) as Array<{ id: string; name: string }>) {
+      competitionNameById.set(row.id, row.name)
+    }
+  }
+
+  const levelIds = [...new Set(
+    [...matchDataById.values()].map((m) => m.match_level_id).filter((id): id is string => Boolean(id))
+  )]
+  const levelNameById = new Map<string, string>()
+  for (let i = 0; i < levelIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Match_Levels')
+      .select('id, name')
+      .in('id', levelIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Match_Levels (player filter rows): ${error.message}`)
+    for (const row of (data ?? []) as Array<{ id: string; name: string }>) {
+      levelNameById.set(row.id, row.name)
+    }
+  }
+
+  // 6. Match events: goals/cards (for team score + per-player counts) and substitutions.
+  type GoalEventRow = {
+    match_id: string
+    event_type: string
+    team_id: string | null
+    primary_person_id: string | null
+    secondary_person_id: string | null
+    minute: number | null
+    minute_extra: number | null
+  }
+  const goalAndCardEvents: GoalEventRow[] = []
+  const EVENT_TYPES = ['GOAL', 'PENALTY_GOAL', 'OWN_GOAL', 'PENALTY_SHOOTOUT_SCORED', 'YELLOW_CARD', 'RED_CARD', 'SECOND_YELLOW_CARD']
+  for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, event_type, team_id, primary_person_id, secondary_person_id, minute, minute_extra')
+        .in('match_id', filteredMatchIds.slice(i, i + CHUNK_SIZE))
+        .in('event_type', EVENT_TYPES)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Events (player filter rows, goals/cards): ${error.message}`)
+      const rows = (data ?? []) as GoalEventRow[]
+      goalAndCardEvents.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+
+  type SubEventRow = {
+    match_id: string
+    primary_person_id: string | null
+    secondary_person_id: string | null
+    minute: number
+    minute_extra: number | null
+  }
+  const subEvents: SubEventRow[] = []
+  for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Events')
+        .select('match_id, primary_person_id, secondary_person_id, minute, minute_extra')
+        .eq('event_type', 'SUBSTITUTION')
+        .in('match_id', filteredMatchIds.slice(i, i + CHUNK_SIZE))
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_Match_Events (player filter rows, subs): ${error.message}`)
+      const rows = (data ?? []) as SubEventRow[]
+      subEvents.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+
+  type SubEntry = { minute: number; extra: number }
+  const subOnByMatchPerson = new Map<string, SubEntry>()
+  const subOffByMatchPerson = new Map<string, SubEntry>()
+  for (const e of subEvents) {
+    if (e.secondary_person_id) {
+      subOnByMatchPerson.set(`${e.match_id}:${e.secondary_person_id}`, {
+        minute: e.minute,
+        extra: e.minute_extra ?? 0,
+      })
+    }
+    if (e.primary_person_id) {
+      subOffByMatchPerson.set(`${e.match_id}:${e.primary_person_id}`, {
+        minute: e.minute,
+        extra: e.minute_extra ?? 0,
+      })
+    }
+  }
+
+  // Team-level scores (from goal events)
+  type TeamGoals = { goals: number; shootoutGoals: number }
+  const teamGoalsInMatch = new Map<string, TeamGoals>()
+  for (const event of goalAndCardEvents) {
+    if (!event.team_id) continue
+    const matchData = matchDataById.get(event.match_id)
+    if (!matchData) continue
+
+    if (event.event_type === 'PENALTY_SHOOTOUT_SCORED') {
+      const key = `${event.match_id}:${event.team_id}`
+      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
+      entry.shootoutGoals += 1
+      teamGoalsInMatch.set(key, entry)
+    } else if (event.event_type === 'OWN_GOAL') {
+      const otherTeamId = matchData.home_team_id === event.team_id ? matchData.away_team_id : matchData.home_team_id
+      const key = `${event.match_id}:${otherTeamId}`
+      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
+      entry.goals += 1
+      teamGoalsInMatch.set(key, entry)
+    } else if (event.event_type === 'GOAL' || event.event_type === 'PENALTY_GOAL') {
+      const key = `${event.match_id}:${event.team_id}`
+      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
+      entry.goals += 1
+      teamGoalsInMatch.set(key, entry)
+    }
+  }
+
+  // Per-(person, match) stats
+  type PerPlayerStats = {
+    goals: number
+    assists: number
+    yellow: number
+    red: number
+  }
+  const perPlayerStats = new Map<string, PerPlayerStats>()
+  const ensurePerPlayer = (matchId: string, personId: string) => {
+    const key = `${matchId}:${personId}`
+    const existing = perPlayerStats.get(key)
+    if (existing) return existing
+    const fresh: PerPlayerStats = { goals: 0, assists: 0, yellow: 0, red: 0 }
+    perPlayerStats.set(key, fresh)
+    return fresh
+  }
+  for (const e of goalAndCardEvents) {
+    if (e.event_type === 'GOAL' || e.event_type === 'PENALTY_GOAL') {
+      if (e.primary_person_id) ensurePerPlayer(e.match_id, e.primary_person_id).goals += 1
+      if (e.secondary_person_id) ensurePerPlayer(e.match_id, e.secondary_person_id).assists += 1
+    } else if (e.event_type === 'OWN_GOAL') {
+      if (e.secondary_person_id) ensurePerPlayer(e.match_id, e.secondary_person_id).assists += 1
+    } else if (e.event_type === 'YELLOW_CARD') {
+      if (e.primary_person_id) ensurePerPlayer(e.match_id, e.primary_person_id).yellow += 1
+    } else if (e.event_type === 'RED_CARD' || e.event_type === 'SECOND_YELLOW_CARD') {
+      if (e.primary_person_id) ensurePerPlayer(e.match_id, e.primary_person_id).red += 1
+    }
+  }
+
+  // 7. Team names + fifa codes (via country/club)
+  const allTeamIds = [...new Set(
+    [...matchDataById.values()].flatMap((m) => [m.home_team_id, m.away_team_id])
+  )]
+  type TeamLinkRow = { id: string; country_id: string | null; club_id: string | null }
+  const teamLinks: TeamLinkRow[] = []
+  for (let i = 0; i < allTeamIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Teams')
+      .select('id, country_id, club_id')
+      .in('id', allTeamIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Teams (player filter rows): ${error.message}`)
+    teamLinks.push(...(data ?? []) as TeamLinkRow[])
+  }
+
+  const teamCountryIds = [...new Set(teamLinks.map((t) => t.country_id).filter((id): id is string => Boolean(id)))]
+  const teamClubIds = [...new Set(teamLinks.map((t) => t.club_id).filter((id): id is string => Boolean(id)))]
+
+  type CountryNameFifaRow = { id: string; name: string; fifa_code: string | null }
+  const countryNameFifaById = new Map<string, CountryNameFifaRow>()
+  for (let i = 0; i < teamCountryIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Countries')
+      .select('id, name, fifa_code')
+      .in('id', teamCountryIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Countries (player filter rows): ${error.message}`)
+    for (const row of (data ?? []) as CountryNameFifaRow[]) countryNameFifaById.set(row.id, row)
+  }
+
+  const clubNameById = new Map<string, string>()
+  for (let i = 0; i < teamClubIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Clubs')
+      .select('id, name')
+      .in('id', teamClubIds.slice(i, i + CHUNK_SIZE))
+    if (error) throw new Error(`tbl_Clubs (player filter rows): ${error.message}`)
+    for (const row of (data ?? []) as Array<{ id: string; name: string }>) clubNameById.set(row.id, row.name)
+  }
+
+  const getTeamName = (teamId: string): string => {
+    const link = teamLinks.find((t) => t.id === teamId)
+    if (!link) return '—'
+    if (link.country_id) return countryNameFifaById.get(link.country_id)?.name ?? '—'
+    if (link.club_id) return clubNameById.get(link.club_id) ?? '—'
+    return '—'
+  }
+  const getTeamFifaCode = (teamId: string): string | null => {
+    const link = teamLinks.find((t) => t.id === teamId)
+    if (!link?.country_id) return null
+    return countryNameFifaById.get(link.country_id)?.fifa_code ?? null
+  }
+
+  const polandCountryId = await getPolandCountryId(supabase)
+  const matchVenueById = await getMatchVenuesByMatchId(
+    supabase,
+    [...matchDataById.values()].map((m) => ({
+      id: m.id,
+      match_date: m.match_date,
+      match_stadium_id: m.match_stadium_id,
+      match_city_id: m.match_city_id,
+    }))
+  )
+
+  // 8. Build rows
+  const result = new Map<string, PlayerFilterMatch[]>()
+  for (const part of polandParticipants) {
+    const matchData = matchDataById.get(part.match_id)
+    if (!matchData) continue
+    const polandTeamId = matchPolandTeamIdMap.get(part.match_id) ?? null
+    if (!polandTeamId) continue
+
+    const competitionName = matchData.competition_id ? (competitionNameById.get(matchData.competition_id) ?? null) : null
+    const levelName = matchData.match_level_id ? (levelNameById.get(matchData.match_level_id) ?? null) : null
+    const competitionKey = mapCompetitionNameToFilterKey(competitionName)
+    const stageKey = mapLevelNameToStageKey(levelName)
+
+    const homeTeam = { name: getTeamName(matchData.home_team_id), fifa_code: getTeamFifaCode(matchData.home_team_id) }
+    const awayTeam = { name: getTeamName(matchData.away_team_id), fifa_code: getTeamFifaCode(matchData.away_team_id) }
+    const polandIsHome = matchData.home_team_id === polandTeamId
+    const polandFifaCode = getTeamFifaCode(polandTeamId)
+
+    // Player team: take from participation; if null, derive (Poland or opponent unclear → null).
+    const playerTeamId = part.team_id
+    const playerIsHome = playerTeamId
+      ? (playerTeamId === matchData.home_team_id ? true : playerTeamId === matchData.away_team_id ? false : null)
+      : null
+    const playerTeamFifaCode = playerTeamId ? getTeamFifaCode(playerTeamId) : null
+    const isPolandPlayer = Boolean(playerTeamId && playerTeamId === polandTeamId)
+
+    // Team-perspective score (from the player's team)
+    let goalsFor = 0
+    let goalsAgainst = 0
+    let outcome: 'W' | 'D' | 'L' | null = null
+    let finalScore: string | null = null
+    let shootoutScore: string | null = null
+
+    if (matchData.match_status === 'FINISHED') {
+      const myTeamId = playerTeamId ?? polandTeamId
+      const otherTeamId = myTeamId === matchData.home_team_id ? matchData.away_team_id : matchData.home_team_id
+      const myGoalsEntry = teamGoalsInMatch.get(`${part.match_id}:${myTeamId}`) ?? { goals: 0, shootoutGoals: 0 }
+      const theirGoalsEntry = teamGoalsInMatch.get(`${part.match_id}:${otherTeamId}`) ?? { goals: 0, shootoutGoals: 0 }
+      goalsFor = myGoalsEntry.goals
+      goalsAgainst = theirGoalsEntry.goals
+
+      const homeGoalsEntry = teamGoalsInMatch.get(`${part.match_id}:${matchData.home_team_id}`) ?? { goals: 0, shootoutGoals: 0 }
+      const awayGoalsEntry = teamGoalsInMatch.get(`${part.match_id}:${matchData.away_team_id}`) ?? { goals: 0, shootoutGoals: 0 }
+      finalScore = `${homeGoalsEntry.goals}:${awayGoalsEntry.goals}`
+
+      const isPenalties = matchData.result_type === 'PENALTIES' || matchData.result_type === 'EXTRA_TIME_AND_PENALTIES'
+      if (isPenalties) {
+        shootoutScore = `${homeGoalsEntry.shootoutGoals}:${awayGoalsEntry.shootoutGoals}`
+        outcome = 'D'
+      } else if (goalsFor > goalsAgainst) {
+        outcome = 'W'
+      } else if (goalsFor < goalsAgainst) {
+        outcome = 'L'
+      } else {
+        outcome = 'D'
+      }
+    }
+
+    // Venue (POV: player's team)
+    const venue = matchVenueById.get(part.match_id) ?? null
+    const playerCountryId = playerTeamId
+      ? (teamLinks.find((t) => t.id === playerTeamId)?.country_id ?? null)
+      : null
+    const opponentTeamIdForVenue = playerTeamId
+      ? (playerTeamId === matchData.home_team_id ? matchData.away_team_id : matchData.home_team_id)
+      : (polandIsHome ? matchData.away_team_id : matchData.home_team_id)
+    const opponentCountryId = teamLinks.find((t) => t.id === opponentTeamIdForVenue)?.country_id ?? null
+    let venueType: 'HOME' | 'AWAY' | 'NEUTRAL' | null = null
+    if (venue?.venue_country_id) {
+      const homeCountryRef = isPolandPlayer ? polandCountryId : playerCountryId
+      if (homeCountryRef && venue.venue_country_id === homeCountryRef) venueType = 'HOME'
+      else if (opponentCountryId && venue.venue_country_id === opponentCountryId) venueType = 'AWAY'
+      else venueType = 'NEUTRAL'
+    }
+
+    // Per-player stats
+    const stats = perPlayerStats.get(`${part.match_id}:${part.person_id}`) ?? { goals: 0, assists: 0, yellow: 0, red: 0 }
+    const isStarter = part.is_starting === true
+    const subOn = isStarter ? null : (subOnByMatchPerson.get(`${part.match_id}:${part.person_id}`) ?? null)
+    const subOff = subOffByMatchPerson.get(`${part.match_id}:${part.person_id}`) ?? null
+    const played = isStarter || Boolean(subOn)
+    const bench = !played
+
+    let minuteCount = 0
+    if (played) {
+      const hasExtraTime =
+        matchData.result_type === 'EXTRA_TIME' ||
+        matchData.result_type === 'EXTRA_TIME_AND_PENALTIES' ||
+        matchData.result_type === 'GOLDEN_GOAL'
+      const matchRegularEnd = hasExtraTime ? 120 : 90
+      const entryMin = isStarter ? 0 : (subOn!.minute)
+      const exitMin = subOff ? subOff.minute : matchRegularEnd
+      const exitExtra = subOff ? subOff.extra : 0
+      const effectiveEntry = entryMin > 0 ? entryMin - 1 : entryMin
+      const effectiveExitBase = subOff ? (exitExtra > 0 ? exitMin : exitMin - 1) : matchRegularEnd
+      const effectiveExit = Math.min(Math.max(0, effectiveExitBase), matchRegularEnd)
+      minuteCount = Math.max(0, effectiveExit - effectiveEntry)
+    }
+
+    const existing = result.get(part.person_id) ?? []
+    existing.push({
+      match_id: part.match_id,
+      match_date: matchData.match_date,
+      match_time: matchData.match_time,
+      match_status: matchData.match_status,
+      result_type: matchData.result_type,
+      walkover_winner_team_id: matchData.walkover_winner_team_id,
+      editorial_status: matchData.editorial_status,
+      competition_key: competitionKey,
+      competition_name: competitionName ?? '',
+      stage_key: stageKey,
+      match_level_name: levelName,
+      home_team_name: homeTeam.name,
+      away_team_name: awayTeam.name,
+      home_team_fifa_code: homeTeam.fifa_code,
+      away_team_fifa_code: awayTeam.fifa_code,
+      poland_team_id: polandTeamId,
+      poland_team_fifa_code: polandFifaCode,
+      poland_is_home: polandIsHome,
+      player_team_id: playerTeamId,
+      player_team_fifa_code: playerTeamFifaCode,
+      player_is_home: playerIsHome,
+      is_poland_player: isPolandPlayer,
+      goals_for: goalsFor,
+      goals_against: goalsAgainst,
+      final_score: finalScore,
+      shootout_score: shootoutScore,
+      outcome,
+      venue_country_id: venue?.venue_country_id ?? null,
+      venue_country_name: venue?.venue_country_name ?? null,
+      venue_city_id: venue?.venue_city_id ?? null,
+      venue_city_name: venue?.venue_city_name ?? null,
+      venue_stadium_id: venue?.venue_stadium_id ?? null,
+      venue_stadium_name: venue?.venue_stadium_name ?? null,
+      venue_type: venueType,
+      is_starting: part.is_starting,
+      played,
+      bench,
+      goal_count: stats.goals,
+      assist_count: stats.assists,
+      yellow_card_count: stats.yellow,
+      red_card_count: stats.red,
+      minute_count: minuteCount,
+    })
+    result.set(part.person_id, existing)
+  }
+
+  return result
+}
+
 async function getPersonStats(
   supabase: ReturnType<typeof createServiceRoleClient>,
   personIds: string[]
@@ -2729,10 +3232,11 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
   const refereeIds = people
     .filter((p) => (rolesByPersonId.get(p.id) ?? []).includes('REFEREE'))
     .map((p) => p.id)
-  const [statsByPersonId, coachResultStatsByPersonId, refereePolandFilterMatchesByPersonId] = await Promise.all([
+  const [statsByPersonId, coachResultStatsByPersonId, refereePolandFilterMatchesByPersonId, playerFilterMatchesByPersonId] = await Promise.all([
     getPersonStats(supabase, playerIds),
     getCoachResultStatsByPersonId(supabase, coachIds),
     getRefereePolandFilterMatchesByPersonId(supabase, refereeIds),
+    getPlayerFilterMatchesByPersonId(supabase, playerIds),
   ])
   const [hasPlayedAgainstPolandByPersonId, hasRepresentedPolandByPersonId, hasCoachedPolandByPersonId, hasCoachedAgainstPolandByPersonId, coachPolandTenureByPersonId, coachPolandFilterMatchesByPersonId] = await Promise.all([
     getPlayedAgainstPolandByPersonId(supabase, playerIds),
@@ -2810,6 +3314,7 @@ export async function getAdminPeople(): Promise<AdminPersonListItem[]> {
         coach_poland_last_match_date: coachPolandTenure?.lastMatchDate ?? null,
         coach_poland_filter_matches: coachPolandFilterMatches,
         referee_filter_matches: refereeFilterMatches,
+        player_filter_matches: playerFilterMatchesByPersonId.get(person.id) ?? [],
         referee_match_count: roleMatchCounts?.referee_match_count ?? 0,
         coach_wins: coachWins,
         coach_draws: coachDraws,
@@ -2973,6 +3478,7 @@ export async function getAdminPeoplePage(
         coach_poland_last_match_date: null,
         coach_poland_filter_matches: [],
         referee_filter_matches: [],
+        player_filter_matches: [],
         referee_match_count: roleMatchCounts?.referee_match_count ?? 0,
         coach_wins: 0,
         coach_draws: 0,
@@ -3121,6 +3627,7 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     coach_poland_last_match_date: null,
     coach_poland_filter_matches: [],
     referee_filter_matches: [],
+    player_filter_matches: [],
     referee_match_count: roleMatchCounts?.referee_match_count ?? 0,
     coach_wins: coachWins,
     coach_draws: coachDraws,
