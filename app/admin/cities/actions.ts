@@ -1,7 +1,9 @@
 ﻿'use server'
 
 import { redirect } from 'next/navigation'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { invalidatePublicCacheVersion } from '@/lib/db/publicCache'
 import type { InlineCreateState } from '@/lib/types/admin'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import {
@@ -14,6 +16,22 @@ import {
   redirectWithError,
   redirectWithSaved,
 } from '@/lib/actions/admin'
+
+function revalidateCityCaches(cityId?: string): void {
+  // Publiczny profil miasta agreguje dane z wielu domen — wszystkie odśwież.
+  revalidateTag('public-cities', 'max')
+  revalidateTag('public-people', 'max')
+  revalidateTag('public-clubs', 'max')
+  revalidateTag('public-matches', 'max')
+  if (cityId) revalidateTag(`public-city:${cityId}`, 'max')
+  revalidatePath('/admin/cities')
+  revalidatePath('/cities')
+  if (cityId) {
+    revalidatePath(`/admin/cities/${cityId}`)
+    revalidatePath(`/cities/${cityId}`)
+  }
+  invalidatePublicCacheVersion()
+}
 
 async function isPolandCountryId(countryId: string): Promise<boolean> {
   const supabase = createServiceRoleClient()
@@ -128,6 +146,7 @@ export async function createCity(formData: FormData): Promise<void> {
     redirectWithError('/admin/cities', 'Błąd zapisu powiązania miasto–kraj. Spróbuj ponownie.')
   }
 
+  revalidateCityCaches(cityId)
   redirectWithAdded('/admin/cities', cityName)
 }
 
@@ -199,6 +218,7 @@ export async function createCityInline(
     return inlineError(prevState, 'Błąd zapisu powiązania miasto–kraj. Spróbuj ponownie.')
   }
 
+  revalidateCityCaches(cityId)
   return inlineSuccess(prevState, cityId, cityName)
 }
 
@@ -266,6 +286,7 @@ export async function updateCity(formData: FormData): Promise<void> {
     }
   }
 
+  revalidateCityCaches(id)
   redirectWithSaved(`/admin/cities/${id}`)
 }
 
@@ -305,6 +326,7 @@ export async function deleteCity(formData: FormData): Promise<void> {
     )
   }
 
+  revalidateCityCaches(id)
   redirectWithAdded('/admin/cities', `Usunięto miasto: ${city?.city_name ?? id}`)
 }
 
@@ -351,6 +373,7 @@ export async function saveCityPeriod(formData: FormData): Promise<void> {
     }
   }
 
+  revalidateCityCaches(cityId)
   redirectWithSaved(`/admin/cities/${cityId}`)
 }
 
@@ -374,6 +397,7 @@ export async function deleteCityPeriod(formData: FormData): Promise<void> {
     redirectWithError(`/admin/cities/${cityId}`, 'Błąd usunięcia okresu. Spróbuj ponownie.')
   }
 
+  revalidateCityCaches(cityId)
   redirectWithSaved(`/admin/cities/${cityId}`)
 }
 

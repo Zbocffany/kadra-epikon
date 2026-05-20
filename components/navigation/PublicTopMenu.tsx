@@ -12,6 +12,7 @@ const menu = [
   { href: '/referees', label: 'Sędziowie' },
   { href: '/countries', label: 'Kraje' },
   { href: '/clubs', label: 'Kluby' },
+  { href: '/cities', label: 'Miasta' },
 ]
 
 function isActivePath(pathname: string, href: string) {
