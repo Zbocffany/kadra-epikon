@@ -7,6 +7,7 @@ import {
   getAdminCountriesOptions,
   getCityCountryPeriods,
 } from '@/lib/db/cities'
+import { validateCityCountryPeriods } from '@/lib/db/cityPeriodsValidation'
 import { getAdminFederations } from '@/lib/db/countries'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
@@ -62,6 +63,7 @@ export default async function AdminCityDetailsPage({
     ? periods.find((p) => p.id === period) ?? null
     : null
   const historyPeriods = periods.filter((p) => p.valid_from || p.valid_to)
+  const periodIssues = validateCityCountryPeriods(periods)
 
   const countryOptions = countries.map((c) => ({ id: c.id, label: c.name }))
 
@@ -248,6 +250,31 @@ export default async function AdminCityDetailsPage({
                 + Dodaj okres
               </Link>
             </div>
+
+            {periodIssues.length > 0 && (
+              <ul className="mb-4 space-y-1.5 rounded-lg border border-amber-700/60 bg-amber-950/40 p-3 text-xs">
+                {periodIssues.map((issue, i) => (
+                  <li
+                    key={i}
+                    className={
+                      issue.level === 'error'
+                        ? 'flex items-start gap-2 text-red-200'
+                        : 'flex items-start gap-2 text-amber-200'
+                    }
+                  >
+                    <span
+                      aria-hidden
+                      className={
+                        issue.level === 'error'
+                          ? 'mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-red-400'
+                          : 'mt-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-amber-400'
+                      }
+                    />
+                    <span>{issue.message}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
 
             {historyPeriods.length > 0 ? (
               <div className="relative flex flex-col">
