@@ -2,6 +2,13 @@ import { unstable_cache } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 import { getPublicCacheKey } from '@/lib/db/publicCache'
+import {
+  loadCityCountryPeriodsMap,
+  loadCountryInfoMap,
+  resolveCityCountry,
+  EMPTY_RESOLVED_CITY_COUNTRY,
+  type ResolvedCityCountry,
+} from '@/lib/db/cityCountryResolver'
 
 type CityCountryPeriod = {
   city_id: string
@@ -164,6 +171,11 @@ export type AdminPersonListItem = {
   birth_city_name: string | null
   birth_country_name: string | null
   birth_country_fifa_code: string | null
+  // Kraj aktualnie na terenie którego znajduje się birth_city. Gdy równy historycznemu —
+  // UI pokazuje tylko jedną flagę. Gdy się różni — konwencja "POL (UKR)".
+  birth_country_current_id: string | null
+  birth_country_current_name: string | null
+  birth_country_current_fifa_code: string | null
   represented_country_names: string[]
   represented_country_fifa_codes: (string | null)[]
   has_represented_poland?: boolean
@@ -3253,6 +3265,31 @@ export async function getAdminPeople(variant: PublicPeopleVariant = 'all'): Prom
     wantCoaches ? getCoachPolandFilterMatchesByPersonId(supabase, coachIds) : Promise.resolve(new Map<string, CoachPolandFilterMatch[]>()),
   ])
 
+  // Resolve historical (na birth_date) + aktualny kraj dla birth_city.
+  const birthCityIds = [...new Set(people.map((p) => p.birth_city_id).filter((id): id is string => Boolean(id)))]
+  const cityPeriodsMap = await loadCityCountryPeriodsMap(supabase, birthCityIds)
+  const extraCountryIds = new Set<string>()
+  for (const list of cityPeriodsMap.values()) for (const p of list) extraCountryIds.add(p.country_id)
+  for (const id of countryIds) extraCountryIds.add(id)
+  const resolverCountryMap = await loadCountryInfoMap(supabase, [...extraCountryIds])
+  const resolveBirthCountry = (personRow: { birth_city_id: string | null; birth_country_id: string | null; birth_date: string | null }): ResolvedCityCountry => {
+    if (!personRow.birth_city_id) {
+      const id = personRow.birth_country_id
+      if (!id) return EMPTY_RESOLVED_CITY_COUNTRY
+      const info = resolverCountryMap.get(id) ?? null
+      return {
+        historical_country_id: id,
+        historical_country_name: info?.name ?? null,
+        historical_country_fifa_code: info?.fifa_code ?? null,
+        current_country_id: id,
+        current_country_name: info?.name ?? null,
+        current_country_fifa_code: info?.fifa_code ?? null,
+      }
+    }
+    const periods = cityPeriodsMap.get(personRow.birth_city_id) ?? []
+    return resolveCityCountry(periods, personRow.birth_date, resolverCountryMap, personRow.birth_country_id)
+  }
+
   return people
     .map((person) => {
       const representedData = representedCountryDataByPersonId.get(person.id) ?? []
@@ -3274,6 +3311,7 @@ export async function getAdminPeople(variant: PublicPeopleVariant = 'all'): Prom
       const coachMatchCount = coachPolandMatchCount + coachAgainstPolandMatchCount
       const coachWins = coachStats?.coach_wins ?? 0
       const coachDraws = coachStats?.coach_draws ?? 0
+      const resolvedBirth = resolveBirthCountry(person)
 
       return {
         id: person.id,
@@ -3286,12 +3324,11 @@ export async function getAdminPeople(variant: PublicPeopleVariant = 'all'): Prom
         birth_city_id: person.birth_city_id,
         birth_country_id: person.birth_country_id,
         birth_city_name: person.birth_city_id ? (cityMap.get(person.birth_city_id) ?? null) : null,
-        birth_country_name: person.birth_country_id
-          ? (countryMap.get(person.birth_country_id) ?? null)
-          : null,
-        birth_country_fifa_code: person.birth_country_id
-          ? (countryFifaCodeMap.get(person.birth_country_id) ?? null)
-          : null,
+        birth_country_name: resolvedBirth.historical_country_name,
+        birth_country_fifa_code: resolvedBirth.historical_country_fifa_code,
+        birth_country_current_id: resolvedBirth.current_country_id,
+        birth_country_current_name: resolvedBirth.current_country_name,
+        birth_country_current_fifa_code: resolvedBirth.current_country_fifa_code,
         represented_country_names: representedNames,
         represented_country_fifa_codes: representedFifaCodes,
         has_represented_poland: hasRepresentedPolandByPersonId.get(person.id) ?? false,
@@ -3462,6 +3499,13 @@ export async function getAdminPeoplePage(
     people.map((person) => person.id)
   )
 
+  // Resolve historical + current birth country (city periods).
+  const birthCityIds = [...new Set(people.map((p) => p.birth_city_id).filter((id): id is string => Boolean(id)))]
+  const cityPeriodsMap = await loadCityCountryPeriodsMap(supabase, birthCityIds)
+  const extraCountryIds = new Set<string>(countryIds as string[])
+  for (const list of cityPeriodsMap.values()) for (const p of list) extraCountryIds.add(p.country_id)
+  const resolverCountryMap = await loadCountryInfoMap(supabase, [...extraCountryIds])
+
   return {
     items: people.map((person) => {
       const representedData = representedCountryDataByPersonId.get(person.id) ?? []
@@ -3471,6 +3515,21 @@ export async function getAdminPeoplePage(
       const representedFifaCodes = representedData.length ? representedData.map((d) => d.fifaCode) : (fallbackFifaCode ? [fallbackFifaCode] : [])
       const coachedData = coachedCountryDataByPersonId.get(person.id) ?? { names: [], fifaCodes: [] }
       const roleMatchCounts = roleMatchCountsByPersonId.get(person.id)
+      const resolvedBirth = person.birth_city_id
+        ? resolveCityCountry(cityPeriodsMap.get(person.birth_city_id) ?? [], person.birth_date, resolverCountryMap, person.birth_country_id)
+        : (person.birth_country_id
+          ? (() => {
+              const info = resolverCountryMap.get(person.birth_country_id!) ?? null
+              return {
+                historical_country_id: person.birth_country_id,
+                historical_country_name: info?.name ?? null,
+                historical_country_fifa_code: info?.fifa_code ?? null,
+                current_country_id: person.birth_country_id,
+                current_country_name: info?.name ?? null,
+                current_country_fifa_code: info?.fifa_code ?? null,
+              }
+            })()
+          : EMPTY_RESOLVED_CITY_COUNTRY)
 
       return {
         id: person.id,
@@ -3483,12 +3542,11 @@ export async function getAdminPeoplePage(
         birth_city_id: person.birth_city_id,
         birth_country_id: person.birth_country_id,
         birth_city_name: person.birth_city_id ? (cityMap.get(person.birth_city_id) ?? null) : null,
-        birth_country_name: person.birth_country_id
-          ? (countryMap.get(person.birth_country_id) ?? null)
-          : null,
-        birth_country_fifa_code: person.birth_country_id
-          ? (countryFifaCodeMap.get(person.birth_country_id) ?? null)
-          : null,
+        birth_country_name: resolvedBirth.historical_country_name,
+        birth_country_fifa_code: resolvedBirth.historical_country_fifa_code,
+        birth_country_current_id: resolvedBirth.current_country_id,
+        birth_country_current_name: resolvedBirth.current_country_name,
+        birth_country_current_fifa_code: resolvedBirth.current_country_fifa_code,
         represented_country_names: representedNames,
         represented_country_fifa_codes: representedFifaCodes,
         coached_country_names: coachedData.names,
@@ -3622,6 +3680,28 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
   const coachWins = coachStats?.coach_wins ?? 0
   const coachDraws = coachStats?.coach_draws ?? 0
 
+  // Resolve historical + current birth country.
+  const personBirthPeriods = person.birth_city_id
+    ? await loadCityCountryPeriodsMap(supabase, [person.birth_city_id])
+    : new Map()
+  const periodsForPerson = person.birth_city_id ? (personBirthPeriods.get(person.birth_city_id) ?? []) : []
+  const extraCountryIds = new Set<string>()
+  for (const p of periodsForPerson) extraCountryIds.add(p.country_id)
+  if (person.birth_country_id) extraCountryIds.add(person.birth_country_id)
+  const resolverCountryMap = await loadCountryInfoMap(supabase, [...extraCountryIds])
+  const resolvedBirth = person.birth_city_id
+    ? resolveCityCountry(periodsForPerson, person.birth_date, resolverCountryMap, person.birth_country_id)
+    : (person.birth_country_id
+      ? {
+          historical_country_id: person.birth_country_id,
+          historical_country_name: country?.name ?? null,
+          historical_country_fifa_code: country?.fifa_code ?? null,
+          current_country_id: person.birth_country_id,
+          current_country_name: country?.name ?? null,
+          current_country_fifa_code: country?.fifa_code ?? null,
+        }
+      : EMPTY_RESOLVED_CITY_COUNTRY)
+
   return {
     id: person.id,
     first_name: person.first_name,
@@ -3633,8 +3713,11 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     birth_city_id: person.birth_city_id,
     birth_country_id: person.birth_country_id,
     birth_city_name: city?.city_name ?? null,
-    birth_country_name: country?.name ?? null,
-    birth_country_fifa_code: country?.fifa_code ?? null,
+    birth_country_name: resolvedBirth.historical_country_name,
+    birth_country_fifa_code: resolvedBirth.historical_country_fifa_code,
+    birth_country_current_id: resolvedBirth.current_country_id,
+    birth_country_current_name: resolvedBirth.current_country_name,
+    birth_country_current_fifa_code: resolvedBirth.current_country_fifa_code,
     represented_country_ids: explicitRepresentedIds,
     represented_country_names: representedNames,
     represented_country_fifa_codes: representedFifaCodes,

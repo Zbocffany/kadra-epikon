@@ -33,6 +33,7 @@ import {
   DetailsPageContent,
 } from '@/components/admin/DetailsPageLayout'
 import CountryFlag from '@/components/CountryFlag'
+import CountryFlagWithHistory from '@/components/CountryFlagWithHistory'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 import PersonBirthplaceFields from '@/components/admin/PersonBirthplaceFields'
 import PersonRepresentedCountriesFields from '@/components/admin/PersonRepresentedCountriesFields'
@@ -310,9 +311,11 @@ export default async function AdminPersonDetailsPage({
                   : 'stat-badge inline-flex items-center gap-1.5 rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900'}>
                   {person.birth_city_name}
                   {person.birth_country_fifa_code && (
-                    <CountryFlag
-                      fifaCode={person.birth_country_fifa_code}
-                      countryName={person.birth_country_name ?? '—'}
+                    <CountryFlagWithHistory
+                      historicalFifaCode={person.birth_country_fifa_code}
+                      historicalCountryName={person.birth_country_name ?? '—'}
+                      currentFifaCode={person.birth_country_current_fifa_code ?? null}
+                      currentCountryName={person.birth_country_current_name ?? null}
                       className="h-[13.5px] w-[20px]"
                     />
                   )}
@@ -330,9 +333,11 @@ export default async function AdminPersonDetailsPage({
               </p>
               <div className="mt-0.5 flex items-center gap-1.5 text-sm text-neutral-400">
                 <span>{person.birth_city_name ?? '—'}</span>
-                <CountryFlag
-                  fifaCode={person.birth_country_fifa_code}
-                  countryName={person.birth_country_name ?? '—'}
+                <CountryFlagWithHistory
+                  historicalFifaCode={person.birth_country_fifa_code}
+                  historicalCountryName={person.birth_country_name ?? '—'}
+                  currentFifaCode={person.birth_country_current_fifa_code ?? null}
+                  currentCountryName={person.birth_country_current_name ?? null}
                   className="h-[13.5px] w-[20px]"
                 />
               </div>

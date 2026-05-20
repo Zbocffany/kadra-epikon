@@ -5,7 +5,7 @@ import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import AdminSearchableTable from '@/components/admin/AdminSearchableTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import type { AdminClub } from '@/lib/db/clubs'
-import CountryFlag from '@/components/CountryFlag'
+import CountryFlagWithHistory from '@/components/CountryFlagWithHistory'
 import PlayerSilhouetteIcon from '@/components/icons/PlayerSilhouetteIcon'
 import PitchIcon from '@/components/icons/PitchIcon'
 import { GoalIcon } from '@/components/icons'
@@ -40,7 +40,13 @@ export default function ClubsSearchTable({
       headerRender: () => null,
       render: (club) => (
         <div className="flex items-center gap-2.5">
-          <CountryFlag fifaCode={club.country_fifa_code} countryName={club.country_name ?? '—'} className="h-3.5 w-[21px] shrink-0" />
+          <CountryFlagWithHistory
+            historicalFifaCode={club.country_fifa_code}
+            historicalCountryName={club.country_name ?? '—'}
+            currentFifaCode={club.country_current_fifa_code}
+            currentCountryName={club.country_current_name}
+            className="h-3.5 w-[21px] shrink-0"
+          />
           <div className="relative inline-flex group/tooltip">
             <SmartPrefetchLink
               href={`${basePath}/${club.id}`}

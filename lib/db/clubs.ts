@@ -2,13 +2,22 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 import { getPublicCacheKey } from '@/lib/db/publicCache'
+import {
+  loadCityCountryPeriodsMap,
+  loadCountryInfoMap,
+  resolveCityCountry,
+} from '@/lib/db/cityCountryResolver'
 
 export type AdminClub = {
   id: string
   name: string
   city_name: string | null
+  // Historyczny kraj = w momencie założenia klubu (z tbl_Club_History FOUNDED).
+  // Fallback gdy brak FOUNDED = aktualny.
   country_name: string | null
   country_fifa_code: string | null
+  country_current_name: string | null
+  country_current_fifa_code: string | null
   player_count: number
   appearance_count: number
   goal_count: number
@@ -252,8 +261,11 @@ export type AdminClubDetails = {
   name: string
   club_city_id: string | null
   city_name: string | null
+  // Historyczny kraj = w momencie założenia klubu (z tbl_Club_History FOUNDED).
   country_name: string | null
   country_fifa_code: string | null
+  country_current_name: string | null
+  country_current_fifa_code: string | null
   stadium_id: string | null
   stadium_name: string | null
 }
@@ -311,6 +323,33 @@ export type AdminClubHistoryEvent = {
   event_order: number | null
 }
 
+// Bulk loader: dla podanego zbioru club_id zwraca Map<club_id, najwcześniejsza data FOUNDED>.
+// Klub może mieć wiele FOUNDED (np. REFORMED), ale dla "historycznego kraju" interesuje nas
+// pierwsze założenie.
+async function getEarliestFoundedDatesByClubIds(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  clubIds: string[]
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>()
+  if (!clubIds.length) return map
+  const BATCH = 250
+  for (let i = 0; i < clubIds.length; i += BATCH) {
+    const chunk = clubIds.slice(i, i + BATCH)
+    const { data, error } = await supabase
+      .from('tbl_Club_History')
+      .select('club_id, event_date')
+      .eq('event_type', 'FOUNDED')
+      .in('club_id', chunk)
+      .not('event_date', 'is', null)
+    if (error) throw new Error(`tbl_Club_History (founded): ${error.message}`)
+    for (const row of (data ?? []) as Array<{ club_id: string; event_date: string }>) {
+      const prev = map.get(row.club_id)
+      if (!prev || row.event_date < prev) map.set(row.club_id, row.event_date)
+    }
+  }
+  return map
+}
+
 export async function getAdminClubs(): Promise<AdminClub[]> {
   const supabase = createServiceRoleClient()
 
@@ -328,66 +367,46 @@ export async function getAdminClubs(): Promise<AdminClub[]> {
     const stats = await getClubStats(supabase, clubs.map((c) => c.id))
     return clubs.map((c) => {
       const s = stats.get(c.id)
-      return { id: c.id, name: c.name, city_name: null, country_name: null, country_fifa_code: null, player_count: s?.player_count ?? 0, appearance_count: s?.appearance_count ?? 0, goal_count: s?.goal_count ?? 0 }
+      return { id: c.id, name: c.name, city_name: null, country_name: null, country_fifa_code: null, country_current_name: null, country_current_fifa_code: null, player_count: s?.player_count ?? 0, appearance_count: s?.appearance_count ?? 0, goal_count: s?.goal_count ?? 0 }
     })
   }
 
   const [
     { data: cities, error: citiesError },
-    periods,
+    cityPeriodsMap,
+    foundedDateByClubId,
   ] = await Promise.all([
     supabase
       .from('tbl_Cities')
       .select('id, city_name')
-      .in('id', cityIds),
-    getCityCountryPeriodsByCityIds(supabase, cityIds),
+      .in('id', cityIds as string[]),
+    loadCityCountryPeriodsMap(supabase, cityIds as string[]),
+    getEarliestFoundedDatesByClubIds(supabase, clubs.map((c) => c.id)),
   ])
 
   if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
 
   const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
 
-  const periodsByCity = new Map<string, CityCountryPeriod[]>()
-  for (const period of periods) {
-    const list = periodsByCity.get(period.city_id) ?? []
-    list.push(period)
-    periodsByCity.set(period.city_id, list)
-  }
-
-  const currentCountryIdByCity = new Map<string, string>()
-  for (const cityId of cityIds) {
-    const current = sortPeriods(periodsByCity.get(cityId) ?? [])[0]
-    if (current?.country_id) {
-      currentCountryIdByCity.set(cityId, current.country_id)
-    }
-  }
-
-  const countryIds = [...new Set([...currentCountryIdByCity.values()])]
-  let countryMap = new Map<string, string>()
-  let countryFifaCodeMap = new Map<string, string | null>()
-
-  if (countryIds.length) {
-    const { data: countries, error: countriesError } = await supabase
-      .from('tbl_Countries')
-      .select('id, name, fifa_code')
-      .in('id', countryIds)
-
-    if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
-    countryMap = new Map((countries ?? []).map((country) => [country.id, country.name]))
-    countryFifaCodeMap = new Map((countries ?? []).map((country) => [country.id, country.fifa_code ?? null]))
-  }
+  const allCountryIds = new Set<string>()
+  for (const list of cityPeriodsMap.values()) for (const p of list) allCountryIds.add(p.country_id)
+  const countryInfoMap = await loadCountryInfoMap(supabase, [...allCountryIds])
 
   const stats = await getClubStats(supabase, clubs.map((c) => c.id))
 
   return clubs.map((c) => {
-    const countryId = c.club_city_id ? currentCountryIdByCity.get(c.club_city_id) : undefined
     const s = stats.get(c.id)
+    const periods = c.club_city_id ? (cityPeriodsMap.get(c.club_city_id) ?? []) : []
+    const founded = foundedDateByClubId.get(c.id) ?? null
+    const resolved = resolveCityCountry(periods, founded, countryInfoMap, null)
     return {
       id: c.id,
       name: c.name,
       city_name: c.club_city_id ? (cityMap.get(c.club_city_id) ?? null) : null,
-      country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
-      country_fifa_code: countryId ? (countryFifaCodeMap.get(countryId) ?? null) : null,
+      country_name: resolved.historical_country_name,
+      country_fifa_code: resolved.historical_country_fifa_code,
+      country_current_name: resolved.current_country_name,
+      country_current_fifa_code: resolved.current_country_fifa_code,
       player_count: s?.player_count ?? 0,
       appearance_count: s?.appearance_count ?? 0,
       goal_count: s?.goal_count ?? 0,
@@ -427,65 +446,45 @@ export async function getAdminClubsPage(
 
   if (!cityIds.length) {
     return {
-      items: clubs.map((c) => ({ id: c.id, name: c.name, city_name: null, country_name: null, country_fifa_code: null, player_count: 0, appearance_count: 0, goal_count: 0 })),
+      items: clubs.map((c) => ({ id: c.id, name: c.name, city_name: null, country_name: null, country_fifa_code: null, country_current_name: null, country_current_fifa_code: null, player_count: 0, appearance_count: 0, goal_count: 0 })),
       total: count ?? 0,
     }
   }
 
   const [
     { data: cities, error: citiesError },
-    periods,
+    cityPeriodsMap,
+    foundedDateByClubId,
   ] = await Promise.all([
     supabase
       .from('tbl_Cities')
       .select('id, city_name')
-      .in('id', cityIds),
-    getCityCountryPeriodsByCityIds(supabase, cityIds),
+      .in('id', cityIds as string[]),
+    loadCityCountryPeriodsMap(supabase, cityIds as string[]),
+    getEarliestFoundedDatesByClubIds(supabase, clubs.map((c) => c.id)),
   ])
 
   if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
 
   const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
 
-  const periodsByCity = new Map<string, CityCountryPeriod[]>()
-  for (const period of periods) {
-    const list = periodsByCity.get(period.city_id) ?? []
-    list.push(period)
-    periodsByCity.set(period.city_id, list)
-  }
-
-  const currentCountryIdByCity = new Map<string, string>()
-  for (const cityId of cityIds) {
-    const current = sortPeriods(periodsByCity.get(cityId) ?? [])[0]
-    if (current?.country_id) {
-      currentCountryIdByCity.set(cityId, current.country_id)
-    }
-  }
-
-  const countryIds = [...new Set([...currentCountryIdByCity.values()])]
-  let countryMap = new Map<string, string>()
-  let countryFifaCodeMap = new Map<string, string | null>()
-
-  if (countryIds.length) {
-    const { data: countries, error: countriesError } = await supabase
-      .from('tbl_Countries')
-      .select('id, name, fifa_code')
-      .in('id', countryIds)
-
-    if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
-    countryMap = new Map((countries ?? []).map((country) => [country.id, country.name]))
-    countryFifaCodeMap = new Map((countries ?? []).map((country) => [country.id, country.fifa_code ?? null]))
-  }
+  const allCountryIds = new Set<string>()
+  for (const list of cityPeriodsMap.values()) for (const p of list) allCountryIds.add(p.country_id)
+  const countryInfoMap = await loadCountryInfoMap(supabase, [...allCountryIds])
 
   return {
     items: clubs.map((c) => {
-      const countryId = c.club_city_id ? currentCountryIdByCity.get(c.club_city_id) : undefined
+      const periods = c.club_city_id ? (cityPeriodsMap.get(c.club_city_id) ?? []) : []
+      const founded = foundedDateByClubId.get(c.id) ?? null
+      const resolved = resolveCityCountry(periods, founded, countryInfoMap, null)
       return {
         id: c.id,
         name: c.name,
         city_name: c.club_city_id ? (cityMap.get(c.club_city_id) ?? null) : null,
-        country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
-        country_fifa_code: countryId ? (countryFifaCodeMap.get(countryId) ?? null) : null,
+        country_name: resolved.historical_country_name,
+        country_fifa_code: resolved.historical_country_fifa_code,
+        country_current_name: resolved.current_country_name,
+        country_current_fifa_code: resolved.current_country_fifa_code,
         player_count: 0,
         appearance_count: 0,
         goal_count: 0,
@@ -583,6 +582,8 @@ export async function getAdminClubDetails(
       city_name: null,
       country_name: null,
       country_fifa_code: null,
+      country_current_name: null,
+      country_current_fifa_code: null,
       stadium_id: club.stadium_id ?? null,
       stadium_name: null,
     }
@@ -590,7 +591,8 @@ export async function getAdminClubDetails(
 
   const [
     { data: city, error: cityError },
-    { data: periods, error: periodError },
+    cityPeriodsMap,
+    foundedDateByClubId,
     { data: stadium, error: stadiumError },
   ] = await Promise.all([
     supabase
@@ -598,10 +600,8 @@ export async function getAdminClubDetails(
       .select('id, city_name')
       .eq('id', club.club_city_id)
       .maybeSingle(),
-    supabase
-      .from('tbl_City_Country_Periods')
-      .select('country_id, valid_from, valid_to')
-      .eq('city_id', club.club_city_id),
+    loadCityCountryPeriodsMap(supabase, [club.club_city_id]),
+    getEarliestFoundedDatesByClubIds(supabase, [club.id]),
     club.stadium_id
       ? supabase
           .from('tbl_Stadiums')
@@ -612,54 +612,23 @@ export async function getAdminClubDetails(
   ])
 
   if (cityError) throw new Error(`tbl_Cities: ${cityError.message}`)
-  if (periodError) {
-    throw new Error(`tbl_City_Country_Periods: ${periodError.message}`)
-  }
   if (stadiumError) throw new Error(`tbl_Stadiums: ${stadiumError.message}`)
 
-  const sortedPeriods = [...(periods ?? [])].sort((a, b) => {
-    // Prefer current assignment (valid_to is null), otherwise newest period.
-    const aCurrent = a.valid_to === null
-    const bCurrent = b.valid_to === null
-
-    if (aCurrent !== bCurrent) return aCurrent ? -1 : 1
-
-    const aTo = a.valid_to ? new Date(a.valid_to).getTime() : Number.NEGATIVE_INFINITY
-    const bTo = b.valid_to ? new Date(b.valid_to).getTime() : Number.NEGATIVE_INFINITY
-    if (aTo !== bTo) return bTo - aTo
-
-    const aFrom = a.valid_from
-      ? new Date(a.valid_from).getTime()
-      : Number.NEGATIVE_INFINITY
-    const bFrom = b.valid_from
-      ? new Date(b.valid_from).getTime()
-      : Number.NEGATIVE_INFINITY
-    return bFrom - aFrom
-  })
-
-  const countryId = sortedPeriods[0]?.country_id ?? null
-  let countryName: string | null = null
-  let countryFifaCode: string | null = null
-
-  if (countryId) {
-    const { data: country, error: countryError } = await supabase
-      .from('tbl_Countries')
-      .select('name, fifa_code')
-      .eq('id', countryId)
-      .maybeSingle()
-
-    if (countryError) throw new Error(`tbl_Countries: ${countryError.message}`)
-    countryName = country?.name ?? null
-    countryFifaCode = country?.fifa_code ?? null
-  }
+  const periods = cityPeriodsMap.get(club.club_city_id) ?? []
+  const allCountryIds = [...new Set(periods.map((p) => p.country_id))]
+  const countryInfoMap = await loadCountryInfoMap(supabase, allCountryIds)
+  const founded = foundedDateByClubId.get(club.id) ?? null
+  const resolved = resolveCityCountry(periods, founded, countryInfoMap, null)
 
   return {
     id: club.id,
     name: club.name,
     club_city_id: club.club_city_id,
     city_name: city?.city_name ?? null,
-    country_name: countryName,
-    country_fifa_code: countryFifaCode,
+    country_name: resolved.historical_country_name,
+    country_fifa_code: resolved.historical_country_fifa_code,
+    country_current_name: resolved.current_country_name,
+    country_current_fifa_code: resolved.current_country_fifa_code,
     stadium_id: club.stadium_id ?? null,
     stadium_name: stadium?.name ?? null,
   }

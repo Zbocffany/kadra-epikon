@@ -21,7 +21,7 @@ import ConfirmSubmitButton from '@/components/admin/ConfirmSubmitButton'
 import AdminCancelLink from '@/components/admin/AdminCancelLink'
 import ClubCityCountryFields from '@/components/admin/ClubCityCountryFields'
 import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
-import CountryFlag from '@/components/CountryFlag'
+import CountryFlagWithHistory from '@/components/CountryFlagWithHistory'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { createStadiumInline } from '@/app/admin/stadiums/actions'
 import PlayerSilhouetteIcon from '@/components/icons/PlayerSilhouetteIcon'
@@ -205,7 +205,13 @@ export default async function AdminClubDetailsPage({
           </span>
         ) : undefined}
         headerRight={!isPublic && club.country_fifa_code ? (
-          <CountryFlag fifaCode={club.country_fifa_code} countryName={club.country_name ?? '—'} className="h-10 w-[60px]" />
+          <CountryFlagWithHistory
+            historicalFifaCode={club.country_fifa_code}
+            historicalCountryName={club.country_name ?? '—'}
+            currentFifaCode={club.country_current_fifa_code}
+            currentCountryName={club.country_current_name}
+            className="h-10 w-[60px]"
+          />
         ) : undefined}
         containerClassName={isPublic
           ? 'relative overflow-hidden rounded-xl border border-emerald-900/70 bg-[linear-gradient(165deg,#2d7a52_0%,#1e603f_18%,#134b33_40%,#0f3f2b_60%,#0b3423_80%,#08281c_100%)] p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.34),0_8px_18px_rgba(0,0,0,0.28)]'
@@ -251,9 +257,11 @@ export default async function AdminClubDetailsPage({
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   {club.country_fifa_code ? (
-                    <CountryFlag
-                      fifaCode={club.country_fifa_code}
-                      countryName={club.country_name ?? '—'}
+                    <CountryFlagWithHistory
+                      historicalFifaCode={club.country_fifa_code}
+                      historicalCountryName={club.country_name ?? '—'}
+                      currentFifaCode={club.country_current_fifa_code}
+                      currentCountryName={club.country_current_name}
                       glossy
                       className="h-[33px] w-[50px] ring-1 ring-neutral-500/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_1px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.7),0_4px_8px_rgba(0,0,0,0.45)]"
                     />

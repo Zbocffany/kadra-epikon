@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import type { AdminClub } from '@/lib/db/clubs'
-import CountryFlag from '@/components/CountryFlag'
+import CountryFlagWithHistory from '@/components/CountryFlagWithHistory'
 import SortableStatHeader from '@/components/admin/SortableStatHeader'
 import PlayerSilhouetteIcon from '@/components/icons/PlayerSilhouetteIcon'
 import PitchIcon from '@/components/icons/PitchIcon'
@@ -104,7 +104,13 @@ export default function PublicClubsSearchTable({ clubs }: { clubs: AdminClub[] }
                   <td className="px-4 py-3 text-neutral-500 text-sm">{i + 1}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2.5">
-                      <CountryFlag fifaCode={club.country_fifa_code} countryName={club.country_name ?? '—'} className="h-3.5 w-[21px] shrink-0" />
+                      <CountryFlagWithHistory
+                        historicalFifaCode={club.country_fifa_code}
+                        historicalCountryName={club.country_name ?? '—'}
+                        currentFifaCode={club.country_current_fifa_code}
+                        currentCountryName={club.country_current_name}
+                        className="h-3.5 w-[21px] shrink-0"
+                      />
                       <SmartPrefetchLink
                         href={`/clubs/${club.id}`}
                         className="inline-flex rounded-md border border-neutral-700 bg-neutral-900 px-2.5 py-1 text-xs font-semibold text-neutral-200 hover:bg-neutral-800"

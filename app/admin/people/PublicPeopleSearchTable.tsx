@@ -4,6 +4,7 @@ import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import CountryFlag from '@/components/CountryFlag'
+import CountryFlagWithHistory from '@/components/CountryFlagWithHistory'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
 import type { AdminPersonListItem, CoachCompetitionFilterKey, CoachStageFilterKey, CoachPolandFilterMatch, RefereeFilterMatch, PlayerFilterMatch } from '@/lib/db/people'
@@ -1921,9 +1922,11 @@ export default function PublicPeopleSearchTable({
                             )}
                           </SmartPrefetchLink>
                           {person.birth_country_name ? (
-                            <CountryFlag
-                              fifaCode={person.birth_country_fifa_code ?? null}
-                              countryName={person.birth_country_name}
+                            <CountryFlagWithHistory
+                              historicalFifaCode={person.birth_country_fifa_code ?? null}
+                              historicalCountryName={person.birth_country_name}
+                              currentFifaCode={person.birth_country_current_fifa_code ?? null}
+                              currentCountryName={person.birth_country_current_name ?? null}
                               className="h-3.5 w-[21px] shrink-0"
                             />
                           ) : null}
@@ -1966,9 +1969,11 @@ export default function PublicPeopleSearchTable({
                         {variant === 'coaches' ? (
                           isPublicCoachesView && coachMode === 'poland' ? (
                             person.birth_country_name ? (
-                              <CountryFlag
-                                fifaCode={person.birth_country_fifa_code ?? null}
-                                countryName={person.birth_country_name}
+                              <CountryFlagWithHistory
+                                historicalFifaCode={person.birth_country_fifa_code ?? null}
+                                historicalCountryName={person.birth_country_name}
+                                currentFifaCode={person.birth_country_current_fifa_code ?? null}
+                                currentCountryName={person.birth_country_current_name ?? null}
                                 className="h-3.5 w-[21px] shrink-0"
                               />
                             ) : null
@@ -2001,9 +2006,11 @@ export default function PublicPeopleSearchTable({
                               {isPublicPlayersView && playerMode === 'poland' && person.birth_country_name && person.birth_country_name !== 'Polska' && (
                                 <>
                                   <span className="mx-0.5 text-neutral-600 text-[10px]">·</span>
-                                  <CountryFlag
-                                    fifaCode={person.birth_country_fifa_code ?? null}
-                                    countryName={person.birth_country_name}
+                                  <CountryFlagWithHistory
+                                    historicalFifaCode={person.birth_country_fifa_code ?? null}
+                                    historicalCountryName={person.birth_country_name}
+                                    currentFifaCode={person.birth_country_current_fifa_code ?? null}
+                                    currentCountryName={person.birth_country_current_name ?? null}
                                     className="h-3.5 w-[21px] shrink-0 opacity-60"
                                   />
                                 </>
