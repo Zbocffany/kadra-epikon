@@ -169,3 +169,75 @@ export async function loadCountryInfoMap(
   }
   return map
 }
+
+export type CityCountryTimelineEntry = {
+  country_id: string
+  country_name: string | null
+  country_fifa_code: string | null
+  valid_from: string | null
+  valid_to: string | null
+}
+
+/**
+ * Buduje chronologiczny timeline przynależności miasta do krajów.
+ *
+ * @param periods    Wszystkie okresy dla danego miasta (wyfiltrowane po city_id).
+ * @param countryMap Mapa country_id → { name, fifa_code }.
+ * @param sinceDate  Jeśli podany, pomija okresy zakończone PRZED tą datą
+ *                   (np. dla osoby = birth_date; dla klubu = data założenia).
+ *                   Null = brak filtra (pełna historia).
+ *
+ * Kolejność wyniku: chronologicznie od najstarszego do najnowszego —
+ * (valid_from NULLS FIRST), potem (valid_to NULLS LAST).
+ *
+ * UWAGA: nie deduplikujemy globalnie po country_id. Jeśli miasto wracało
+ * do tego samego kraju po okresie pośrednim, każdy okres musi pozostać
+ * osobnym wpisem, bo inaczej psuje się kolejność i zakresy dat.
+ */
+export function buildCityCountryTimeline(
+  periods: CityCountryPeriodRow[],
+  countryMap: Map<string, CountryInfo>,
+  sinceDate: string | null = null,
+): CityCountryTimelineEntry[] {
+  if (!periods.length) return []
+
+  const sinceTs = sinceDate ? new Date(sinceDate).getTime() : null
+  const validSince = sinceTs !== null && !Number.isNaN(sinceTs) ? sinceTs : null
+
+  const filtered = validSince === null
+    ? periods
+    : periods.filter((p) => {
+        if (p.valid_to === null) return true
+        const to = new Date(p.valid_to).getTime()
+        if (Number.isNaN(to)) return true
+        return to >= validSince
+      })
+
+  const sorted = [...filtered].sort((a, b) => {
+    // valid_from NULLS FIRST (otwarty początek = najstarszy znany).
+    const aFromNull = a.valid_from === null
+    const bFromNull = b.valid_from === null
+    if (aFromNull !== bFromNull) return aFromNull ? -1 : 1
+    const aFrom = a.valid_from ? new Date(a.valid_from).getTime() : 0
+    const bFrom = b.valid_from ? new Date(b.valid_from).getTime() : 0
+    if (aFrom !== bFrom) return aFrom - bFrom
+    // valid_to NULLS LAST (otwarty koniec = najnowszy).
+    const aToNull = a.valid_to === null
+    const bToNull = b.valid_to === null
+    if (aToNull !== bToNull) return aToNull ? 1 : -1
+    const aTo = a.valid_to ? new Date(a.valid_to).getTime() : 0
+    const bTo = b.valid_to ? new Date(b.valid_to).getTime() : 0
+    return aTo - bTo
+  })
+
+  return sorted.map((p) => {
+    const info = countryMap.get(p.country_id)
+    return {
+      country_id: p.country_id,
+      country_name: info?.name ?? null,
+      country_fifa_code: info?.fifa_code ?? null,
+      valid_from: p.valid_from,
+      valid_to: p.valid_to,
+    }
+  })
+}

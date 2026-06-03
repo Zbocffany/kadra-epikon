@@ -4,7 +4,6 @@ import { getPublicCacheKey } from '@/lib/db/publicCache'
 import {
   loadCityCountryPeriodsMap,
   loadCountryInfoMap,
-  resolveCityCountry,
   type ResolvedCityCountry,
 } from '@/lib/db/cityCountryResolver'
 
@@ -76,26 +75,39 @@ function buildPersonDisplayName(p: {
 async function getAdminCityProfile(id: string): Promise<PublicCityProfile | null> {
   const supabase = createServiceRoleClient()
 
-  // 1. Miasto.
+  // 1. Miasto + aktualny kraj (denormalizacja w tbl_Cities; patrz migracja 038).
   const { data: city, error: cityError } = await supabase
     .from('tbl_Cities')
-    .select('id, city_name, voivodeship')
+    .select('id, city_name, voivodeship, current_country_id')
     .eq('id', id)
     .maybeSingle()
   if (cityError) throw new Error(`tbl_Cities: ${cityError.message}`)
   if (!city) return null
 
-  // 2. Okresy miasto→kraj + kraje.
+  // 2. Okresy miasto→kraj (TYLKO datowane po migracji 038) + kraje (rozszerzone
+  //    o current_country_id, by zbudować ResolvedCityCountry).
   const cityPeriodsMap = await loadCityCountryPeriodsMap(supabase, [id])
   const rawPeriods = cityPeriodsMap.get(id) ?? []
-  const allCountryIds = [...new Set(rawPeriods.map((p) => p.country_id))]
-  const countryInfoMap = await loadCountryInfoMap(supabase, allCountryIds)
+  const allCountryIds = new Set<string>(rawPeriods.map((p) => p.country_id))
+  if (city.current_country_id) allCountryIds.add(city.current_country_id)
+  const countryInfoMap = await loadCountryInfoMap(supabase, [...allCountryIds])
 
-  // Aktualny kraj (referenceDate = dziś).
-  const today = new Date().toISOString().slice(0, 10)
-  const current = resolveCityCountry(rawPeriods, today, countryInfoMap, null)
+  // Aktualny kraj = z tbl_Cities (źródło prawdy). Historyczny = ten sam, bo
+  // referencją jest "dziś". Dla widoków people/clubs liczymy różnice w lib/db/people.ts.
+  const currentInfo = city.current_country_id
+    ? countryInfoMap.get(city.current_country_id) ?? null
+    : null
+  const current: ResolvedCityCountry = {
+    historical_country_id: city.current_country_id ?? null,
+    historical_country_name: currentInfo?.name ?? null,
+    historical_country_fifa_code: currentInfo?.fifa_code ?? null,
+    current_country_id: city.current_country_id ?? null,
+    current_country_name: currentInfo?.name ?? null,
+    current_country_fifa_code: currentInfo?.fifa_code ?? null,
+  }
 
-  // Periods z id-kami (do listy w UI).
+  // Periods z id-kami (do listy w UI). Po migracji 038 nie ma już wierszy
+  // NULL/NULL — CHECK w bazie tego pilnuje.
   const { data: periodRows, error: periodRowsErr } = await supabase
     .from('tbl_City_Country_Periods')
     .select('id, country_id, valid_from, valid_to')
@@ -350,7 +362,7 @@ async function getAdminPublicCityList(): Promise<PublicCityListItem[]> {
 
   const { data: cities, error: citiesErr } = await supabase
     .from('tbl_Cities')
-    .select('id, city_name')
+    .select('id, city_name, current_country_id')
     .order('city_name', { ascending: true })
   if (citiesErr) throw new Error(`tbl_Cities: ${citiesErr.message}`)
   if (!cities?.length) return []
@@ -412,22 +424,21 @@ async function getAdminPublicCityList(): Promise<PublicCityListItem[]> {
     }
   }
 
-  // Aktualny kraj per miasto.
-  const cityPeriodsMap = await loadCityCountryPeriodsMap(supabase, cityIds)
-  const allCountryIds = new Set<string>()
-  for (const list of cityPeriodsMap.values()) for (const p of list) allCountryIds.add(p.country_id)
-  const countryInfoMap = await loadCountryInfoMap(supabase, [...allCountryIds])
-  const today = new Date().toISOString().slice(0, 10)
+  // Aktualny kraj per miasto — czytamy bezpośrednio z tbl_Cities.current_country_id
+  // (denormalizacja, patrz migracja 038).
+  const currentCountryIds = [
+    ...new Set(cities.map((c) => c.current_country_id).filter((x): x is string => Boolean(x))),
+  ]
+  const countryInfoMap = await loadCountryInfoMap(supabase, currentCountryIds)
 
   return cities
     .map((c) => {
-      const periods = cityPeriodsMap.get(c.id) ?? []
-      const resolved = resolveCityCountry(periods, today, countryInfoMap, null)
+      const info = c.current_country_id ? countryInfoMap.get(c.current_country_id) ?? null : null
       return {
         id: c.id,
         city_name: c.city_name ?? '—',
-        current_country_name: resolved.current_country_name,
-        current_country_fifa_code: resolved.current_country_fifa_code,
+        current_country_name: info?.name ?? null,
+        current_country_fifa_code: info?.fifa_code ?? null,
         person_count: personCount.get(c.id) ?? 0,
         club_count: clubCount.get(c.id) ?? 0,
         match_count: matchCount.get(c.id) ?? 0,

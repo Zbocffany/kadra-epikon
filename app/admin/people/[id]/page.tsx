@@ -34,6 +34,7 @@ import {
 } from '@/components/admin/DetailsPageLayout'
 import CountryFlag from '@/components/CountryFlag'
 import CountryFlagWithHistory from '@/components/CountryFlagWithHistory'
+import CityCountryTimeline from '@/components/CityCountryTimeline'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 import PersonBirthplaceFields from '@/components/admin/PersonBirthplaceFields'
 import PersonRepresentedCountriesFields from '@/components/admin/PersonRepresentedCountriesFields'
@@ -309,16 +310,13 @@ export default async function AdminPersonDetailsPage({
                 <span className={isPublicHighlightedPage
                   ? 'stat-badge inline-flex items-center gap-1.5 rounded-md border border-white/30 bg-slate-950/35 px-2 py-0.5 font-barlow text-[0.9rem] font-semibold text-slate-50 shadow-[0_3px_8px_rgba(0,0,0,0.3)]'
                   : 'stat-badge inline-flex items-center gap-1.5 rounded border border-neutral-600/60 light:border-neutral-300 bg-gradient-to-b from-neutral-700 to-neutral-900 light:from-neutral-100 light:to-neutral-200 px-1.5 py-0.5 shadow-sm ring-1 ring-inset ring-white/5 light:ring-black/10 font-barlow text-[0.9rem] font-semibold text-neutral-200 light:text-neutral-900'}>
-                  {person.birth_city_name}
-                  {person.birth_country_fifa_code && (
-                    <CountryFlagWithHistory
-                      historicalFifaCode={person.birth_country_fifa_code}
-                      historicalCountryName={person.birth_country_name ?? '—'}
-                      currentFifaCode={person.birth_country_current_fifa_code ?? null}
-                      currentCountryName={person.birth_country_current_name ?? null}
-                      className="h-[13.5px] w-[20px]"
-                    />
-                  )}
+                  <CityCountryTimeline
+                    cityName={person.birth_city_name}
+                    timeline={person.birth_city_country_timeline}
+                    flagClassName="h-[13.5px] w-[20px]"
+                    fallbackCurrentFifaCode={person.birth_country_current_fifa_code ?? person.birth_country_fifa_code}
+                    fallbackCurrentCountryName={person.birth_country_current_name ?? person.birth_country_name}
+                  />
                 </span>
               )}
             </div>
@@ -332,13 +330,12 @@ export default async function AdminPersonDetailsPage({
                 )}
               </p>
               <div className="mt-0.5 flex items-center gap-1.5 text-sm text-neutral-400">
-                <span>{person.birth_city_name ?? '—'}</span>
-                <CountryFlagWithHistory
-                  historicalFifaCode={person.birth_country_fifa_code}
-                  historicalCountryName={person.birth_country_name ?? '—'}
-                  currentFifaCode={person.birth_country_current_fifa_code ?? null}
-                  currentCountryName={person.birth_country_current_name ?? null}
-                  className="h-[13.5px] w-[20px]"
+                <CityCountryTimeline
+                  cityName={person.birth_city_name ?? '—'}
+                  timeline={person.birth_city_country_timeline}
+                  flagClassName="h-[13.5px] w-[20px]"
+                  fallbackCurrentFifaCode={person.birth_country_current_fifa_code ?? person.birth_country_fifa_code}
+                  fallbackCurrentCountryName={person.birth_country_current_name ?? person.birth_country_name}
                 />
               </div>
             </div>

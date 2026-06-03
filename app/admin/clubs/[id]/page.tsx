@@ -7,11 +7,13 @@ import {
   getAdminClubDetails,
   getAdminClubDetailStats,
   getAdminClubPlayerStats,
+  getAdminClubRivalPlayerStats,
   getClubHistory,
   getPublicClubDetails,
   getPublicClubDetailStats,
   getPublicClubHistory,
   getPublicClubPlayerStats,
+  getPublicClubRivalPlayerStats,
 } from '@/lib/db/clubs'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import { getAdminStadiumOptions } from '@/lib/db/stadiums'
@@ -22,6 +24,7 @@ import AdminCancelLink from '@/components/admin/AdminCancelLink'
 import ClubCityCountryFields from '@/components/admin/ClubCityCountryFields'
 import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
 import CountryFlagWithHistory from '@/components/CountryFlagWithHistory'
+import CityCountryTimeline from '@/components/CityCountryTimeline'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { createStadiumInline } from '@/app/admin/stadiums/actions'
 import PlayerSilhouetteIcon from '@/components/icons/PlayerSilhouetteIcon'
@@ -29,6 +32,7 @@ import PitchIcon from '@/components/icons/PitchIcon'
 import ClockIcon from '@/components/icons/ClockIcon'
 import { GoalIcon, AssistIcon } from '@/components/icons'
 import PublicClubPlayersTable from '@/components/clubs/PublicClubPlayersTable'
+import PublicClubRivalPlayersTable from '@/components/clubs/PublicClubRivalPlayersTable'
 import {
   DetailsPageContainer,
   DetailsPageHeader,
@@ -99,7 +103,7 @@ export default async function AdminClubDetailsPage({
     (await searchParams) as Awaited<SearchParams> & { history?: string }
   const isEdit = !isPublic && mode === 'edit'
 
-  const [club, cities, countries, stadiums, historyEvents, clubStats, clubPlayers] = await Promise.all([
+  const [club, cities, countries, stadiums, historyEvents, clubStats, clubPlayers, clubRivalPlayers] = await Promise.all([
     isPublic ? getPublicClubDetails(id) : getAdminClubDetails(id),
     isEdit ? getAdminCities() : Promise.resolve([]),
     isEdit ? getAdminCountriesOptions() : Promise.resolve([]),
@@ -107,6 +111,7 @@ export default async function AdminClubDetailsPage({
     isPublic ? getPublicClubHistory(id) : getClubHistory(id),
     isPublic ? getPublicClubDetailStats(id) : getAdminClubDetailStats(id),
     isPublic ? getPublicClubPlayerStats(id) : getAdminClubPlayerStats(id),
+    isPublic ? getPublicClubRivalPlayerStats(id) : getAdminClubRivalPlayerStats(id),
   ])
 
   if (!club) {
@@ -204,13 +209,13 @@ export default async function AdminClubDetailsPage({
             {club.city_name}
           </span>
         ) : undefined}
-        headerRight={!isPublic && club.country_fifa_code ? (
-          <CountryFlagWithHistory
-            historicalFifaCode={club.country_fifa_code}
-            historicalCountryName={club.country_name ?? '—'}
-            currentFifaCode={club.country_current_fifa_code}
-            currentCountryName={club.country_current_name}
-            className="h-10 w-[60px]"
+        headerRight={!isPublic && (club.country_fifa_code || club.city_country_timeline.length > 0) ? (
+          <CityCountryTimeline
+            cityName={null}
+            timeline={club.city_country_timeline}
+            flagClassName="h-10 w-[60px]"
+            fallbackCurrentFifaCode={club.country_current_fifa_code ?? club.country_fifa_code}
+            fallbackCurrentCountryName={club.country_current_name ?? club.country_name}
           />
         ) : undefined}
         containerClassName={isPublic
@@ -256,30 +261,24 @@ export default async function AdminClubDetailsPage({
                   </span>
                 </div>
                 <div className="flex flex-col items-end gap-2">
-                  {club.country_fifa_code ? (
-                    <CountryFlagWithHistory
-                      historicalFifaCode={club.country_fifa_code}
-                      historicalCountryName={club.country_name ?? '—'}
-                      currentFifaCode={club.country_current_fifa_code}
-                      currentCountryName={club.country_current_name}
+                  {(club.country_fifa_code || club.city_country_timeline.length > 0) ? (
+                    <CityCountryTimeline
+                      cityName={null}
+                      timeline={club.city_country_timeline}
+                      flagClassName="h-[33px] w-[50px] ring-1 ring-neutral-500/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_1px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.7),0_4px_8px_rgba(0,0,0,0.45)]"
+                      fallbackCurrentFifaCode={club.country_current_fifa_code ?? club.country_fifa_code}
+                      fallbackCurrentCountryName={club.country_current_name ?? club.country_name}
                       glossy
-                      className="h-[33px] w-[50px] ring-1 ring-neutral-500/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.45),inset_0_-1px_1px_rgba(0,0,0,0.6),0_1px_2px_rgba(0,0,0,0.7),0_4px_8px_rgba(0,0,0,0.45)]"
                     />
                   ) : null}
-                  {(club.country_name || club.city_name) ? (
-                    <div className="flex items-center gap-2">
-                      {club.city_name ? (
-                        <span className="stat-badge inline-flex items-center rounded-md border border-white/30 bg-slate-950/35 px-2 py-0.5 font-barlow text-[0.82rem] font-semibold text-slate-50 shadow-[0_3px_8px_rgba(0,0,0,0.3)]">
-                          {club.city_name}
-                        </span>
-                      ) : null}
-                      {club.country_name ? (
-                        <span className="stat-badge inline-flex items-center rounded-md border border-white/30 bg-slate-950/35 px-2 py-0.5 font-barlow text-[0.82rem] font-semibold text-slate-50 shadow-[0_3px_8px_rgba(0,0,0,0.3)]">
-                          {club.country_name}
-                        </span>
-                      ) : null}
-                    </div>
+                  {club.city_name ? (
+                    <span className="stat-badge inline-flex items-center rounded-md border border-white/30 bg-slate-950/35 px-2 py-0.5 font-barlow text-[0.82rem] font-semibold text-slate-50 shadow-[0_3px_8px_rgba(0,0,0,0.3)]">
+                      {club.city_name}
+                    </span>
                   ) : null}
+                  <span className="stat-badge inline-flex items-center rounded-md border border-white/30 bg-slate-950/35 px-2 py-0.5 font-barlow text-[0.82rem] font-semibold text-slate-50 shadow-[0_3px_8px_rgba(0,0,0,0.3)]">
+                    Rok założenia: {club.founded_year ?? '—'}
+                  </span>
                 </div>
               </div>
             ) : null}
@@ -302,29 +301,100 @@ export default async function AdminClubDetailsPage({
             ) : null}
 
             <div className="mt-6">
-              {isPublic ? (
-                <div className="rounded-xl border border-emerald-900/80 bg-emerald-950/30">
-                  <div className="border-b border-emerald-900/80 bg-emerald-950/45 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-emerald-100/80">
-                    Piłkarze reprezentacji Polski w tym klubie
-                  </div>
+              {isPublic ? (<>
+                <details open className="overflow-hidden rounded-xl border border-emerald-900/80 bg-emerald-950/30 group/det">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-emerald-900/80 bg-emerald-950/45 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-emerald-100/80 marker:content-none">
+                    <span>Reprezentanci Polski</span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        title={`Zawodnicy: ${clubPlayers.length}`}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-emerald-100/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0.06)_22%,rgba(12,31,24,0.46)_100%)] px-2 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_3px_rgba(0,0,0,0.45),0_2px_5px_rgba(0,0,0,0.45)] font-barlow text-[0.95rem] font-semibold text-emerald-50"
+                      >
+                        <PlayerSilhouetteIcon className="h-3.5 w-3.5" />
+                        <span>{clubPlayers.length}</span>
+                      </span>
+                      <span
+                        title={`Występy: ${clubStats.appearance_count}`}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-emerald-100/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0.06)_22%,rgba(12,31,24,0.46)_100%)] px-2 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_3px_rgba(0,0,0,0.45),0_2px_5px_rgba(0,0,0,0.45)] font-barlow text-[0.95rem] font-semibold text-emerald-50"
+                      >
+                        <PitchIcon className="h-3.5 w-3.5" />
+                        <span>{clubStats.appearance_count}</span>
+                      </span>
+                      <span
+                        title={`Gole: ${clubStats.goal_count}`}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-emerald-100/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0.06)_22%,rgba(12,31,24,0.46)_100%)] px-2 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_3px_rgba(0,0,0,0.45),0_2px_5px_rgba(0,0,0,0.45)] font-barlow text-[0.95rem] font-semibold text-emerald-50"
+                      >
+                        <GoalIcon className="h-3.5 w-3.5" />
+                        <span>{clubStats.goal_count}</span>
+                      </span>
+                      <span
+                        title={`Minuty: ${clubStats.minute_count}`}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-emerald-100/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0.06)_22%,rgba(12,31,24,0.46)_100%)] px-2 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_3px_rgba(0,0,0,0.45),0_2px_5px_rgba(0,0,0,0.45)] font-barlow text-[0.95rem] font-semibold text-emerald-50"
+                      >
+                        <ClockIcon className="h-3.5 w-3.5" />
+                        <span>{clubStats.minute_count}</span>
+                      </span>
+                      <GlossyDisclosureCircle rotateClassName="group-open/det:rotate-180" />
+                    </div>
+                  </summary>
 
                   <div className="p-4">
                     {clubPlayers.length > 0 ? (
-                      <PublicClubPlayersTable
-                        players={clubPlayers}
-                        summary={{
-                          appearance_count: clubStats.appearance_count,
-                          goal_count: clubStats.goal_count,
-                          assist_count: clubStats.assist_count,
-                          minute_count: clubStats.minute_count,
-                        }}
-                      />
+                      <PublicClubPlayersTable players={clubPlayers} />
                     ) : (
                       <p className="mb-1 text-sm text-neutral-500">Brak piłkarzy reprezentacji Polski powiązanych z tym klubem.</p>
                     )}
                   </div>
-                </div>
-              ) : (
+                </details>
+
+                {clubRivalPlayers.length > 0 ? (() => {
+                  const rivalAppearances = clubRivalPlayers.reduce((acc, p) => acc + p.appearance_count, 0)
+                  const rivalGoals = clubRivalPlayers.reduce((acc, p) => acc + p.goal_count, 0)
+                  const rivalMinutes = clubRivalPlayers.reduce((acc, p) => acc + p.minute_count, 0)
+                  return (
+                    <details open className="mt-4 overflow-hidden rounded-xl border border-emerald-900/80 bg-emerald-950/30 group/det">
+                      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-emerald-900/80 bg-emerald-950/45 px-4 py-3 text-xs font-semibold uppercase tracking-widest text-emerald-100/80 marker:content-none">
+                        <span>Rywale Polski</span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            title={`Zawodnicy: ${clubRivalPlayers.length}`}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-emerald-100/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0.06)_22%,rgba(12,31,24,0.46)_100%)] px-2 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_3px_rgba(0,0,0,0.45),0_2px_5px_rgba(0,0,0,0.45)] font-barlow text-[0.95rem] font-semibold text-emerald-50"
+                          >
+                            <PlayerSilhouetteIcon className="h-3.5 w-3.5" />
+                            <span>{clubRivalPlayers.length}</span>
+                          </span>
+                          <span
+                            title={`Występy: ${rivalAppearances}`}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-emerald-100/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0.06)_22%,rgba(12,31,24,0.46)_100%)] px-2 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_3px_rgba(0,0,0,0.45),0_2px_5px_rgba(0,0,0,0.45)] font-barlow text-[0.95rem] font-semibold text-emerald-50"
+                          >
+                            <PitchIcon className="h-3.5 w-3.5" />
+                            <span>{rivalAppearances}</span>
+                          </span>
+                          <span
+                            title={`Gole: ${rivalGoals}`}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-emerald-100/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0.06)_22%,rgba(12,31,24,0.46)_100%)] px-2 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_3px_rgba(0,0,0,0.45),0_2px_5px_rgba(0,0,0,0.45)] font-barlow text-[0.95rem] font-semibold text-emerald-50"
+                          >
+                            <GoalIcon className="h-3.5 w-3.5" />
+                            <span>{rivalGoals}</span>
+                          </span>
+                          <span
+                            title={`Minuty: ${rivalMinutes}`}
+                            className="inline-flex items-center gap-1.5 rounded-md border border-emerald-100/55 bg-[linear-gradient(180deg,rgba(255,255,255,0.26)_0%,rgba(255,255,255,0.06)_22%,rgba(12,31,24,0.46)_100%)] px-2 py-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.42),inset_0_-2px_3px_rgba(0,0,0,0.45),0_2px_5px_rgba(0,0,0,0.45)] font-barlow text-[0.95rem] font-semibold text-emerald-50"
+                          >
+                            <ClockIcon className="h-3.5 w-3.5" />
+                            <span>{rivalMinutes}</span>
+                          </span>
+                          <GlossyDisclosureCircle rotateClassName="group-open/det:rotate-180" />
+                        </div>
+                      </summary>
+
+                      <div className="p-4">
+                        <PublicClubRivalPlayersTable players={clubRivalPlayers} />
+                      </div>
+                    </details>
+                  )
+                })() : null}
+              </>) : (
                 <details open={historyEvents.length > 0} className="overflow-hidden rounded-lg border border-neutral-800 group/det">
                   <summary className="flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-neutral-500 marker:content-none">
                     <span>Historia</span>

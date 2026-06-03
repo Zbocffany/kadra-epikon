@@ -2,8 +2,6 @@ import { getPublicCityList } from '@/lib/db/citiesPublic'
 import type { PublicCityListItem } from '@/lib/db/citiesPublic'
 import PublicCitiesSearchTable from './PublicCitiesSearchTable'
 
-export const dynamic = 'force-dynamic'
-
 export default async function PublicCitiesPage() {
   let cities: PublicCityListItem[] = []
   let fetchError: string | null = null

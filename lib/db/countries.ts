@@ -1,5 +1,7 @@
+import { unstable_cache } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
+import { getPublicCacheKey } from '@/lib/db/publicCache'
 
 export type AdminCountry = {
   id: string
@@ -223,20 +225,26 @@ export async function getAdminCountries(): Promise<AdminCountry[]> {
 }
 
 export async function getPublicCountries(): Promise<PublicCountry[]> {
-  const countries = await getAdminCountries()
-
-  return countries.map((country) => ({
-    id: country.id,
-    name: country.name,
-    fifa_code: country.fifa_code,
-    federation_short_name: country.federation_short_name,
-    matches: country.matches,
-    wins: country.wins,
-    draws: country.draws,
-    losses: country.losses,
-    goals_for: country.goals_for,
-    goals_against: country.goals_against,
-  }))
+  const cacheKey = await getPublicCacheKey('public-countries')
+  return unstable_cache(
+    async () => {
+      const countries = await getAdminCountries()
+      return countries.map((country) => ({
+        id: country.id,
+        name: country.name,
+        fifa_code: country.fifa_code,
+        federation_short_name: country.federation_short_name,
+        matches: country.matches,
+        wins: country.wins,
+        draws: country.draws,
+        losses: country.losses,
+        goals_for: country.goals_for,
+        goals_against: country.goals_against,
+      }))
+    },
+    cacheKey,
+    { revalidate: 3600, tags: ['public-countries'] }
+  )()
 }
 
 export async function getAdminCountriesPage(

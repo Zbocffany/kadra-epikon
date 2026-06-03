@@ -35,6 +35,7 @@ export default function AddPersonModal({
   const [lastName, setLastName] = useState('')
   const [nickname, setNickname] = useState('')
   const [birthDate, setBirthDate] = useState('')
+  const [deathDate, setDeathDate] = useState('')
   const [selectedCityId, setSelectedCityId] = useState('')
   const [selectedCountryId, setSelectedCountryId] = useState('')
   const [selectedRepresentedCountryId, setSelectedRepresentedCountryId] = useState('')
@@ -51,6 +52,7 @@ export default function AddPersonModal({
     lastName: string
     nickname: string
     birthDate: string | null
+    deathDate: string | null
     cityId: string | null
     countryId: string | null
     representedCountryIds: string[]
@@ -159,6 +161,7 @@ export default function AddPersonModal({
     lName: string,
     nick: string,
     bDate: string | null,
+    dDate: string | null,
     cityId: string | null,
     countryId: string | null,
     representedCountryIds: string[],
@@ -168,11 +171,12 @@ export default function AddPersonModal({
     setIsLoading(true)
 
     try {
-      const newPerson = await addPerson(fName, lName, nick, bDate, cityId, countryId, representedCountryIds, active)
+      const newPerson = await addPerson(fName, lName, nick, bDate, dDate, cityId, countryId, representedCountryIds, active)
       setFirstName('')
       setLastName('')
       setNickname('')
       setBirthDate('')
+      setDeathDate('')
       setSelectedCityId('')
       setSelectedCountryId('')
       setSelectedRepresentedCountryId('')
@@ -202,6 +206,7 @@ export default function AddPersonModal({
           lastName,
           nickname,
           birthDate: birthDate || null,
+          deathDate: deathDate || null,
           cityId: selectedCityId || null,
           countryId: selectedCountryId || null,
           representedCountryIds: selectedRepresentedCountryId ? [selectedRepresentedCountryId] : [],
@@ -216,6 +221,7 @@ export default function AddPersonModal({
       lastName,
       nickname,
       birthDate || null,
+      deathDate || null,
       selectedCityId || null,
       selectedCountryId || null,
       selectedRepresentedCountryId ? [selectedRepresentedCountryId] : [],
@@ -225,8 +231,8 @@ export default function AddPersonModal({
 
   async function handleConfirmDespiteDuplicates() {
     if (!pendingPersonData) return
-    const { firstName: fN, lastName: lN, nickname: nN, birthDate: bD, cityId, countryId, representedCountryIds, isActive: active } = pendingPersonData
-    await doAddPerson(fN, lN, nN, bD, cityId, countryId, representedCountryIds, active)
+    const { firstName: fN, lastName: lN, nickname: nN, birthDate: bD, deathDate: dD, cityId, countryId, representedCountryIds, isActive: active } = pendingPersonData
+    await doAddPerson(fN, lN, nN, bD, dD, cityId, countryId, representedCountryIds, active)
   }
 
   if (!isOpen) return null
@@ -297,6 +303,20 @@ export default function AddPersonModal({
               type="date"
               value={birthDate}
               onChange={(e) => setBirthDate(e.target.value)}
+              className="mt-1 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
+              disabled={isLoading}
+            />
+          </div>
+
+          <div>
+            <label htmlFor="deathDate" className="block text-sm font-medium text-neutral-300">
+              Data śmierci
+            </label>
+            <input
+              id="deathDate"
+              type="date"
+              value={deathDate}
+              onChange={(e) => setDeathDate(e.target.value)}
               className="mt-1 w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100"
               disabled={isLoading}
             />

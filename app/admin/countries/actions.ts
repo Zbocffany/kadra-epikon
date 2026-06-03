@@ -1,6 +1,8 @@
 ﻿'use server'
 
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { invalidatePublicCacheVersion } from '@/lib/db/publicCache'
 import type { InlineCreateState } from '@/lib/types/admin'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import {
@@ -13,6 +15,17 @@ import {
   redirectWithError,
   redirectWithSaved,
 } from '@/lib/actions/admin'
+
+function revalidateCountryCaches(countryId: string | null = null): void {
+  revalidateTag('public-countries', 'max')
+  revalidatePath('/admin/countries')
+  revalidatePath('/countries')
+  if (countryId) {
+    revalidatePath(`/admin/countries/${countryId}`)
+    revalidatePath(`/countries/${countryId}`)
+  }
+  invalidatePublicCacheVersion()
+}
 
 function normalizeFifaCode(raw: FormDataEntryValue | null): string | null {
   const val = (typeof raw === 'string' ? raw : '').trim().toUpperCase()
@@ -76,6 +89,7 @@ export async function createCountry(formData: FormData): Promise<void> {
     redirectWithError('/admin/countries', message)
   }
 
+  revalidateCountryCaches(id)
   redirectWithAdded('/admin/countries', name)
 }
 
@@ -223,6 +237,7 @@ export async function updateCountry(formData: FormData): Promise<void> {
     redirectWithError(`/admin/countries/${id}`, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
+  revalidateCountryCaches(id)
   redirectWithSaved(`/admin/countries/${id}`)
 }
 
@@ -253,6 +268,7 @@ export async function deleteCountry(formData: FormData): Promise<void> {
     )
   }
 
+  revalidateCountryCaches(id)
   redirectWithAdded('/admin/countries', `Usunięto kraj: ${country?.name ?? id}`)
 }
 
@@ -437,6 +453,7 @@ export async function saveCountryHistoryEvent(formData: FormData): Promise<void>
     }
   }
 
+  revalidateCountryCaches(countryId)
   redirectWithSaved(`/admin/countries/${countryId}`)
 }
 
@@ -467,6 +484,7 @@ export async function deleteCountryHistoryEvent(formData: FormData): Promise<voi
     redirectWithError(`/admin/countries/${countryId}`, 'Wystąpił błąd serwera. Spróbuj ponownie.')
   }
 
+  revalidateCountryCaches(countryId)
   redirectWithSaved(`/admin/countries/${countryId}`)
 }
 

@@ -17,19 +17,12 @@ import {
   redirectWithSaved,
 } from '@/lib/actions/admin'
 
-function revalidateCityCaches(cityId?: string): void {
-  // Publiczny profil miasta agreguje dane z wielu domen — wszystkie odśwież.
+function revalidateCityCaches(cityId: string): void {
   revalidateTag('public-cities', 'max')
-  revalidateTag('public-people', 'max')
-  revalidateTag('public-clubs', 'max')
-  revalidateTag('public-matches', 'max')
-  if (cityId) revalidateTag(`public-city:${cityId}`, 'max')
   revalidatePath('/admin/cities')
+  revalidatePath(`/admin/cities/${cityId}`)
   revalidatePath('/cities')
-  if (cityId) {
-    revalidatePath(`/admin/cities/${cityId}`)
-    revalidatePath(`/cities/${cityId}`)
-  }
+  revalidatePath(`/cities/${cityId}`)
   invalidatePublicCacheVersion()
 }
 
@@ -57,23 +50,13 @@ export async function getCityCurrentCountry(
   await requireAdminAccess()
   const supabase = createServiceRoleClient()
 
-  const { data: periods } = await supabase
-    .from('tbl_City_Country_Periods')
-    .select('country_id, valid_from, valid_to')
-    .eq('city_id', cityId)
+  const { data: city } = await supabase
+    .from('tbl_Cities')
+    .select('current_country_id')
+    .eq('id', cityId)
+    .maybeSingle()
 
-  if (!periods?.length) return null
-
-  const sorted = [...periods].sort((a, b) => {
-    const aCurrent = a.valid_to === null
-    const bCurrent = b.valid_to === null
-    if (aCurrent !== bCurrent) return aCurrent ? -1 : 1
-    const aTo = a.valid_to ? new Date(a.valid_to).getTime() : Number.NEGATIVE_INFINITY
-    const bTo = b.valid_to ? new Date(b.valid_to).getTime() : Number.NEGATIVE_INFINITY
-    return bTo - aTo
-  })
-
-  const countryId = sorted[0]?.country_id
+  const countryId = city?.current_country_id
   if (!countryId) return null
 
   const { data: country } = await supabase
@@ -125,25 +108,11 @@ export async function createCity(formData: FormData): Promise<void> {
     id: cityId,
     city_name: cityName,
     voivodeship,
+    current_country_id: countryId,
   })
 
   if (cityError) {
     redirectWithError('/admin/cities', 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
-  }
-
-  const { error: periodError } = await supabase.from('tbl_City_Country_Periods').insert({
-    id: crypto.randomUUID(),
-    city_id: cityId,
-    country_id: countryId,
-    valid_from: null,
-    valid_to: null,
-    description: 'Dodane z panelu admina',
-  })
-
-  if (periodError) {
-    // Best effort cleanup when linking country fails after city insert.
-    await supabase.from('tbl_Cities').delete().eq('id', cityId)
-    redirectWithError('/admin/cities', 'Błąd zapisu powiązania miasto–kraj. Spróbuj ponownie.')
   }
 
   revalidateCityCaches(cityId)
@@ -198,24 +167,11 @@ export async function createCityInline(
     id: cityId,
     city_name: cityName,
     voivodeship,
+    current_country_id: countryId,
   })
 
   if (cityError) {
     return inlineError(prevState, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
-  }
-
-  const { error: periodError } = await supabase.from('tbl_City_Country_Periods').insert({
-    id: crypto.randomUUID(),
-    city_id: cityId,
-    country_id: countryId,
-    valid_from: null,
-    valid_to: null,
-    description: 'Dodane z panelu admina',
-  })
-
-  if (periodError) {
-    await supabase.from('tbl_Cities').delete().eq('id', cityId)
-    return inlineError(prevState, 'Błąd zapisu powiązania miasto–kraj. Spróbuj ponownie.')
   }
 
   revalidateCityCaches(cityId)
@@ -228,7 +184,6 @@ export async function updateCity(formData: FormData): Promise<void> {
   const cityName = getTrimmedString(formData, 'city_name')
   const countryId = getTrimmedString(formData, 'country_id')
   const voivodeship = getTrimmedNullable(formData, 'voivodeship')
-  const currentPeriodId = getTrimmedString(formData, 'current_period_id')
 
   if (!id) {
     redirectWithError('/admin/cities', 'Brak ID miasta do edycji.')
@@ -253,35 +208,30 @@ export async function updateCity(formData: FormData): Promise<void> {
 
   const { error: cityError } = await supabase
     .from('tbl_Cities')
-    .update({ city_name: cityName, voivodeship: voivodeship })
+    .update({ city_name: cityName, voivodeship: voivodeship, current_country_id: countryId })
     .eq('id', id)
 
   if (cityError) {
     redirectWithError(`/admin/cities/${id}`, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
-  if (currentPeriodId) {
+  // Jeśli miasto ma otwarty okres historyczny, zsynchronizuj jego country_id
+  // (Żeby tbl_Cities.current_country_id i otwarty okres pozostawały spójne).
+  // Trigger sync_city_current_country zadziała w drugą stronę i tak.
+  const { data: openPeriod } = await supabase
+    .from('tbl_City_Country_Periods')
+    .select('id')
+    .eq('city_id', id)
+    .is('valid_to', null)
+    .maybeSingle()
+
+  if (openPeriod?.id) {
     const { error: updatePeriodError } = await supabase
       .from('tbl_City_Country_Periods')
       .update({ country_id: countryId })
-      .eq('id', currentPeriodId)
+      .eq('id', openPeriod.id)
 
     if (updatePeriodError) {
-      redirectWithError(`/admin/cities/${id}`, 'Błąd zapisu powiązania miasto–kraj. Spróbuj ponownie.')
-    }
-  } else {
-    const { error: createPeriodError } = await supabase
-      .from('tbl_City_Country_Periods')
-      .insert({
-        id: crypto.randomUUID(),
-        city_id: id,
-        country_id: countryId,
-        valid_from: null,
-        valid_to: null,
-        description: 'Dodane z panelu admina',
-      })
-
-    if (createPeriodError) {
       redirectWithError(`/admin/cities/${id}`, 'Błąd zapisu powiązania miasto–kraj. Spróbuj ponownie.')
     }
   }
@@ -372,6 +322,10 @@ export async function saveCityPeriod(formData: FormData): Promise<void> {
       redirectWithError(`/admin/cities/${cityId}`, 'Błąd zapisu okresu. Spróbuj ponownie.')
     }
   }
+
+  // Spójność tbl_Cities.current_country_id <-> otwarty okres pilnuje trigger
+  // sync_city_current_country. Brak NULL/NULL jest egzekwowany przez CHECK
+  // w tbl_City_Country_Periods (patrz migracja 038).
 
   revalidateCityCaches(cityId)
   redirectWithSaved(`/admin/cities/${cityId}`)

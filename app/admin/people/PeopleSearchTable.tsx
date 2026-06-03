@@ -13,7 +13,7 @@ import { GoalIcon, AssistIcon, YellowCardIcon, RedCardIcon } from '@/components/
 import BenchIcon from '@/components/icons/BenchIcon'
 import SortableStatHeader from '@/components/admin/SortableStatHeader'
 
-export type PeopleCardVariant = 'players' | 'coaches' | 'referees'
+export type PeopleCardVariant = 'all' | 'players' | 'coaches' | 'referees'
 
 function getAgeDisplay(person: AdminPersonListItem): string | null {
   if (!person.birth_date) return null
@@ -25,7 +25,7 @@ function getAgeDisplay(person: AdminPersonListItem): string | null {
   return person.death_date ? null : `(${age} l.)`
 }
 
-function getRoleForVariant(variant: PeopleCardVariant): 'PLAYER' | 'COACH' | 'REFEREE' {
+function getRoleForVariant(variant: Exclude<PeopleCardVariant, 'all'>): 'PLAYER' | 'COACH' | 'REFEREE' {
   if (variant === 'coaches') return 'COACH'
   if (variant === 'referees') return 'REFEREE'
   return 'PLAYER'
@@ -54,10 +54,10 @@ export default function PeopleSearchTable({
   type CoachSortKey = 'coach_match_count' | 'coach_wins' | 'coach_draws' | 'coach_losses' | 'coach_goals_scored' | 'coach_goals_conceded' | 'coach_points_per_match'
   const [sortKey, setSortKey] = useState<PlayerSortKey>('appearance_count')
   const [coachSortKey, setCoachSortKey] = useState<CoachSortKey>('coach_match_count')
-  const role = getRoleForVariant(variant)
+  const role = variant === 'all' ? null : getRoleForVariant(variant)
 
   const roleFiltered = useMemo(
-    () => people.filter((person) => person.roles.includes(role)),
+    () => (role ? people.filter((person) => person.roles.includes(role)) : people),
     [people, role]
   )
 

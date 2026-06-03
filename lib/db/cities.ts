@@ -1,14 +1,6 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
-type CityCountryPeriod = {
-  id?: string
-  city_id: string
-  country_id: string
-  valid_from: string | null
-  valid_to: string | null
-}
-
 export type AdminCityListItem = {
   id: string
   city_name: string | null
@@ -29,7 +21,6 @@ export type AdminCityDetails = {
   id: string
   city_name: string | null
   current_country_id: string | null
-  current_period_id: string | null
   country_name: string | null
   country_fifa_code: string | null
   voivodeship: string | null
@@ -44,51 +35,6 @@ export type AdminCityPeriod = {
   valid_from: string | null
   valid_to: string | null
   description: string | null
-}
-
-function sortPeriods(periods: CityCountryPeriod[]): CityCountryPeriod[] {
-  return [...periods].sort((a, b) => {
-    const aCurrent = a.valid_to === null
-    const bCurrent = b.valid_to === null
-
-    if (aCurrent !== bCurrent) return aCurrent ? -1 : 1
-
-    const aTo = a.valid_to ? new Date(a.valid_to).getTime() : Number.NEGATIVE_INFINITY
-    const bTo = b.valid_to ? new Date(b.valid_to).getTime() : Number.NEGATIVE_INFINITY
-    if (aTo !== bTo) return bTo - aTo
-
-    const aFrom = a.valid_from ? new Date(a.valid_from).getTime() : Number.NEGATIVE_INFINITY
-    const bFrom = b.valid_from ? new Date(b.valid_from).getTime() : Number.NEGATIVE_INFINITY
-    return bFrom - aFrom
-  })
-}
-
-async function getCityCountryPeriodsByCityIds(
-  supabase: ReturnType<typeof createServiceRoleClient>,
-  cityIds: string[]
-): Promise<CityCountryPeriod[]> {
-  if (!cityIds.length) return []
-
-  const periods: CityCountryPeriod[] = []
-  const batchSize = 250
-
-  for (let start = 0; start < cityIds.length; start += batchSize) {
-    const cityIdsBatch = cityIds.slice(start, start + batchSize)
-    const { data: periodsBatch, error: periodsError } = await supabase
-      .from('tbl_City_Country_Periods')
-      .select('city_id, country_id, valid_from, valid_to')
-      .in('city_id', cityIdsBatch)
-
-    if (periodsError) {
-      throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
-    }
-
-    if (periodsBatch?.length) {
-      periods.push(...periodsBatch)
-    }
-  }
-
-  return periods
 }
 
 async function getCityStats(
@@ -242,7 +188,7 @@ export async function getAdminCitiesList(): Promise<AdminCityListItem[]> {
 
   const { data: cities, error: citiesError } = await supabase
     .from('tbl_Cities')
-    .select('id, city_name')
+    .select('id, city_name, current_country_id')
     .order('city_name', { ascending: true })
 
   if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
@@ -250,19 +196,9 @@ export async function getAdminCitiesList(): Promise<AdminCityListItem[]> {
 
   const cityIds = cities.map((c) => c.id)
 
-  const periods = await getCityCountryPeriodsByCityIds(supabase, cityIds)
-
-  const periodsByCity = new Map<string, CityCountryPeriod[]>()
-  for (const p of periods) {
-    const arr = periodsByCity.get(p.city_id) ?? []
-    arr.push(p)
-    periodsByCity.set(p.city_id, arr)
-  }
-
   const currentCountryIdByCity = new Map<string, string>()
-  for (const cityId of cityIds) {
-    const best = sortPeriods(periodsByCity.get(cityId) ?? [])[0]
-    if (best?.country_id) currentCountryIdByCity.set(cityId, best.country_id)
+  for (const c of cities) {
+    if (c.current_country_id) currentCountryIdByCity.set(c.id, c.current_country_id)
   }
 
   const countryIds = [...new Set([...currentCountryIdByCity.values()])]
@@ -326,28 +262,16 @@ export async function getAdminCitiesListPage(
 
   const { data: cities, error: citiesError, count } = await supabase
     .from('tbl_Cities')
-    .select('id, city_name', { count: 'exact' })
+    .select('id, city_name, current_country_id', { count: 'exact' })
     .order('city_name', { ascending: true })
     .range(from, to)
 
   if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
   if (!cities?.length) return { items: [], total: count ?? 0 }
 
-  const cityIds = cities.map((c) => c.id)
-
-  const periods = await getCityCountryPeriodsByCityIds(supabase, cityIds)
-
-  const periodsByCity = new Map<string, CityCountryPeriod[]>()
-  for (const p of periods) {
-    const arr = periodsByCity.get(p.city_id) ?? []
-    arr.push(p)
-    periodsByCity.set(p.city_id, arr)
-  }
-
   const currentCountryIdByCity = new Map<string, string>()
-  for (const cityId of cityIds) {
-    const best = sortPeriods(periodsByCity.get(cityId) ?? [])[0]
-    if (best?.country_id) currentCountryIdByCity.set(cityId, best.country_id)
+  for (const c of cities) {
+    if (c.current_country_id) currentCountryIdByCity.set(c.id, c.current_country_id)
   }
 
   const countryIds = [...new Set([...currentCountryIdByCity.values()])]
@@ -397,32 +321,21 @@ export async function getAdminCityDetails(id: string): Promise<AdminCityDetails 
 
   const { data: city, error: cityError } = await supabase
     .from('tbl_Cities')
-    .select('id, city_name, voivodeship')
+    .select('id, city_name, voivodeship, current_country_id')
     .eq('id', id)
     .maybeSingle()
 
   if (cityError) throw new Error(`tbl_Cities: ${cityError.message}`)
   if (!city) return null
 
-  const { data: periods, error: periodsError } = await supabase
-    .from('tbl_City_Country_Periods')
-    .select('id, city_id, country_id, valid_from, valid_to')
-    .eq('city_id', id)
-
-  if (periodsError) {
-    throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
-  }
-
-  const best = sortPeriods(periods ?? [])[0]
-
   let countryName: string | null = null
   let countryFifaCode: string | null = null
 
-  if (best?.country_id) {
+  if (city.current_country_id) {
     const { data: country, error: countryError } = await supabase
       .from('tbl_Countries')
       .select('name, fifa_code')
-      .eq('id', best.country_id)
+      .eq('id', city.current_country_id)
       .maybeSingle()
 
     if (countryError) throw new Error(`tbl_Countries: ${countryError.message}`)
@@ -430,11 +343,13 @@ export async function getAdminCityDetails(id: string): Promise<AdminCityDetails 
     countryFifaCode = country?.fifa_code ?? null
   }
 
+  // Po migracji 038 źródłem prawdy aktualnego kraju jest tbl_Cities.current_country_id.
+  // Formularz edycji aktualnego kraju trafia bezpośrednio do tbl_Cities;
+  // spójność z otwartym okresem pilnuje trigger sync_city_current_country.
   return {
     id: city.id,
     city_name: city.city_name,
-    current_country_id: best?.country_id ?? null,
-    current_period_id: best?.id ?? null,
+    current_country_id: city.current_country_id ?? null,
     country_name: countryName,
     country_fifa_code: countryFifaCode,
     voivodeship: city.voivodeship ?? null,

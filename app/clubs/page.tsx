@@ -1,10 +1,18 @@
 import { getPublicClubs } from '@/lib/db/clubs'
 import type { AdminClub } from '@/lib/db/clubs'
-import PublicClubsSearchTable from './PublicClubsSearchTable'
+import PublicClubsSearchTable, { type ClubsListMode } from './PublicClubsSearchTable'
 
-export const dynamic = 'force-dynamic'
+function parseMode(raw: string | string[] | undefined): ClubsListMode {
+  const v = Array.isArray(raw) ? raw[0] : raw
+  if (v === 'all' || v === 'rivals') return v
+  return 'poland'
+}
 
-export default async function PublicClubsPage() {
+export default async function PublicClubsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
   let clubs: AdminClub[] = []
   let fetchError: string | null = null
 
@@ -13,6 +21,9 @@ export default async function PublicClubsPage() {
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
+
+  const resolvedParams = (await searchParams) ?? {}
+  const initialMode = parseMode(resolvedParams.clubMode)
 
   return (
     <div className="public-theme">
@@ -26,7 +37,7 @@ export default async function PublicClubsPage() {
                   <strong className="font-semibold">Błąd pobierania danych:</strong> {fetchError}
                 </div>
               ) : (
-                <PublicClubsSearchTable clubs={clubs} />
+                <PublicClubsSearchTable clubs={clubs} initialMode={initialMode} />
               )}
             </div>
           </section>

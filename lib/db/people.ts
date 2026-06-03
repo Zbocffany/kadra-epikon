@@ -6,8 +6,10 @@ import {
   loadCityCountryPeriodsMap,
   loadCountryInfoMap,
   resolveCityCountry,
+  buildCityCountryTimeline,
   EMPTY_RESOLVED_CITY_COUNTRY,
   type ResolvedCityCountry,
+  type CityCountryTimelineEntry,
 } from '@/lib/db/cityCountryResolver'
 
 type CityCountryPeriod = {
@@ -233,6 +235,12 @@ export type AdminPersonListItem = {
 
 export type AdminPersonDetails = AdminPersonListItem & {
   represented_country_ids: string[]
+  /**
+   * Chronologiczna lista państw, do których należało miasto urodzenia
+   * OD daty narodzin osoby (starsze okresy są pomijane).
+   * Pusta tablica gdy brak miasta urodzenia lub brak okresów w bazie.
+   */
+  birth_city_country_timeline: CityCountryTimelineEntry[]
 }
 
 export type AdminPersonBirthCityOption = {
@@ -1648,7 +1656,7 @@ export async function getAdminPersonBirthCityOptions(): Promise<AdminPersonBirth
 
   const { data: cities, error: citiesError } = await supabase
     .from('tbl_Cities')
-    .select('id, city_name')
+    .select('id, city_name, current_country_id')
     .order('city_name', { ascending: true })
 
   if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
@@ -1684,9 +1692,10 @@ export async function getAdminPersonBirthCityOptions(): Promise<AdminPersonBirth
   }
 
   const currentCountryIdByCity = new Map<string, string>()
-  for (const cityId of cityIds) {
-    const best = sortPeriods(periodsByCity.get(cityId) ?? [])[0]
-    if (best?.country_id) currentCountryIdByCity.set(cityId, best.country_id)
+  for (const city of cities) {
+    const best = sortPeriods(periodsByCity.get(city.id) ?? [])[0]
+    const currentCountryId = city.current_country_id ?? best?.country_id ?? null
+    if (currentCountryId) currentCountryIdByCity.set(city.id, currentCountryId)
   }
 
   const countryIds = [...new Set([...currentCountryIdByCity.values()])]
@@ -3201,13 +3210,17 @@ export async function getAdminPeople(variant: PublicPeopleVariant = 'all'): Prom
   // Batch cities to avoid oversized .in() queries that can fail at the fetch layer
   const CITY_CHUNK = 80
   const cityMap = new Map<string, string | null>()
+  const cityCurrentCountryMap = new Map<string, string | null>()
   for (let i = 0; i < cityIds.length; i += CITY_CHUNK) {
     const { data: cityBatch, error: citiesError } = await supabase
       .from('tbl_Cities')
-      .select('id, city_name')
+      .select('id, city_name, current_country_id')
       .in('id', cityIds.slice(i, i + CITY_CHUNK))
     if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
-    for (const c of cityBatch ?? []) cityMap.set(c.id, c.city_name)
+    for (const c of cityBatch ?? []) {
+      cityMap.set(c.id, c.city_name)
+      cityCurrentCountryMap.set(c.id, c.current_country_id ?? null)
+    }
   }
 
   const { data: countries, error: countriesError } = countryIds.length
@@ -3271,6 +3284,7 @@ export async function getAdminPeople(variant: PublicPeopleVariant = 'all'): Prom
   const extraCountryIds = new Set<string>()
   for (const list of cityPeriodsMap.values()) for (const p of list) extraCountryIds.add(p.country_id)
   for (const id of countryIds) extraCountryIds.add(id)
+  for (const cid of cityCurrentCountryMap.values()) if (cid) extraCountryIds.add(cid)
   const resolverCountryMap = await loadCountryInfoMap(supabase, [...extraCountryIds])
   const resolveBirthCountry = (personRow: { birth_city_id: string | null; birth_country_id: string | null; birth_date: string | null }): ResolvedCityCountry => {
     if (!personRow.birth_city_id) {
@@ -3287,7 +3301,10 @@ export async function getAdminPeople(variant: PublicPeopleVariant = 'all'): Prom
       }
     }
     const periods = cityPeriodsMap.get(personRow.birth_city_id) ?? []
-    return resolveCityCountry(periods, personRow.birth_date, resolverCountryMap, personRow.birth_country_id)
+    // Fallback gdy brak okresów historycznych: birth_country_id (jawne pole osoby),
+    // a w jego braku — tbl_Cities.current_country_id (denormalizacja, migracja 038).
+    const fallback = personRow.birth_country_id ?? cityCurrentCountryMap.get(personRow.birth_city_id) ?? null
+    return resolveCityCountry(periods, personRow.birth_date, resolverCountryMap, fallback)
   }
 
   return people
@@ -3466,13 +3483,17 @@ export async function getAdminPeoplePage(
   // Batch cities to avoid oversized .in() queries that can fail at the fetch layer
   const CITY_CHUNK = 80
   const cityMap = new Map<string, string | null>()
+  const cityCurrentCountryMap = new Map<string, string | null>()
   for (let i = 0; i < cityIds.length; i += CITY_CHUNK) {
     const { data: cityBatch, error: citiesError } = await supabase
       .from('tbl_Cities')
-      .select('id, city_name')
+      .select('id, city_name, current_country_id')
       .in('id', cityIds.slice(i, i + CITY_CHUNK))
     if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
-    for (const c of cityBatch ?? []) cityMap.set(c.id, c.city_name)
+    for (const c of cityBatch ?? []) {
+      cityMap.set(c.id, c.city_name)
+      cityCurrentCountryMap.set(c.id, c.current_country_id ?? null)
+    }
   }
 
   const { data: countries, error: countriesError } = countryIds.length
@@ -3504,6 +3525,7 @@ export async function getAdminPeoplePage(
   const cityPeriodsMap = await loadCityCountryPeriodsMap(supabase, birthCityIds)
   const extraCountryIds = new Set<string>(countryIds as string[])
   for (const list of cityPeriodsMap.values()) for (const p of list) extraCountryIds.add(p.country_id)
+  for (const cid of cityCurrentCountryMap.values()) if (cid) extraCountryIds.add(cid)
   const resolverCountryMap = await loadCountryInfoMap(supabase, [...extraCountryIds])
 
   return {
@@ -3516,7 +3538,12 @@ export async function getAdminPeoplePage(
       const coachedData = coachedCountryDataByPersonId.get(person.id) ?? { names: [], fifaCodes: [] }
       const roleMatchCounts = roleMatchCountsByPersonId.get(person.id)
       const resolvedBirth = person.birth_city_id
-        ? resolveCityCountry(cityPeriodsMap.get(person.birth_city_id) ?? [], person.birth_date, resolverCountryMap, person.birth_country_id)
+        ? resolveCityCountry(
+            cityPeriodsMap.get(person.birth_city_id) ?? [],
+            person.birth_date,
+            resolverCountryMap,
+            person.birth_country_id ?? cityCurrentCountryMap.get(person.birth_city_id) ?? null,
+          )
         : (person.birth_country_id
           ? (() => {
               const info = resolverCountryMap.get(person.birth_country_id!) ?? null
@@ -3630,10 +3657,10 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     person.birth_city_id
       ? supabase
           .from('tbl_Cities')
-          .select('city_name')
+          .select('city_name, current_country_id')
           .eq('id', person.birth_city_id)
           .maybeSingle()
-      : Promise.resolve({ data: null as { city_name: string | null } | null, error: null }),
+      : Promise.resolve({ data: null as { city_name: string | null; current_country_id: string | null } | null, error: null }),
     person.birth_country_id
       ? supabase
           .from('tbl_Countries')
@@ -3688,9 +3715,11 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
   const extraCountryIds = new Set<string>()
   for (const p of periodsForPerson) extraCountryIds.add(p.country_id)
   if (person.birth_country_id) extraCountryIds.add(person.birth_country_id)
+  if (city?.current_country_id) extraCountryIds.add(city.current_country_id)
   const resolverCountryMap = await loadCountryInfoMap(supabase, [...extraCountryIds])
+  const birthCountryFallback = person.birth_country_id ?? city?.current_country_id ?? null
   const resolvedBirth = person.birth_city_id
-    ? resolveCityCountry(periodsForPerson, person.birth_date, resolverCountryMap, person.birth_country_id)
+    ? resolveCityCountry(periodsForPerson, person.birth_date, resolverCountryMap, birthCountryFallback)
     : (person.birth_country_id
       ? {
           historical_country_id: person.birth_country_id,
@@ -3701,6 +3730,10 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
           current_country_fifa_code: country?.fifa_code ?? null,
         }
       : EMPTY_RESOLVED_CITY_COUNTRY)
+
+  const birthCityCountryTimeline = person.birth_city_id
+    ? buildCityCountryTimeline(periodsForPerson, resolverCountryMap, person.birth_date)
+    : []
 
   return {
     id: person.id,
@@ -3718,6 +3751,7 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
     birth_country_current_id: resolvedBirth.current_country_id,
     birth_country_current_name: resolvedBirth.current_country_name,
     birth_country_current_fifa_code: resolvedBirth.current_country_fifa_code,
+    birth_city_country_timeline: birthCityCountryTimeline,
     represented_country_ids: explicitRepresentedIds,
     represented_country_names: representedNames,
     represented_country_fifa_codes: representedFifaCodes,

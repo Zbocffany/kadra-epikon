@@ -59,7 +59,7 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
     >
       {!fetchError && (
         <>
-          <PeopleSearchTable people={people} />
+          <PeopleSearchTable people={people} variant="all" />
 
           {isCreateModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">

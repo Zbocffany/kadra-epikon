@@ -1783,6 +1783,7 @@ export async function addPerson(
   lastName: string,
   nickname: string,
   birthDate: string | null = null,
+  deathDate: string | null = null,
   birthCityId: string | null = null,
   birthCountryId: string | null = null,
   representedCountryIds: string[] = [],
@@ -1794,6 +1795,7 @@ export async function addPerson(
   const lastNameTrimmed = lastName?.trim() || null
   const nicknameTrimmed = nickname?.trim() || null
   const birthDateTrimmed = birthDate?.trim() || null
+  const deathDateTrimmed = deathDate?.trim() || null
   const birthCityIdTrimmed = birthCityId?.trim() || null
   const birthCountryIdTrimmed = birthCountryId?.trim() || null
   const representedCountryIdsTrimmed = [...new Set(representedCountryIds.map((id) => id?.trim()).filter(Boolean))]
@@ -1811,6 +1813,7 @@ export async function addPerson(
     last_name: lastNameTrimmed,
     nickname: nicknameTrimmed,
     birth_date: birthDateTrimmed,
+    death_date: deathDateTrimmed,
     birth_city_id: birthCityIdTrimmed,
     birth_country_id: birthCountryIdTrimmed,
     is_active: isActive,

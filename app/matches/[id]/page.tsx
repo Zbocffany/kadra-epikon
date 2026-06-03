@@ -4,8 +4,6 @@ import { getPublicMatchDetails, getPublicMatchEvents, getPublicMatchParticipants
 import { getAdminCityDetails } from '@/lib/db/cities'
 import { getAdminStadiumDetails } from '@/lib/db/stadiums'
 
-export const dynamic = 'force-dynamic'
-
 type Params = Promise<{ id: string }>
 type SearchParams = Promise<{ from?: string | string[] | undefined }>
 

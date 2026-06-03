@@ -1,8 +1,6 @@
 import PublicMatchesContent from '@/components/matches/PublicMatchesPage'
 import type { RawSearchParams } from '@/lib/pagination'
 
-export const dynamic = 'force-dynamic'
-
 type SearchParams = Promise<RawSearchParams>
 
 export default async function PublicMatchesPage({ searchParams }: { searchParams: SearchParams }) {

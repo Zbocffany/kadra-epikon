@@ -63,7 +63,11 @@ export default async function AdminCityDetailsPage({
     ? periods.find((p) => p.id === period) ?? null
     : null
   const historyPeriods = periods.filter((p) => p.valid_from || p.valid_to)
-  const periodIssues = validateCityCountryPeriods(periods)
+  // Walidację puszczamy tylko po okresach z datami — wiersz NULL/NULL "cały okres"
+  // wstawiany przez pole "Kraj" przy tworzeniu miasta nie powinien fałszować raportu
+  // (jako drugi otwarty okres albo duplikat sąsiedni). Patrz purgeRedundantOpenAllPeriods.
+  const periodsForValidation = historyPeriods.length > 0 ? historyPeriods : periods
+  const periodIssues = validateCityCountryPeriods(periodsForValidation)
 
   const countryOptions = countries.map((c) => ({ id: c.id, label: c.name }))
 
@@ -209,11 +213,6 @@ export default async function AdminCityDetailsPage({
         editContent={
           <form action={updateCity} className="space-y-4">
             <input type="hidden" name="id" value={city.id} />
-            <input
-              type="hidden"
-              name="current_period_id"
-              value={city.current_period_id ?? ''}
-            />
             {fields}
             <div className="flex items-center justify-end gap-2 pt-2">
               <Link

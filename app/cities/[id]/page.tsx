@@ -5,8 +5,6 @@ import GlossyDisclosureCircle from '@/components/admin/GlossyDisclosureCircle'
 import { getPublicCityProfile, type PublicCityPersonRole } from '@/lib/db/citiesPublic'
 import type { DetailPageParams } from '@/lib/types/admin'
 
-export const dynamic = 'force-dynamic'
-
 function formatYear(date: string | null): string {
   if (!date) return '—'
   return date.slice(0, 4)

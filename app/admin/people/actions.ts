@@ -1,9 +1,25 @@
 ﻿'use server'
 
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { invalidatePublicCacheVersion } from '@/lib/db/publicCache'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import { getTrimmedNullable, getTrimmedString, redirectWithAdded, redirectWithError, redirectWithSaved } from '@/lib/actions/admin'
 import { findDuplicatePeopleByBirthDateAndCountry, type DuplicatePerson } from '@/lib/db/people'
+
+function revalidatePeopleCaches(personId: string | null = null): void {
+  revalidateTag('public-people', 'max')
+  if (personId) revalidateTag(`public-person:${personId}`, 'max')
+  revalidatePath('/admin/people')
+  revalidatePath('/players')
+  revalidatePath('/coaches')
+  revalidatePath('/referees')
+  if (personId) {
+    revalidatePath(`/admin/people/${personId}`)
+    revalidatePath(`/people/${personId}`)
+  }
+  invalidatePublicCacheVersion()
+}
 
 export async function checkDuplicatePeople(
   birthDate: string | null,
@@ -160,6 +176,7 @@ export async function createPerson(formData: FormData): Promise<void> {
   }
 
   const label = [firstName, lastName].filter(Boolean).join(' ').trim() || nickname || 'osoba'
+  revalidatePeopleCaches(personId)
   redirectWithAdded('/admin/people', label)
 }
 
@@ -224,6 +241,8 @@ export async function updatePerson(formData: FormData): Promise<void> {
 
   // Cache publicznych widoków jest unieważniany automatycznie przez triggery DB
   // (tbl_Public_Cache_Version) — patrz migracja 032_public_cache_versioning.sql.
+  // Dodatkowo wymuszamy revalidate Next.js i odświeżenie lokalnej wersji cache.
+  revalidatePeopleCaches(id)
 
   redirectWithSaved(`/admin/people/${id}`)
 }
@@ -256,6 +275,7 @@ export async function deletePerson(formData: FormData): Promise<void> {
   }
 
   const label = [person?.first_name, person?.last_name].filter(Boolean).join(' ').trim() || person?.nickname || id
+  revalidatePeopleCaches(id)
   redirectWithAdded('/admin/people', `Usunięto osóbe: ${label}`)
 }
 

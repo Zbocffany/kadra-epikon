@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "sync:flags": "node scripts/sync-flag-icons.mjs"
+    "sync:flags": "node scripts/sync-flag-icons.mjs",
+    "fill:club-founded:wikidata": "node scripts/fill-club-founded-wikidata.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.9.0",
@@ -15,7 +16,8 @@
     "flag-icons": "^7.5.0",
     "next": "16.1.1",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

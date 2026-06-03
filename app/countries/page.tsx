@@ -2,8 +2,6 @@ import type { PublicCountry } from '@/lib/db/countries'
 import { getPublicCountries } from '@/lib/db/countries'
 import CountriesSearchTable from './CountriesSearchTable'
 
-export const dynamic = 'force-dynamic'
-
 export default async function PublicCountriesPage() {
   let countries: PublicCountry[] = []
   let fetchError: string | null = null

@@ -1,8 +1,6 @@
 import AdminPersonDetailsPage from '../../admin/people/[id]/page'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
 
-export const dynamic = 'force-dynamic'
-
 type PublicPersonDetailsPageProps = {
   params: DetailPageParams
   searchParams?: DetailPageSearchParams

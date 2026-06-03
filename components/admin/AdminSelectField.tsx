@@ -145,14 +145,34 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
     let cancelled = false
     setIsFetching(true)
     const doFetch = fetchUrl
-      ? (q: string) => fetch(`${fetchUrl}?q=${encodeURIComponent(q)}`).then((r) => r.json() as Promise<T[]>)
+      ? async (q: string): Promise<T[]> => {
+          const res = await fetch(`${fetchUrl}?q=${encodeURIComponent(q)}`)
+          if (!res.ok) {
+            const body = await res.text().catch(() => '')
+            console.error(
+              `[AdminSelectField:${name}] ${fetchUrl} failed: ${res.status} ${res.statusText}`,
+              body,
+            )
+            return []
+          }
+          const data = (await res.json()) as unknown
+          if (!Array.isArray(data)) {
+            console.error(
+              `[AdminSelectField:${name}] ${fetchUrl} returned non-array payload`,
+              data,
+            )
+            return []
+          }
+          return data as T[]
+        }
       : fetchOptions!
     doFetch(debouncedQuery).then((results) => {
       if (!cancelled) {
         setAsyncResults(results)
         setIsFetching(false)
       }
-    }).catch(() => {
+    }).catch((err) => {
+      console.error(`[AdminSelectField:${name}] fetch threw`, err)
       if (!cancelled) setIsFetching(false)
     })
     return () => { cancelled = true }
@@ -162,8 +182,14 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
     if (!wrapperRef.current?.contains(e.relatedTarget as Node)) {
       setIsOpen(false)
       // Reset query to reflect actual selected value (discard abandoned search text)
+      // When using fetchOptions with empty initial options, selected item may not be in allOptions.
+      // In that case, keep query as-is (preserves the display label that was set when value changed).
       const selected = allOptions.find((opt) => opt.id === value)
-      setQuery(selected ? getDisplayLabel(selected) : '')
+      if (selected) {
+        setQuery(getDisplayLabel(selected))
+      } else if (value && !isAsync) {
+        setQuery('')
+      }
     }
   }
 

@@ -55,9 +55,33 @@ export default function MatchCreateModal({
   const [walkoverWinnerTeamId, setWalkoverWinnerTeamId] = useState('')
 
   const fetchTeamOptions = useCallback(async (q: string): Promise<AdminTeamOption[]> => {
-    const res = await fetch(`/api/admin/teams/search?q=${encodeURIComponent(q)}`)
-    if (!res.ok) return []
-    return res.json()
+    let res: Response
+    try {
+      res = await fetch(`/api/admin/teams/search?q=${encodeURIComponent(q)}`)
+    } catch (err) {
+      console.error('[MatchCreateModal] fetchTeamOptions network error', err)
+      return []
+    }
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.error(
+        `[MatchCreateModal] /api/admin/teams/search failed: ${res.status} ${res.statusText}`,
+        body,
+      )
+      return []
+    }
+    try {
+      const data = (await res.json()) as AdminTeamOption[]
+      if (!Array.isArray(data) || data.length === 0) {
+        console.warn(
+          `[MatchCreateModal] /api/admin/teams/search returned empty list for q=${JSON.stringify(q)}`,
+        )
+      }
+      return data
+    } catch (err) {
+      console.error('[MatchCreateModal] fetchTeamOptions JSON parse error', err)
+      return []
+    }
   }, [])
 
   const handleCityOptionCreated = (option: { id: string; label?: string }) => {    setCityOptions((prev) => {
@@ -316,16 +340,16 @@ export default function MatchCreateModal({
             <div className="flex flex-col gap-1.5">
               <AdminSelectField
                 name="home_team_id"
-                label="Gospodarz"
+                label="Gospodarz (reprezentacja)"
                 required
                 selectedId={homeTeamId}
                 options={[]}
                 fetchOptions={fetchTeamOptions}
                 displayKey="label"
-                placeholder="Wpisz nazwę, aby wyszukać gospodarza..."
-                addButtonLabel="+ Dodaj klub"
-                addDialogTitle="Nowy klub"
-                emptyResultsMessage="Brak wyników - możesz dodać nowy klub poniżej."
+                placeholder="Wpisz nazwę kraju..."
+                addButtonLabel="+ Dodaj reprezentację"
+                addDialogTitle="Nowa reprezentacja"
+                emptyResultsMessage="Brak wyników."
                 createAction={createClubInline}
                 onSelectedIdChange={(teamId) => {
                   setHomeTeamId(teamId)
@@ -347,16 +371,16 @@ export default function MatchCreateModal({
             <div className="flex flex-col gap-1.5">
               <AdminSelectField
                 name="away_team_id"
-                label="Gość"
+                label="Gość (reprezentacja)"
                 required
                 selectedId={awayTeamId}
                 options={[]}
                 fetchOptions={fetchTeamOptions}
                 displayKey="label"
-                placeholder="Wpisz nazwę, aby wyszukać gościa..."
-                addButtonLabel="+ Dodaj klub"
-                addDialogTitle="Nowy klub"
-                emptyResultsMessage="Brak wyników - możesz dodać nowy klub poniżej."
+                placeholder="Wpisz nazwę kraju..."
+                addButtonLabel="+ Dodaj reprezentację"
+                addDialogTitle="Nowa reprezentacja"
+                emptyResultsMessage="Brak wyników."
                 createAction={createClubInline}
                 onSelectedIdChange={(teamId) => {
                   setAwayTeamId(teamId)

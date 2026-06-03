@@ -1,6 +1,8 @@
 ﻿'use server'
 
+import { revalidatePath } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { invalidatePublicCacheVersion } from '@/lib/db/publicCache'
 import type { InlineCreateState } from '@/lib/types/admin'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import {
@@ -11,6 +13,15 @@ import {
   redirectWithError,
   redirectWithSaved,
 } from '@/lib/actions/admin'
+
+function revalidateStadiumCaches(stadiumId: string | null = null): void {
+  // Stadiums nie maj\u0105 osobnej publicznej listy, ale s\u0105 czytane w match details
+  // (getPublicMatchDetails). Dlatego \u0142ami\u0105c lokaln\u0105 wersj\u0119 cache wymuszamy
+  // re-fetch wszystkich publicznych zapyta\u0144 sk\u0142adaj\u0105cych si\u0119 z \u015bwie\u017cymi danymi.
+  revalidatePath('/admin/stadiums')
+  if (stadiumId) revalidatePath(`/admin/stadiums/${stadiumId}`)
+  invalidatePublicCacheVersion()
+}
 
 export async function createStadium(formData: FormData): Promise<void> {
   await requireAdminAccess()
@@ -41,6 +52,7 @@ export async function createStadium(formData: FormData): Promise<void> {
     redirectWithError('/admin/stadiums', 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
+  revalidateStadiumCaches()
   redirectWithAdded('/admin/stadiums', name)
 }
 
@@ -89,6 +101,7 @@ export async function createStadiumInline(
 
   const label = city.city_name ? `${name} (${city.city_name})` : name
 
+  revalidateStadiumCaches(id)
   return inlineSuccess(prevState, id, label)
 }
 
@@ -128,6 +141,7 @@ export async function updateStadium(formData: FormData): Promise<void> {
     redirectWithError(`/admin/stadiums/${id}`, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
+  revalidateStadiumCaches(id)
   redirectWithSaved(`/admin/stadiums/${id}`)
 }
 
@@ -158,6 +172,7 @@ export async function deleteStadium(formData: FormData): Promise<void> {
     )
   }
 
+  revalidateStadiumCaches(id)
   redirectWithAdded('/admin/stadiums', `Usunięto stadion: ${stadium?.name ?? id}`)
 }
 
