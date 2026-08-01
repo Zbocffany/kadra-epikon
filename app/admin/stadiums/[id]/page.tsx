@@ -7,6 +7,7 @@ import type { AdminCountryOption } from '@/lib/db/cities'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import { getAdminCities } from '@/lib/db/clubs'
 import { getAdminStadiumDetails } from '@/lib/db/stadiums'
+import { formatCityWithFifa } from '@/lib/utils/cityLabel'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import {
   DetailsPageContainer,
@@ -133,7 +134,7 @@ export default async function AdminStadiumDetailsPage({
               label="Miasto stadionu"
               required
               selectedId={stadium.stadium_city_id}
-              options={cities.map((c) => ({ id: c.id, label: c.city_name }))}
+              options={cities.map((c) => ({ id: c.id, label: formatCityWithFifa(c.city_name, c.current_country_fifa_code) }))}
               displayKey="label"
               addButtonLabel="+ Dodaj miasto"
               addDialogTitle="Nowe miasto"

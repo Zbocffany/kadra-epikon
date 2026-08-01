@@ -1,5 +1,5 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
-import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
+import { fetchAllRows, getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
 export type AdminCityListItem = {
   id: string
@@ -186,13 +186,18 @@ async function getCityStats(
 export async function getAdminCitiesList(): Promise<AdminCityListItem[]> {
   const supabase = createServiceRoleClient()
 
-  const { data: cities, error: citiesError } = await supabase
-    .from('tbl_Cities')
-    .select('id, city_name, current_country_id')
-    .order('city_name', { ascending: true })
+  type CityRow = { id: string; city_name: string | null; current_country_id: string | null }
+  // PostgREST caps responses at 1000 rows; cities easily exceed that, so page through all.
+  const cities = await fetchAllRows<CityRow>((from, to) =>
+    supabase
+      .from('tbl_Cities')
+      .select('id, city_name, current_country_id')
+      .order('city_name', { ascending: true, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
-  if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
-  if (!cities?.length) return []
+  if (!cities.length) return []
 
   const cityIds = cities.map((c) => c.id)
 
@@ -219,16 +224,20 @@ export async function getAdminCitiesList(): Promise<AdminCityListItem[]> {
 
   // Pobieramy WSZYSTKICH ludzi z ustawionym birth_city_id i filtrujemy w JS.
   // Nie używamy .in('birth_city_id', cityIds) bo cityIds może mieć setki UUID-ów i przekraczać limit URL PostgREST.
-  const { data: people, error: peopleError } = await supabase
-    .from('tbl_People')
-    .select('id, birth_city_id')
-    .not('birth_city_id', 'is', null)
-
-  if (peopleError) throw new Error(`tbl_People: ${peopleError.message}`)
+  // Paginujemy przez .range() — bez tego PostgREST tnie wynik do 1000 wierszy (tbl_People ma ich >>1000).
+  type PersonBirthRow = { id: string; birth_city_id: string | null }
+  const people = await fetchAllRows<PersonBirthRow>((from, to) =>
+    supabase
+      .from('tbl_People')
+      .select('id, birth_city_id')
+      .not('birth_city_id', 'is', null)
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
   const cityIdSet = new Set(cityIds)
   const personByCityId = new Map<string, string[]>()
-  for (const p of people ?? []) {
+  for (const p of people) {
     if (!p.birth_city_id || !cityIdSet.has(p.birth_city_id)) continue
     const arr = personByCityId.get(p.birth_city_id) ?? []
     arr.push(p.id)

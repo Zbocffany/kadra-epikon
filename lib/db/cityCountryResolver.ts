@@ -129,17 +129,26 @@ export async function loadCityCountryPeriodsMap(
   if (!cityIds.length) return map
 
   const BATCH = 250
+  const PAGE_SIZE = 1000
   for (let i = 0; i < cityIds.length; i += BATCH) {
     const chunk = cityIds.slice(i, i + BATCH)
-    const { data, error } = await supabase
-      .from('tbl_City_Country_Periods')
-      .select('city_id, country_id, valid_from, valid_to')
-      .in('city_id', chunk)
-    if (error) throw new Error(`tbl_City_Country_Periods: ${error.message}`)
-    for (const row of (data ?? []) as CityCountryPeriodRow[]) {
-      const list = map.get(row.city_id)
-      if (list) list.push(row)
-      else map.set(row.city_id, [row])
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_City_Country_Periods')
+        .select('city_id, country_id, valid_from, valid_to')
+        .in('city_id', chunk)
+        .order('city_id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (error) throw new Error(`tbl_City_Country_Periods: ${error.message}`)
+      const rows = (data ?? []) as CityCountryPeriodRow[]
+      for (const row of rows) {
+        const list = map.get(row.city_id)
+        if (list) list.push(row)
+        else map.set(row.city_id, [row])
+      }
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
     }
   }
   return map

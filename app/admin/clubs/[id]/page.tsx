@@ -40,6 +40,7 @@ import {
 } from '@/components/admin/DetailsPageLayout'
 import { DetailsFieldCard, DetailsFieldValue } from '@/components/admin/DetailsFieldCard'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
+import { formatCityWithFifa } from '@/lib/utils/cityLabel'
 
 type Params = DetailPageParams
 type SearchParams = DetailPageSearchParams
@@ -51,7 +52,7 @@ function formatEventDate(date: string | null, precision: 'YEAR' | 'MONTH' | 'DAY
   return date
 }
 
-function StadiumInlineForm({ cities }: { cities: { id: string; city_name: string }[] }) {
+function StadiumInlineForm({ cities }: { cities: { id: string; city_name: string; current_country_fifa_code: string | null }[] }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-1.5">
@@ -80,7 +81,7 @@ function StadiumInlineForm({ cities }: { cities: { id: string; city_name: string
           <option value="">— wybierz —</option>
           {cities.map((city) => (
             <option key={city.id} value={city.id}>
-              {city.city_name}
+              {formatCityWithFifa(city.city_name, city.current_country_fifa_code)}
             </option>
           ))}
         </select>

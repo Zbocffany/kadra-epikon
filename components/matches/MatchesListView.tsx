@@ -464,7 +464,7 @@ export default function MatchesListView({
 
               <div className="min-w-0 flex-1 space-y-6">
                 {!fetchError && showUpcomingSection && upcomingMatches.length > 0 ? (
-              <details className="mb-6 group overflow-visible rounded-xl border border-neutral-800 bg-neutral-950">
+              <details suppressHydrationWarning className="mb-6 group overflow-visible rounded-xl border border-neutral-800 bg-neutral-950">
                 <summary className="relative z-20 flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-4 py-2.5 marker:content-none pointer-events-auto">
                   <GlossySummaryBadge>Najbliższe mecze</GlossySummaryBadge>
                   <span className="inline-flex items-center gap-3">
@@ -609,7 +609,7 @@ export default function MatchesListView({
                         <div className="px-4 py-5 text-sm text-neutral-500">Brak meczów poza zaplanowanymi na tej stronie.</div>
                       )}
                       {years.map((year) => (
-                        <details key={year} className="group bg-neutral-950">
+                        <details key={year} suppressHydrationWarning className="group bg-neutral-950">
                           <summary className="relative z-20 grid min-h-[58px] cursor-pointer list-none grid-cols-[auto_1fr_auto] items-center gap-[14px] bg-neutral-900 px-[18px] py-[9px] marker:content-none pointer-events-auto">
                             <GlossySummaryBadge>{year}</GlossySummaryBadge>
                             <div className="flex min-h-[32px] min-w-0 items-center justify-center text-center">

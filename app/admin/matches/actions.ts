@@ -3,6 +3,7 @@
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { invalidatePublicCacheVersion } from '@/lib/db/publicCache'
+import { fetchAllRows } from '@/lib/db/pagination'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import {
   getTrimmedNullable,
@@ -359,17 +360,22 @@ async function resolveClubTeamIdForParticipant(
   personId: string,
   matchDate: string
 ): Promise<string | null> {
-  const { data: periods, error } = await supabase
-    .from('tbl_Person_Team_Periods')
-    .select('club_team_id, valid_from, valid_to')
-    .eq('person_id', personId)
-    .order('valid_from', { ascending: false })
-
-  if (error) {
-    throw new Error('Nie udało się wyliczyć klubu osoby na dzień meczu.')
+  type PersonTeamPeriodRow = {
+    club_team_id: string
+    valid_from: string
+    valid_to: string | null
   }
+  // PostgREST tnie do 1000 wierszy bez .range() — paginujemy defensywnie.
+  const periods = await fetchAllRows<PersonTeamPeriodRow>((from, to) =>
+    supabase
+      .from('tbl_Person_Team_Periods')
+      .select('club_team_id, valid_from, valid_to')
+      .eq('person_id', personId)
+      .order('valid_from', { ascending: false })
+      .range(from, to)
+  )
 
-  const matchingPeriod = (periods ?? []).find((period) => (
+  const matchingPeriod = periods.find((period) => (
     period.valid_from <= matchDate && (!period.valid_to || period.valid_to >= matchDate)
   ))
 
@@ -1855,6 +1861,16 @@ export async function addPerson(
   const fullName = firstNameTrimmed && lastNameTrimmed
     ? `${firstNameTrimmed} ${lastNameTrimmed}`
     : firstNameTrimmed || lastNameTrimmed || nicknameTrimmed || '—'
+
+  // Invalidate public + admin caches so the new person shows up immediately on
+  // /admin/people, /players, /coaches, /referees and the person details pages.
+  revalidateTag('public-people', 'max')
+  revalidateTag(`public-person:${personId}`, 'max')
+  revalidatePath('/admin/people')
+  revalidatePath('/players')
+  revalidatePath('/coaches')
+  revalidatePath('/referees')
+  invalidatePublicCacheVersion()
 
   return {
     id: personId,

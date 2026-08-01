@@ -6,6 +6,7 @@ import type { AdminPersonBirthCityOption } from '@/lib/db/people'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import type { InlineCreateState } from '@/lib/types/admin'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
+import { formatCityWithFifa } from '@/lib/utils/cityLabel'
 
 const BIRTH_COUNTRY_CHANGED_EVENT = 'person:birth-country-changed'
 const COUNTRY_CREATED_EVENT = 'person:country-created'
@@ -122,7 +123,7 @@ export default function PersonBirthplaceFields({
         name="birth_city_id"
         label="Miasto urodzenia"
         selectedId={selectedCityId}
-        options={cities.map((city) => ({ id: city.id, label: city.city_name }))}
+        options={cities.map((city) => ({ id: city.id, label: formatCityWithFifa(city.city_name, city.current_country_fifa_code) }))}
         displayKey="label"
         placeholder="Wpisz, aby filtrowac miasta..."
         addButtonLabel="+ Dodaj miasto"

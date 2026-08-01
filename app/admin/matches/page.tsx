@@ -68,7 +68,7 @@ export default async function AdminMatchesPage({ searchParams }: { searchParams:
   let matches: AdminMatch[] = []
   let competitionOptions: { id: string; name: string }[] = []
   let teamOptions: { id: string; label: string }[] = []
-  let cityOptions: { id: string; name: string }[] = []
+  let cityOptions: { id: string; name: string; current_country_fifa_code: string | null }[] = []
   let countryOptions: AdminCountryOption[] = []
   let federationOptions: AdminFederation[] = []
   let stadiumOptions: AdminStadiumOption[] = []

@@ -9,7 +9,9 @@ import DuplicatePeopleWarning from '@/components/admin/DuplicatePeopleWarning'
 import { createCityInline } from '@/app/admin/cities/actions'
 import { createCountryInline } from '@/app/admin/countries/actions'
 import AdminSelectField from '@/components/admin/AdminSelectField'
+import CityPeriodsBuilder from '@/app/admin/matches/CityPeriodsBuilder'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
+import { formatCityWithFifa } from '@/lib/utils/cityLabel'
 
 const MATCH_CITY_CREATED_EVENT = 'match:city-created'
 const MATCH_COUNTRY_CREATED_EVENT = 'match:country-created'
@@ -329,7 +331,7 @@ export default function AddPersonModal({
             disabled={isLoading}
             selectedId={selectedCityId}
             emptyOptionLabel="- brak -"
-            options={cityOptions.map((city) => ({ id: city.id, label: city.city_name }))}
+            options={cityOptions.map((city) => ({ id: city.id, label: formatCityWithFifa(city.city_name, city.current_country_fifa_code) }))}
             displayKey="label"
             placeholder="Wpisz, aby filtrować miasta..."
             addButtonLabel="+ Dodaj miasto"
@@ -342,11 +344,15 @@ export default function AddPersonModal({
               const countryName = createdCountryId
                 ? countryOptions.find((country) => country.id === createdCountryId)?.name ?? null
                 : null
+              const createdCountryFifa = createdCountryId
+                ? countryOptions.find((country) => country.id === createdCountryId)?.fifa_code ?? null
+                : null
               const createdCity: AdminPersonBirthCityOption = {
                 id: option.id,
                 city_name: option.label ?? '—',
                 current_country_id: createdCountryId,
                 current_country_name: countryName,
+                current_country_fifa_code: createdCountryFifa,
               }
 
               setCityOptions((prev) => {
@@ -485,6 +491,26 @@ export default function AddPersonModal({
                     ))}
                   </select>
                 </div>
+
+                <CityPeriodsBuilder
+                  scope="add_person_city"
+                  countries={countryOptions}
+                  federations={federations}
+                  onCountryOptionCreated={(option) => {
+                    const createdCountry = { id: option.id, name: option.label ?? '—' }
+                    setCountryOptions((prev) => {
+                      if (prev.some((country) => country.id === option.id)) return prev
+                      return [...prev, createdCountry].sort((a, b) =>
+                        a.name.localeCompare(b.name, 'pl')
+                      )
+                    })
+                    window.dispatchEvent(
+                      new CustomEvent<AdminCountryOption>(MATCH_COUNTRY_CREATED_EVENT, {
+                        detail: createdCountry,
+                      })
+                    )
+                  }}
+                />
               </div>
             )}
           />

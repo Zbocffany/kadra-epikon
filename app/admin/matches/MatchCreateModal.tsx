@@ -13,6 +13,7 @@ import {
   renderCreateClubInlineForm,
   renderCreateStadiumInlineForm,
 } from './inlineCreateForms'
+import { formatCityWithFifa } from '@/lib/utils/cityLabel'
 import type {
   AdminCityOption,
   AdminCompetitionOption,
@@ -86,7 +87,7 @@ export default function MatchCreateModal({
 
   const handleCityOptionCreated = (option: { id: string; label?: string }) => {    setCityOptions((prev) => {
       if (prev.some((city) => city.id === option.id)) return prev
-      return [...prev, { id: option.id, name: option.label ?? '—' }]
+      return [...prev, { id: option.id, name: option.label ?? '—', current_country_fifa_code: null }]
         .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
     })
   }
@@ -288,14 +289,14 @@ export default function MatchCreateModal({
                 }}
                 inlineForm={renderCreateStadiumInlineForm({
                   scope: 'inline_match',
-                  cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.name })),
+                  cityOptions: cityOptions.map((city) => ({ id: city.id, label: formatCityWithFifa(city.name, city.current_country_fifa_code) })),
                   countries: countryOptions,
                   federations,
                   onSelectedCityIdChange: setPendingStadiumCityId,
                   onCityOptionCreated: (option) => {
                     setCityOptions((prev) => {
                       if (prev.some((city) => city.id === option.id)) return prev
-                      return [...prev, { id: option.id, name: option.label ?? '—' }]
+                      return [...prev, { id: option.id, name: option.label ?? '—', current_country_fifa_code: null }]
                         .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
                     })
                     setPendingStadiumCityId(option.id)
@@ -310,7 +311,7 @@ export default function MatchCreateModal({
                 name="match_city_id"
                 label="Miasto meczu"
                 selectedId={selectedCityId}
-                options={cityOptions.map((city) => ({ id: city.id, label: city.name }))}
+                options={cityOptions.map((city) => ({ id: city.id, label: formatCityWithFifa(city.name, city.current_country_fifa_code) }))}
                 displayKey="label"
                 placeholder="Wpisz, aby filtrować miasta..."
                 addButtonLabel="+ Dodaj miasto"
@@ -321,7 +322,7 @@ export default function MatchCreateModal({
                 onOptionCreated={(option) => {
                   setCityOptions((prev) => {
                     if (prev.some((city) => city.id === option.id)) return prev
-                    return [...prev, { id: option.id, name: option.label ?? '—' }]
+                    return [...prev, { id: option.id, name: option.label ?? '—', current_country_fifa_code: null }]
                       .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
                   })
                 }}
@@ -359,7 +360,7 @@ export default function MatchCreateModal({
                 }}
                 inlineForm={renderCreateClubInlineForm({
                   scope: 'inline_match_home',
-                  cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.name })),
+                  cityOptions: cityOptions.map((city) => ({ id: city.id, label: formatCityWithFifa(city.name, city.current_country_fifa_code) })),
                   countries: countryOptions,
                   federations,
                   onCityOptionCreated: handleCityOptionCreated,
@@ -390,7 +391,7 @@ export default function MatchCreateModal({
                 }}
                 inlineForm={renderCreateClubInlineForm({
                   scope: 'inline_match_away',
-                  cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.name })),
+                  cityOptions: cityOptions.map((city) => ({ id: city.id, label: formatCityWithFifa(city.name, city.current_country_fifa_code) })),
                   countries: countryOptions,
                   federations,
                   onCityOptionCreated: handleCityOptionCreated,

@@ -242,7 +242,7 @@ export default function CoachMatchesByYearSection({ matches, yearStats, detailBa
       {highlighted ? (
         <span aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.18)_0%,rgba(255,255,255,0.05)_30%,rgba(0,0,0,0.16)_100%)]" />
       ) : null}
-      <details open={defaultExpanded && matches.length > 0} className={highlighted ? 'relative z-10 overflow-hidden rounded-lg border border-emerald-900/80 group/det' : 'overflow-hidden rounded-lg border border-neutral-800 group/det'}>
+      <details suppressHydrationWarning open={defaultExpanded && matches.length > 0} className={highlighted ? 'relative z-10 overflow-hidden rounded-lg border border-emerald-900/80 group/det' : 'overflow-hidden rounded-lg border border-neutral-800 group/det'}>
         <summary className={highlighted ? 'flex cursor-pointer list-none items-center justify-between bg-emerald-950/45 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-emerald-100/80 marker:content-none' : 'flex cursor-pointer list-none items-center justify-between bg-neutral-900 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-neutral-500 marker:content-none'}>
           <span>{title}</span>
           <GlossyDisclosureCircle rotateClassName="group-open/det:rotate-180" />
@@ -253,7 +253,7 @@ export default function CoachMatchesByYearSection({ matches, yearStats, detailBa
             <div className="px-4 py-5 text-sm text-neutral-500">{emptyMessage}</div>
           ) : (
             years.map((year) => (
-              <details key={year} className={highlighted ? 'group/year bg-emerald-950/20' : 'group/year bg-neutral-950'}>
+              <details key={year} suppressHydrationWarning className={highlighted ? 'group/year bg-emerald-950/20' : 'group/year bg-neutral-950'}>
                 <summary className={highlighted
                   ? 'relative z-20 grid cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)_1.25rem] items-center gap-3 border-t border-emerald-900/70 bg-emerald-950/38 px-3 py-2 marker:content-none pointer-events-auto'
                   : 'relative z-20 grid cursor-pointer list-none grid-cols-[auto_minmax(0,1fr)_1.25rem] items-center gap-3 bg-neutral-900 px-3 py-2 marker:content-none pointer-events-auto'}>

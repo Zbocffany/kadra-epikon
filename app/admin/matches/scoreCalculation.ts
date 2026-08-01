@@ -12,7 +12,7 @@ export interface MatchScore {
 /**
  * Oblicza wynik meczu na podstawie zdarzeń.
  * - homeGoals/awayGoals: bramki w regulaminowym czasie + dogrywce
- * - homeGoalsHT/awayGoalsHT: bramki do przerwy (minute < 45)
+ * - homeGoalsHT/awayGoalsHT: bramki do przerwy (minute <= 45, obejmuje doliczony czas 1. połowy)
  * - homeShootoutScore/awayShootoutScore: wynik rzutów karnych
  */
 export function calculateMatchScore(
@@ -35,12 +35,12 @@ export function calculateMatchScore(
     if (GOAL_TYPES.has(event.event_type)) {
       if (event.team_id === homeTeamId) {
         homeGoals += 1
-        if (event.minute < 45) {
+        if (event.minute <= 45) {
           homeGoalsHT += 1
         }
       } else if (event.team_id === awayTeamId) {
         awayGoals += 1
-        if (event.minute < 45) {
+        if (event.minute <= 45) {
           awayGoalsHT += 1
         }
       }

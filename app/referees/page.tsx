@@ -1,5 +1,5 @@
 import { getPublicPeople } from '@/lib/db/people'
-import PublicPeopleSearchTable from '@/app/admin/people/PublicPeopleSearchTable'
+import PublicPeopleSearchTable from '@/components/people/PublicPeopleSearchTable'
 
 export default async function PublicRefereesPage() {
 	const people = await getPublicPeople('referees')

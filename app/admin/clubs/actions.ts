@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import { invalidatePublicCacheVersion } from '@/lib/db/publicCache'
+import { fetchAllRows } from '@/lib/db/pagination'
 import type { InlineCreateState } from '@/lib/types/admin'
 import {
   getTrimmedNullable,
@@ -14,6 +15,18 @@ import {
   redirectWithError,
   redirectWithSaved,
 } from '@/lib/actions/admin'
+
+function revalidateClubCaches(clubId: string | null = null): void {
+  revalidateTag('public-clubs', 'max')
+  if (clubId) revalidateTag(`public-club:${clubId}`, 'max')
+  revalidatePath('/admin/clubs')
+  revalidatePath('/clubs')
+  if (clubId) {
+    revalidatePath(`/admin/clubs/${clubId}`)
+    revalidatePath(`/clubs/${clubId}`)
+  }
+  invalidatePublicCacheVersion()
+}
 
 async function ensureClubTeamExists(clubId: string): Promise<void> {
   const supabase = createServiceRoleClient()
@@ -72,6 +85,8 @@ export async function createClubInline(
     return inlineError(prevState, 'Nie udało się pobrać drużyny dla nowego klubu.')
   }
 
+  revalidateClubCaches(clubId)
+
   return inlineSuccess(prevState, teamData.id, name)
 }
 
@@ -107,6 +122,8 @@ export async function createClub(formData: FormData): Promise<void> {
     console.error('ensureClubTeamExists error:', err)
     redirectWithError('/admin/clubs', message)
   }
+
+  revalidateClubCaches(id)
 
   redirectWithAdded('/admin/clubs', name)
 }
@@ -151,12 +168,17 @@ export async function updateClub(formData: FormData): Promise<void> {
     .maybeSingle()
 
   if (team?.id) {
-    const { data: matches } = await supabase
-      .from('tbl_Matches')
-      .select('id')
-      .or(`home_team_id.eq.${team.id},away_team_id.eq.${team.id}`)
+    // PostgREST tnie do 1000 wierszy bez .range() — klub może mieć >1000 meczów.
+    const matches = await fetchAllRows<{ id: string }>((from, to) =>
+      supabase
+        .from('tbl_Matches')
+        .select('id')
+        .or(`home_team_id.eq.${team.id},away_team_id.eq.${team.id}`)
+        .order('id', { ascending: true })
+        .range(from, to)
+    )
 
-    const matchIds = [...new Set((matches ?? []).map((match) => match.id).filter(Boolean))]
+    const matchIds = [...new Set(matches.map((match) => match.id).filter(Boolean))]
     for (const matchId of matchIds) {
       revalidateTag(`public-match:${matchId}`, 'max')
     }
@@ -181,106 +203,41 @@ export async function deleteClub(formData: FormData): Promise<void> {
 
   const supabase = createServiceRoleClient()
 
-  const { data: club } = await supabase
-    .from('tbl_Clubs')
-    .select('name')
-    .eq('id', id)
-    .maybeSingle()
+  // Cały cascade + walidacja "czy klub ma powiązane mecze" żyje w RPC
+  // (migracja 040). Dzięki temu jest transakcyjny: crash w środku cofa całość,
+  // a jednoczesne dodanie meczu między walidacją a delete jest niemożliwe.
+  const { data, error } = await supabase
+    .rpc('admin_delete_club', { p_club_id: id })
+    .single<{ deleted: boolean; match_count: number; club_name: string | null }>()
 
-  // Find the club's team row
-  const { data: team } = await supabase
-    .from('tbl_Teams')
-    .select('id')
-    .eq('club_id', id)
-    .maybeSingle()
-
-  if (team) {
-    // Block deletion if the team is used in any match (home or away)
-    const { count: homeMatchCount } = await supabase
-      .from('tbl_Matches')
-      .select('id', { count: 'exact', head: true })
-      .eq('home_team_id', team.id)
-
-    const { count: awayMatchCount } = await supabase
-      .from('tbl_Matches')
-      .select('id', { count: 'exact', head: true })
-      .eq('away_team_id', team.id)
-
-    const totalMatches = (homeMatchCount ?? 0) + (awayMatchCount ?? 0)
-    if (totalMatches > 0) {
-      redirectWithError(
-        `/admin/clubs/${id}`,
-        `Nie można usunąć klubu — drużyna tego klubu jest powiązana z ${totalMatches} ${
-          totalMatches === 1 ? 'meczem' : totalMatches < 5 ? 'meczami' : 'meczami'
-        }. Najpierw usuń lub przepisz te mecze.`
-      )
-    }
-
-    // No matches → safe to clean up dependents before deleting the team
-
-    // 1) Nullify club_team_id in match participants (nullable FK)
-    await supabase
-      .from('tbl_Match_Participants')
-      .update({ club_team_id: null })
-      .eq('club_team_id', team.id)
-
-    // 2) Nullify team_id in match events (nullable FK)
-    await supabase
-      .from('tbl_Match_Events')
-      .update({ team_id: null })
-      .eq('team_id', team.id)
-
-    // 3) Delete person-team periods tied to this club's team
-    await supabase
-      .from('tbl_Person_Team_Periods')
-      .delete()
-      .eq('club_team_id', team.id)
-
-    // 4) Delete the team row itself
-    const { error: teamDeleteError } = await supabase
-      .from('tbl_Teams')
-      .delete()
-      .eq('id', team.id)
-
-    if (teamDeleteError) {
-      redirectWithError(`/admin/clubs/${id}`, 'Błąd usuwania drużyny klubu. Spróbuj ponownie.')
-    }
-  }
-
-  // 5) Delete club history (club_id NOT NULL → must go before club)
-  await supabase.from('tbl_Club_History').delete().eq('club_id', id)
-
-  // 6) Delete the club itself
-  const { error: clubDeleteError } = await supabase
-    .from('tbl_Clubs')
-    .delete()
-    .eq('id', id)
-
-  if (clubDeleteError) {
+  if (error) {
+    console.error('admin_delete_club RPC error:', error)
     redirectWithError(
       `/admin/clubs/${id}`,
       'Wystąpił błąd bazy danych podczas usuwania klubu. Spróbuj ponownie.'
     )
   }
 
-  revalidatePath('/admin/clubs')
-  revalidatePath(`/admin/clubs/${id}`)
-  revalidateTag('public-clubs', 'max')
-  revalidateTag(`public-club:${id}`, 'max')
-  if (team?.id) {
-    const { data: matches } = await supabase
-      .from('tbl_Matches')
-      .select('id')
-      .or(`home_team_id.eq.${team.id},away_team_id.eq.${team.id}`)
-
-    const matchIds = [...new Set((matches ?? []).map((match) => match.id).filter(Boolean))]
-    for (const matchId of matchIds) {
-      revalidateTag(`public-match:${matchId}`, 'max')
-    }
+  if (!data) {
+    redirectWithError(`/admin/clubs/${id}`, 'Brak odpowiedzi z bazy przy usuwaniu klubu.')
   }
-  invalidatePublicCacheVersion()
 
-  redirectWithAdded('/admin/clubs', `Usunięto klub: ${club?.name ?? id}`)
+  if (!data.deleted) {
+    if (data.club_name === null) {
+      redirectWithError('/admin/clubs', 'Klub nie istnieje lub został już usunięty.')
+    }
+    const totalMatches = data.match_count
+    redirectWithError(
+      `/admin/clubs/${id}`,
+      `Nie można usunąć klubu — drużyna tego klubu jest powiązana z ${totalMatches} ${
+        totalMatches === 1 ? 'meczem' : 'meczami'
+      }. Najpierw usuń lub przepisz te mecze.`
+    )
+  }
+
+  revalidateClubCaches(id)
+
+  redirectWithAdded('/admin/clubs', `Usunięto klub: ${data.club_name ?? id}`)
 }
 
 export async function saveClubHistoryEvent(formData: FormData): Promise<void> {
@@ -338,6 +295,8 @@ export async function saveClubHistoryEvent(formData: FormData): Promise<void> {
     }
   }
 
+  revalidateClubCaches(clubId)
+
   redirectWithSaved(`/admin/clubs/${clubId}`)
 }
 
@@ -359,6 +318,8 @@ export async function deleteClubHistoryEvent(formData: FormData): Promise<void> 
   if (error) {
     redirectWithError(`/admin/clubs/${clubId}`, 'Wystąpił błąd serwera. Spróbuj ponownie.')
   }
+
+  revalidateClubCaches(clubId)
 
   redirectWithSaved(`/admin/clubs/${clubId}`)
 }

@@ -258,6 +258,11 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
     }
   }, [dialogOpen, query])
 
+  // Synchronizuje wewnętrzny stan z propem `selectedId` TYLKO gdy ten się zmieni.
+  // Wcześniej efekt zależał też od `allOptions` i `getDisplayLabel` — przez co każda
+  // zmiana referencji tablicy opcji (np. inline create, async fetch, rerender rodzica)
+  // resetowała `value` do wartości z serwera, kasując wybór użytkownika.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (selectedId === undefined) {
       return
@@ -271,7 +276,7 @@ export default function AdminSelectField<T extends AdminSelectOption = AdminSele
       const selected = allOptions.find((opt) => opt.id === id)
       if (selected) setQuery(getDisplayLabel(selected))
     }
-  }, [allOptions, getDisplayLabel, selectedId])
+  }, [selectedId])
 
   const filteredOptions = useMemo(() => {
     if (isAsync) {

@@ -1,5 +1,6 @@
 import { unstable_cache } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
+import { fetchAllRows } from '@/lib/db/pagination'
 import { getPublicCacheKey } from '@/lib/db/publicCache'
 import {
   loadCityCountryPeriodsMap,
@@ -140,28 +141,45 @@ async function getAdminCityProfile(id: string): Promise<PublicCityProfile | null
   })
 
   // 3. Osoby urodzone w mieście.
-  const { data: peopleRows, error: peopleErr } = await supabase
-    .from('tbl_People')
-    .select('id, first_name, last_name, nickname, birth_date, death_date')
-    .eq('birth_city_id', id)
-  if (peopleErr) throw new Error(`tbl_People (birth_city): ${peopleErr.message}`)
+  // PostgREST tnie do 1000 wierszy bez .range() — duże miasta (Warszawa, Kraków) mogą mieć więcej.
+  type CityPersonRow = {
+    id: string
+    first_name: string | null
+    last_name: string | null
+    nickname: string | null
+    birth_date: string | null
+    death_date: string | null
+  }
+  const peopleRows = await fetchAllRows<CityPersonRow>((from, to) =>
+    supabase
+      .from('tbl_People')
+      .select('id, first_name, last_name, nickname, birth_date, death_date')
+      .eq('birth_city_id', id)
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
-  const peopleIds = (peopleRows ?? []).map((p) => p.id)
+  const peopleIds = peopleRows.map((p) => p.id)
 
   // Role z tbl_Match_Participants (analogicznie do getRolesByPersonId).
   const rolesByPersonId = new Map<string, Set<PublicCityPersonRole>>()
   if (peopleIds.length) {
     const CHUNK = 100
     for (let i = 0; i < peopleIds.length; i += CHUNK) {
-      const { data: roleRows, error: roleErr } = await supabase
-        .from('tbl_Match_Participants')
-        .select('person_id, role')
-        .in('person_id', peopleIds.slice(i, i + CHUNK))
-      if (roleErr) throw new Error(`tbl_Match_Participants (roles): ${roleErr.message}`)
-      for (const r of (roleRows ?? []) as Array<{ person_id: string; role: string }>) {
+      const chunkIds = peopleIds.slice(i, i + CHUNK)
+      // Wewnątrz chunka też paginujemy — 100 osób × ~30 udziałów/os = ~3000 wierszy, > 1000.
+      const roleRows = await fetchAllRows<{ person_id: string; role: string }>((from, to) =>
+        supabase
+          .from('tbl_Match_Participants')
+          .select('person_id, role')
+          .in('person_id', chunkIds)
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
+      for (const r of roleRows) {
         if (r.role !== 'PLAYER' && r.role !== 'COACH' && r.role !== 'REFEREE') continue
         const set = rolesByPersonId.get(r.person_id) ?? new Set<PublicCityPersonRole>()
-        set.add(r.role)
+        set.add(r.role as PublicCityPersonRole)
         rolesByPersonId.set(r.person_id, set)
       }
     }
@@ -169,7 +187,7 @@ async function getAdminCityProfile(id: string): Promise<PublicCityProfile | null
 
   const ROLE_ORDER: Record<PublicCityPersonRole, number> = { PLAYER: 0, COACH: 1, REFEREE: 2 }
 
-  const people: PublicCityPerson[] = (peopleRows ?? [])
+  const people: PublicCityPerson[] = peopleRows
     .map((p) => ({
       id: p.id,
       display_name: buildPersonDisplayName(p),

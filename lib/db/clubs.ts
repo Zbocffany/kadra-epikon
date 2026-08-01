@@ -1,6 +1,6 @@
 ﻿import { unstable_cache } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
-import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
+import { fetchAllRows, getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 import { getPublicCacheKey } from '@/lib/db/publicCache'
 import {
   loadCityCountryPeriodsMap,
@@ -105,12 +105,21 @@ async function getClubStats(
 
   const allTeamRows: Array<{ id: string; club_id: string }> = []
   for (let i = 0; i < clubIds.length; i += CHUNK_SIZE) {
-    const { data: teams, error: teamsError } = await supabase
-      .from('tbl_Teams')
-      .select('id, club_id')
-      .in('club_id', clubIds.slice(i, i + CHUNK_SIZE))
-    if (teamsError) throw new Error(`tbl_Teams: ${teamsError.message}`)
-    allTeamRows.push(...((teams ?? []) as Array<{ id: string; club_id: string }>))
+    const teamChunk = clubIds.slice(i, i + CHUNK_SIZE)
+    let from = 0
+    while (true) {
+      const { data: teams, error: teamsError } = await supabase
+        .from('tbl_Teams')
+        .select('id, club_id')
+        .in('club_id', teamChunk)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+      if (teamsError) throw new Error(`tbl_Teams: ${teamsError.message}`)
+      const rows = (teams ?? []) as Array<{ id: string; club_id: string }>
+      allTeamRows.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
   }
 
   const teamRows = allTeamRows
@@ -302,20 +311,27 @@ async function getCityCountryPeriodsByCityIds(
 
   const periods: CityCountryPeriod[] = []
   const batchSize = 250
+  const PAGE_SIZE = 1000
 
   for (let start = 0; start < cityIds.length; start += batchSize) {
     const cityIdsBatch = cityIds.slice(start, start + batchSize)
-    const { data: periodsBatch, error: periodsError } = await supabase
-      .from('tbl_City_Country_Periods')
-      .select('city_id, country_id, valid_from, valid_to')
-      .in('city_id', cityIdsBatch)
+    let from = 0
+    while (true) {
+      const { data: periodsBatch, error: periodsError } = await supabase
+        .from('tbl_City_Country_Periods')
+        .select('city_id, country_id, valid_from, valid_to')
+        .in('city_id', cityIdsBatch)
+        .order('city_id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
 
-    if (periodsError) {
-      throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
-    }
+      if (periodsError) {
+        throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
+      }
 
-    if (periodsBatch?.length) {
-      periods.push(...periodsBatch)
+      const rows = (periodsBatch ?? []) as CityCountryPeriod[]
+      if (rows.length) periods.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
     }
   }
 
@@ -347,6 +363,7 @@ export type AdminCity = {
   city_name: string
   current_country_id: string | null
   current_country_name: string | null
+  current_country_fifa_code: string | null
 }
 
 export type AdminClubPlayerStat = {
@@ -434,18 +451,48 @@ async function getEarliestFoundedDatesByClubIds(
   return map
 }
 
+// Bulk loader: chunkuje `.in('id', cityIds)` (URL length) + paginuje (ZASADA #7).
+// Zwraca tylko pola potrzebne resolverowi kraju klubu.
+type ClubCityRow = { id: string; city_name: string | null; current_country_id: string | null }
+async function loadClubCityRowsByIds(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  cityIds: string[]
+): Promise<ClubCityRow[]> {
+  if (!cityIds.length) return []
+  const out: ClubCityRow[] = []
+  const BATCH = 250
+  for (let i = 0; i < cityIds.length; i += BATCH) {
+    const chunk = cityIds.slice(i, i + BATCH)
+    const rows = await fetchAllRows<ClubCityRow>((from, to) =>
+      supabase
+        .from('tbl_Cities')
+        .select('id, city_name, current_country_id')
+        .in('id', chunk)
+        .order('id', { ascending: true })
+        .range(from, to)
+    )
+    out.push(...rows)
+  }
+  return out
+}
+
 export async function getAdminClubs(): Promise<AdminClub[]> {
   const supabase = createServiceRoleClient()
 
-  const { data: clubs, error: clubsError } = await supabase
-    .from('tbl_Clubs')
-    .select('id, name, club_city_id')
-    .order('name', { ascending: true })
+  type ClubRow = { id: string; name: string; club_city_id: string | null }
+  // PostgREST tnie do 1000 wierszy bez .range() — paginujemy całą tabelę klubów.
+  const clubs = await fetchAllRows<ClubRow>((from, to) =>
+    supabase
+      .from('tbl_Clubs')
+      .select('id, name, club_city_id')
+      .order('name', { ascending: true, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
-  if (clubsError) throw new Error(`tbl_Clubs: ${clubsError.message}`)
-  if (!clubs?.length) return []
+  if (!clubs.length) return []
 
-  const cityIds = [...new Set(clubs.map((c) => c.club_city_id).filter(Boolean))]
+  const cityIds = [...new Set(clubs.map((c) => c.club_city_id).filter((v): v is string => Boolean(v)))]
 
   if (!cityIds.length) {
     const [stats, foundedDateByClubId] = await Promise.all([
@@ -475,23 +522,18 @@ export async function getAdminClubs(): Promise<AdminClub[]> {
   }
 
   const [
-    { data: cities, error: citiesError },
+    cities,
     cityPeriodsMap,
     foundedDateByClubId,
   ] = await Promise.all([
-    supabase
-      .from('tbl_Cities')
-      .select('id, city_name, current_country_id')
-      .in('id', cityIds as string[]),
+    loadClubCityRowsByIds(supabase, cityIds as string[]),
     loadCityCountryPeriodsMap(supabase, cityIds as string[]),
     getEarliestFoundedDatesByClubIds(supabase, clubs.map((c) => c.id)),
   ])
 
-  if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
-
-  const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
+  const cityMap = new Map(cities.map((c) => [c.id, c.city_name]))
   const cityCurrentCountryMap = new Map(
-    (cities ?? []).map((c) => [c.id, c.current_country_id ?? null] as const)
+    cities.map((c) => [c.id, c.current_country_id ?? null] as const)
   )
 
   const allCountryIds = new Set<string>()
@@ -581,23 +623,18 @@ export async function getAdminClubsPage(
   }
 
   const [
-    { data: cities, error: citiesError },
+    cities,
     cityPeriodsMap,
     foundedDateByClubId,
   ] = await Promise.all([
-    supabase
-      .from('tbl_Cities')
-      .select('id, city_name, current_country_id')
-      .in('id', cityIds as string[]),
+    loadClubCityRowsByIds(supabase, cityIds as string[]),
     loadCityCountryPeriodsMap(supabase, cityIds as string[]),
     getEarliestFoundedDatesByClubIds(supabase, clubs.map((c) => c.id)),
   ])
 
-  if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
-
-  const cityMap = new Map((cities ?? []).map((c) => [c.id, c.city_name]))
+  const cityMap = new Map(cities.map((c) => [c.id, c.city_name]))
   const cityCurrentCountryMap = new Map(
-    (cities ?? []).map((c) => [c.id, c.current_country_id ?? null] as const)
+    cities.map((c) => [c.id, c.current_country_id ?? null] as const)
   )
 
   const allCountryIds = new Set<string>()
@@ -637,13 +674,18 @@ export async function getAdminClubsPage(
 export async function getAdminCities(): Promise<AdminCity[]> {
   const supabase = createServiceRoleClient()
 
-  const { data: cities, error: citiesError } = await supabase
-    .from('tbl_Cities')
-    .select('id, city_name')
-    .order('city_name', { ascending: true })
+  type CityRow = { id: string; city_name: string }
+  // tbl_Cities ma >1000 rekordów — paginujemy, bo PostgREST tnie do 1000 bez .range().
+  const cities = await fetchAllRows<CityRow>((from, to) =>
+    supabase
+      .from('tbl_Cities')
+      .select('id, city_name')
+      .order('city_name', { ascending: true, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
-  if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
-  if (!cities?.length) return []
+  if (!cities.length) return []
 
   const cityIds = cities.map((c) => c.id)
 
@@ -666,15 +708,19 @@ export async function getAdminCities(): Promise<AdminCity[]> {
 
   const countryIds = [...new Set([...currentCountryIdByCity.values()])]
   let countryMap = new Map<string, string>()
+  let countryFifaMap = new Map<string, string | null>()
 
   if (countryIds.length) {
     const { data: countries, error: countriesError } = await supabase
       .from('tbl_Countries')
-      .select('id, name')
+      .select('id, name, fifa_code')
       .in('id', countryIds)
 
     if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
     countryMap = new Map((countries ?? []).map((country) => [country.id, country.name]))
+    countryFifaMap = new Map(
+      (countries ?? []).map((country) => [country.id, country.fifa_code ?? null])
+    )
   }
 
   return cities.map((c) => {
@@ -684,6 +730,7 @@ export async function getAdminCities(): Promise<AdminCity[]> {
       city_name: c.city_name,
       current_country_id: countryId,
       current_country_name: countryId ? (countryMap.get(countryId) ?? null) : null,
+      current_country_fifa_code: countryId ? (countryFifaMap.get(countryId) ?? null) : null,
     }
   })
 }

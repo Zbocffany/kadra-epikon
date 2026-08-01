@@ -8,6 +8,7 @@ import type { AdminCountryOption } from '@/lib/db/cities'
 import type { AdminFederation } from '@/lib/db/countries'
 import type { AdminCityOption, AdminStadiumOption } from '@/lib/db/matches'
 import { renderCreateCityInlineForm, renderCreateStadiumInlineForm } from '../inlineCreateForms'
+import { formatCityWithFifa } from '@/lib/utils/cityLabel'
 
 type EditMatchLocationFieldsProps = {
   initialStadiumId: string | null
@@ -105,14 +106,14 @@ export default function EditMatchLocationFields({
             }}
             inlineForm={renderCreateStadiumInlineForm({
               scope: 'inline_edit',
-              cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.name })),
+              cityOptions: cityOptions.map((city) => ({ id: city.id, label: formatCityWithFifa(city.name, city.current_country_fifa_code) })),
               countries: countryOptions,
               federations,
               onSelectedCityIdChange: setPendingStadiumCityId,
               onCityOptionCreated: (option) => {
                 setCityOptions((prev) => {
                   if (prev.some((city) => city.id === option.id)) return prev
-                  return [...prev, { id: option.id, name: option.label ?? '—' }]
+                  return [...prev, { id: option.id, name: option.label ?? '—', current_country_fifa_code: null }]
                     .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
                 })
                 setPendingStadiumCityId(option.id)
@@ -131,7 +132,7 @@ export default function EditMatchLocationFields({
             label="Miasto meczu"
             hideLabel
             selectedId={selectedCityId}
-            options={cityOptions.map((city) => ({ id: city.id, label: city.name }))}
+            options={cityOptions.map((city) => ({ id: city.id, label: formatCityWithFifa(city.name, city.current_country_fifa_code) }))}
             displayKey="label"
             placeholder="Wpisz, aby filtrować miasta..."
             addButtonLabel="Dodaj miasto"
@@ -142,7 +143,7 @@ export default function EditMatchLocationFields({
             onOptionCreated={(option) => {
               setCityOptions((prev) => {
                 if (prev.some((city) => city.id === option.id)) return prev
-                return [...prev, { id: option.id, name: option.label ?? '—' }]
+                return [...prev, { id: option.id, name: option.label ?? '—', current_country_fifa_code: null }]
                   .sort((a, b) => a.name.localeCompare(b.name, 'pl'))
               })
             }}

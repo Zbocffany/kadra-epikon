@@ -1,5 +1,5 @@
 import { createServiceRoleClient } from '@/lib/supabase/server'
-import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
+import { fetchAllRows, getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 
 type CityCountryPeriod = {
   city_id: string
@@ -236,15 +236,20 @@ async function getStadiumVsPolandStats(
 export async function getAdminStadiums(): Promise<AdminStadiumListItem[]> {
   const supabase = createServiceRoleClient()
 
-  const { data: stadiums, error: stadiumsError } = await supabase
-    .from('tbl_Stadiums')
-    .select('id, name, stadium_city_id')
-    .order('name', { ascending: true })
+  type StadiumRow = { id: string; name: string; stadium_city_id: string | null }
+  // PostgREST tnie do 1000 wierszy bez .range() — paginujemy całą tabelę.
+  const stadiums = await fetchAllRows<StadiumRow>((from, to) =>
+    supabase
+      .from('tbl_Stadiums')
+      .select('id, name, stadium_city_id')
+      .order('name', { ascending: true, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
-  if (stadiumsError) throw new Error(`tbl_Stadiums: ${stadiumsError.message}`)
-  if (!stadiums?.length) return []
+  if (!stadiums.length) return []
 
-  const cityIds = [...new Set(stadiums.map((s) => s.stadium_city_id).filter(Boolean))]
+  const cityIds = [...new Set(stadiums.map((s) => s.stadium_city_id).filter((v): v is string => Boolean(v)))]
 
   if (!cityIds.length) {
     return stadiums.map((stadium) => ({

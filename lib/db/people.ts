@@ -1,6 +1,6 @@
 import { unstable_cache } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
-import { getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
+import { fetchAllRows, getPageRange, PG_PAGE_SIZE, type PaginatedDbResult } from '@/lib/db/pagination'
 import { getPublicCacheKey } from '@/lib/db/publicCache'
 import {
   loadCityCountryPeriodsMap,
@@ -248,6 +248,7 @@ export type AdminPersonBirthCityOption = {
   city_name: string
   current_country_id: string | null
   current_country_name: string | null
+  current_country_fifa_code: string | null
 }
 
 function sortPeriods(periods: CityCountryPeriod[]): CityCountryPeriod[] {
@@ -297,14 +298,19 @@ async function getRolesByPersonId(
   }
 
   const CHUNK_SIZE = 80
-  const allParticipants: { person_id: string; role: string }[] = []
+  type ParticipantRoleRow = { person_id: string; role: string }
+  const allParticipants: ParticipantRoleRow[] = []
   for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Match_Participants')
-      .select('person_id, role')
-      .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
-    if (error) throw new Error(`tbl_Match_Participants: ${error.message}`)
-    allParticipants.push(...(data ?? []))
+    const chunkIds = personIds.slice(i, i + CHUNK_SIZE)
+    const rows = await fetchAllRows<ParticipantRoleRow>((from, to) =>
+      supabase
+        .from('tbl_Match_Participants')
+        .select('person_id, role')
+        .in('person_id', chunkIds)
+        .order('id', { ascending: true })
+        .range(from, to)
+    )
+    allParticipants.push(...rows)
   }
   const participants = allParticipants
 
@@ -334,14 +340,20 @@ async function getExplicitRepresentedCountryDataByPersonId(
   }
 
   const CHUNK_SIZE = 80
-  const allLinks: { person_id: string; country_id: string }[] = []
+  type PersonCountryRow = { person_id: string; country_id: string }
+  const allLinks: PersonCountryRow[] = []
   for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Person_Countries')
-      .select('person_id, country_id')
-      .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
-    if (error) throw new Error(`tbl_Person_Countries: ${error.message}`)
-    allLinks.push(...(data ?? []))
+    const chunkIds = personIds.slice(i, i + CHUNK_SIZE)
+    const rows = await fetchAllRows<PersonCountryRow>((from, to) =>
+      supabase
+        .from('tbl_Person_Countries')
+        .select('person_id, country_id')
+        .in('person_id', chunkIds)
+        .order('person_id', { ascending: true })
+        .order('country_id', { ascending: true })
+        .range(from, to)
+    )
+    allLinks.push(...rows)
   }
   const links = allLinks
 
@@ -386,14 +398,20 @@ async function getExplicitRepresentedCountryIdsByPersonId(
   }
 
   const CHUNK_SIZE = 80
-  const allLinks: { person_id: string; country_id: string }[] = []
+  type PersonCountryRow = { person_id: string; country_id: string }
+  const allLinks: PersonCountryRow[] = []
   for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Person_Countries')
-      .select('person_id, country_id')
-      .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
-    if (error) throw new Error(`tbl_Person_Countries: ${error.message}`)
-    allLinks.push(...(data ?? []))
+    const chunkIds = personIds.slice(i, i + CHUNK_SIZE)
+    const rows = await fetchAllRows<PersonCountryRow>((from, to) =>
+      supabase
+        .from('tbl_Person_Countries')
+        .select('person_id, country_id')
+        .in('person_id', chunkIds)
+        .order('person_id', { ascending: true })
+        .order('country_id', { ascending: true })
+        .range(from, to)
+    )
+    allLinks.push(...rows)
   }
   const links = allLinks
 
@@ -487,8 +505,22 @@ type MatchVenue = {
 }
 
 // Resolves venue (stadium → city → country @ match_date) for the given match ids.
-// Country comes from tbl_City_Country_Periods (time-dependent), city from
-// tbl_Stadiums.stadium_city_id when match has a stadium, else from tbl_Matches.match_city_id.
+//
+// Country resolution (kolejność priorytetu):
+//   1. Okres z tbl_City_Country_Periods, w którym match_date mieści się
+//      w [valid_from, valid_to] — to "kraj historyczny w dniu meczu".
+//   2. Fallback: tbl_Cities.current_country_id — używany dla miast, które
+//      nie mają wpisów historycznych (po migracji 038 to NORMA, nie wyjątek
+//      — miasto bez zmian państwowych ma 0 wierszy w tbl_City_Country_Periods).
+//      BEZ tego fallbacku filtr "Lokalizacja" w widoku publicznym gubił
+//      wszystkie mecze rozegrane w miastach bez okresów (czyli praktycznie
+//      całą Polskę współczesną).
+//   3. Ostatecznie: pierwszy okres po sort (najpóźniejszy / otwarty) —
+//      ratunek dla miast, w których są okresy ale żaden nie obejmuje
+//      match_date (powinien być rzadki — miasto ma przerwy w historii).
+//
+// City source: tbl_Stadiums.stadium_city_id when match has a stadium,
+// else tbl_Matches.match_city_id.
 async function getMatchVenuesByMatchId(
   supabase: ReturnType<typeof createServiceRoleClient>,
   matchInfos: Array<{ id: string; match_date: string; match_stadium_id: string | null; match_city_id: string | null }>
@@ -518,12 +550,15 @@ async function getMatchVenuesByMatchId(
 
   const cityIds = [...new Set([...effectiveCityIdByMatch.values()].filter((v): v is string => Boolean(v)))]
 
-  type CityRow = { id: string; city_name: string | null }
+  // current_country_id potrzebny jako fallback gdy miasto nie ma okresów
+  // (lub gdy match_date wypada poza wszystkimi okresami). Po migracji 038
+  // jest źródłem prawdy o aktualnym kraju miasta.
+  type CityRow = { id: string; city_name: string | null; current_country_id: string | null }
   const cityById = new Map<string, CityRow>()
   for (let i = 0; i < cityIds.length; i += CHUNK_SIZE) {
     const { data, error } = await supabase
       .from('tbl_Cities')
-      .select('id, city_name')
+      .select('id, city_name, current_country_id')
       .in('id', cityIds.slice(i, i + CHUNK_SIZE))
     if (error) throw new Error(`tbl_Cities (match venues): ${error.message}`)
     for (const row of (data ?? []) as CityRow[]) cityById.set(row.id, row)
@@ -531,12 +566,16 @@ async function getMatchVenuesByMatchId(
 
   const periodsByCity = new Map<string, CityCountryPeriod[]>()
   for (let i = 0; i < cityIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_City_Country_Periods')
-      .select('city_id, country_id, valid_from, valid_to')
-      .in('city_id', cityIds.slice(i, i + CHUNK_SIZE))
-    if (error) throw new Error(`tbl_City_Country_Periods (match venues): ${error.message}`)
-    for (const row of (data ?? []) as CityCountryPeriod[]) {
+    const cityIdsBatch = cityIds.slice(i, i + CHUNK_SIZE)
+    const rows = await fetchAllRows<CityCountryPeriod>((from, to) =>
+      supabase
+        .from('tbl_City_Country_Periods')
+        .select('city_id, country_id, valid_from, valid_to')
+        .in('city_id', cityIdsBatch)
+        .order('city_id', { ascending: true })
+        .range(from, to)
+    )
+    for (const row of rows) {
       const arr = periodsByCity.get(row.city_id) ?? []
       arr.push(row)
       periodsByCity.set(row.city_id, arr)
@@ -554,8 +593,15 @@ async function getMatchVenuesByMatchId(
       const toOk = !p.valid_to || matchDate <= p.valid_to
       return fromOk && toOk
     })
-    const chosen = inRange ?? sortPeriods(periods)[0] ?? null
-    matchCountryIdByMatch.set(m.id, chosen?.country_id ?? null)
+    // Fallback: current_country_id z tbl_Cities (źródło prawdy po migracji 038),
+    // a dopiero potem najnowszy okres (rezerwa na wypadek miast bez current_country_id).
+    const fallbackCurrent = cityById.get(cityId)?.current_country_id ?? null
+    const chosenCountryId =
+      inRange?.country_id ??
+      fallbackCurrent ??
+      sortPeriods(periods)[0]?.country_id ??
+      null
+    matchCountryIdByMatch.set(m.id, chosenCountryId)
   }
 
   const countryIds = [...new Set([...matchCountryIdByMatch.values()].filter((v): v is string => Boolean(v)))]
@@ -1654,34 +1700,37 @@ export async function findDuplicatePeopleByBirthDateAndCountry(
 export async function getAdminPersonBirthCityOptions(): Promise<AdminPersonBirthCityOption[]> {
   const supabase = createServiceRoleClient()
 
-  const { data: cities, error: citiesError } = await supabase
-    .from('tbl_Cities')
-    .select('id, city_name, current_country_id')
-    .order('city_name', { ascending: true })
+  type CityRow = { id: string; city_name: string | null; current_country_id: string | null }
+  // tbl_Cities ma >1000 rekordów — paginujemy, bo PostgREST tnie do 1000 wierszy bez .range().
+  const cities = await fetchAllRows<CityRow>((from, to) =>
+    supabase
+      .from('tbl_Cities')
+      .select('id, city_name, current_country_id')
+      .order('city_name', { ascending: true, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
-  if (citiesError) throw new Error(`tbl_Cities: ${citiesError.message}`)
-  if (!cities?.length) return []
+  if (!cities.length) return []
 
   const cityIds = cities.map((city) => city.id)
 
-  // Avoid oversized `.in(...)` queries that can fail at fetch layer when city count is high.
+  // Avoid oversized `.in(...)` queries that can fail at fetch layer when city count is high,
+  // and avoid silent 1000-row truncation per chunk (ZASADA #7) — paginujemy `.range()` wewnątrz chunka.
   const periods: CityCountryPeriod[] = []
   const batchSize = 250
 
   for (let start = 0; start < cityIds.length; start += batchSize) {
     const cityIdsBatch = cityIds.slice(start, start + batchSize)
-    const { data: periodsBatch, error: periodsError } = await supabase
-      .from('tbl_City_Country_Periods')
-      .select('city_id, country_id, valid_from, valid_to')
-      .in('city_id', cityIdsBatch)
-
-    if (periodsError) {
-      throw new Error(`tbl_City_Country_Periods: ${periodsError.message}`)
-    }
-
-    if (periodsBatch?.length) {
-      periods.push(...periodsBatch)
-    }
+    const rows = await fetchAllRows<CityCountryPeriod>((from, to) =>
+      supabase
+        .from('tbl_City_Country_Periods')
+        .select('city_id, country_id, valid_from, valid_to')
+        .in('city_id', cityIdsBatch)
+        .order('city_id', { ascending: true })
+        .range(from, to)
+    )
+    if (rows.length) periods.push(...rows)
   }
 
   const periodsByCity = new Map<string, CityCountryPeriod[]>()
@@ -1700,15 +1749,19 @@ export async function getAdminPersonBirthCityOptions(): Promise<AdminPersonBirth
 
   const countryIds = [...new Set([...currentCountryIdByCity.values()])]
   let countryNameById = new Map<string, string>()
+  let countryFifaCodeById = new Map<string, string | null>()
 
   if (countryIds.length) {
     const { data: countries, error: countriesError } = await supabase
       .from('tbl_Countries')
-      .select('id, name')
+      .select('id, name, fifa_code')
       .in('id', countryIds)
 
     if (countriesError) throw new Error(`tbl_Countries: ${countriesError.message}`)
     countryNameById = new Map((countries ?? []).map((country) => [country.id, country.name]))
+    countryFifaCodeById = new Map(
+      (countries ?? []).map((country) => [country.id, country.fifa_code ?? null])
+    )
   }
 
   return cities.map((city) => {
@@ -1719,6 +1772,7 @@ export async function getAdminPersonBirthCityOptions(): Promise<AdminPersonBirth
       city_name: city.city_name ?? '—',
       current_country_id: currentCountryId,
       current_country_name: currentCountryId ? (countryNameById.get(currentCountryId) ?? null) : null,
+      current_country_fifa_code: currentCountryId ? (countryFifaCodeById.get(currentCountryId) ?? null) : null,
     }
   })
 }
@@ -3194,18 +3248,62 @@ async function getPlayerMinutes(
 
 export type PublicPeopleVariant = 'players' | 'coaches' | 'referees' | 'all' | 'lite'
 
-export async function getAdminPeople(variant: PublicPeopleVariant = 'all'): Promise<AdminPersonListItem[]> {
+/**
+ * Wewnętrzny mechanizm shardingu listy `tbl_People` po heksadecymalnym prefiksie UUID.
+ * Używany przez `getPublicPeople` do podzielenia cache'u 'lite' na kilka mniejszych
+ * wpisów — Next.js `unstable_cache` ma limit 2MB na wpis, a pełne lite rośnie wraz
+ * z liczbą osób w bazie. UUID-y są rozkładane jednorodnie, więc modulo z pierwszych
+ * dwóch znaków daje równe shardy.
+ */
+export type PeopleShard = { idx: number; count: number }
+
+function personMatchesShard(personId: string, shard: PeopleShard | undefined): boolean {
+  if (!shard) return true
+  const bucket = parseInt(personId.slice(0, 2), 16)
+  if (Number.isNaN(bucket)) return shard.idx === 0
+  return bucket % shard.count === shard.idx
+}
+
+export async function getAdminPeople(
+  variant: PublicPeopleVariant = 'all',
+  options: { shard?: PeopleShard } = {}
+): Promise<AdminPersonListItem[]> {
   const supabase = createServiceRoleClient()
 
-  const { data: people, error: peopleError } = await supabase
-    .from('tbl_People')
-    .select('id, first_name, last_name, nickname, birth_date, death_date, is_active, birth_city_id, birth_country_id')
+  type PersonRow = {
+    id: string
+    first_name: string | null
+    last_name: string | null
+    nickname: string | null
+    birth_date: string | null
+    death_date: string | null
+    is_active: boolean | null
+    birth_city_id: string | null
+    birth_country_id: string | null
+  }
 
-  if (peopleError) throw new Error(`tbl_People: ${peopleError.message}`)
-  if (!people?.length) return []
+  // PostgREST caps a single response at 1000 rows by default. Page through the
+  // whole table with a stable order so freshly added people are never silently
+  // dropped.
+  const allPeople = await fetchAllRows<PersonRow>((from, to) =>
+    supabase
+      .from('tbl_People')
+      .select('id, first_name, last_name, nickname, birth_date, death_date, is_active, birth_city_id, birth_country_id')
+      .order('last_name', { ascending: true, nullsFirst: false })
+      .order('first_name', { ascending: true, nullsFirst: false })
+      .order('nickname', { ascending: true, nullsFirst: false })
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
-  const cityIds = [...new Set(people.map((p) => p.birth_city_id).filter(Boolean))]
-  const countryIds = [...new Set(people.map((p) => p.birth_country_id).filter(Boolean))]
+  const people = options.shard
+    ? allPeople.filter((p) => personMatchesShard(p.id, options.shard))
+    : allPeople
+
+  if (!people.length) return []
+
+  const cityIds = [...new Set(people.map((p) => p.birth_city_id).filter((v): v is string => Boolean(v)))]
+  const countryIds = [...new Set(people.map((p) => p.birth_country_id).filter((v): v is string => Boolean(v)))]
 
   // Batch cities to avoid oversized .in() queries that can fail at the fetch layer
   const CITY_CHUNK = 80
@@ -3420,15 +3518,38 @@ export async function getPublicPeople(variant: PublicPeopleVariant = 'all'): Pro
   // Cache only the "lite" payload (without large *_filter_matches arrays) to stay below
   // Next.js unstable_cache 2MB per-entry limit. Filter matches are loaded per request
   // (only the ones the current variant needs) and merged in.
-  const liteCacheKey = await getPublicCacheKey('public-people', 'lite')
-  const lite = await unstable_cache(
-    async () => getAdminPeople('lite'),
-    liteCacheKey,
-    {
-      revalidate: 3600,
-      tags: ['public-people'],
-    }
-  )()
+  //
+  // Sharding lite po prefiksie UUID — Next.js `unstable_cache` ma twardy limit 2 MB
+  // na pojedynczy wpis. Lite (~60 pól skalarnych per osoba ≈ 2 KB JSON) rośnie
+  // liniowo z liczbą osób w bazie:
+  //   1 000 osób  → ~2.0 MB  → mieści się w jednym wpisie ledwo, lub pęka.
+  //   4 000 osób  → ~8.0 MB  → wymaga ≥4 shardów.
+  //   8 000 osób  → ~16.0 MB → wymaga ≥8 shardów.
+  //  16 000 osób  → ~32.0 MB → wymaga ≥16 shardów.
+  //
+  // SHARD_COUNT = 16 daje zapas do ~16 000 osób przy obecnej strukturze pól.
+  // UUID rozkłada się jednorodnie, więc shardy są równe. Wszystkie shardy mają
+  // ten sam tag `public-people`, więc pojedynczy `revalidateTag` inwaliduje całość.
+  //
+  // To plaster — docelowe rozwiązanie to server-side pagination z filtrami w URL
+  // i agregaty w bazie. Refaktor zaplanowany po zamrożeniu modelu danych.
+  const SHARD_COUNT = 16
+  const liteCacheKeyBase = await getPublicCacheKey('public-people', 'lite')
+  const shards = await Promise.all(
+    Array.from({ length: SHARD_COUNT }, (_, shardIdx) =>
+      unstable_cache(
+        async () => getAdminPeople('lite', { shard: { idx: shardIdx, count: SHARD_COUNT } }),
+        [...liteCacheKeyBase, `shard-${shardIdx}-of-${SHARD_COUNT}`],
+        {
+          revalidate: 3600,
+          tags: ['public-people'],
+        }
+      )()
+    )
+  )
+  const lite = shards
+    .flat()
+    .sort((a, b) => buildDisplayName(a).localeCompare(buildDisplayName(b), 'pl'))
 
   if (variant === 'lite') return lite
 

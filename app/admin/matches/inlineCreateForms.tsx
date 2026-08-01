@@ -4,6 +4,7 @@ import { createCountryInline } from '@/app/admin/countries/actions'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import type { AdminFederation } from '@/lib/db/countries'
+import CityPeriodsBuilder from './CityPeriodsBuilder'
 
 type InlineOption = {
   id: string
@@ -121,6 +122,13 @@ export function renderCreateCityInlineForm({
           ))}
         </select>
       </div>
+
+      <CityPeriodsBuilder
+        scope={scope}
+        countries={countries}
+        federations={federations}
+        onCountryOptionCreated={onCountryOptionCreated}
+      />
     </div>
   )
 }

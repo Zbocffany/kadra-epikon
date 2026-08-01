@@ -9,6 +9,7 @@ import type { AdminCity } from '@/lib/db/clubs'
 import { getAdminStadiums } from '@/lib/db/stadiums'
 import type { AdminStadiumListItem } from '@/lib/db/stadiums'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
+import { formatCityWithFifa } from '@/lib/utils/cityLabel'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import AdminListLayout from '@/components/admin/AdminListLayout'
 import AdminCancelLink from '@/components/admin/AdminCancelLink'
@@ -38,7 +39,7 @@ function StadiumCreateFields({ cities, countries }: { cities: AdminCity[]; count
         name="stadium_city_id"
         label="Miasto stadionu"
         required
-        options={cities.map((c) => ({ id: c.id, label: c.city_name }))}
+        options={cities.map((c) => ({ id: c.id, label: formatCityWithFifa(c.city_name, c.current_country_fifa_code) }))}
         displayKey="label"
         addButtonLabel="+ Dodaj miasto"
         addDialogTitle="Nowe miasto"

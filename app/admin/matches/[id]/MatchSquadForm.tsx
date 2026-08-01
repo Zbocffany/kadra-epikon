@@ -15,6 +15,7 @@ import { createClubInline } from '@/app/admin/clubs/actions'
 import PersonPickerField, { MATCH_PERSON_CREATED_EVENT } from './PersonPickerField'
 import { compareByPlayerPosition } from '../playerPositionSort'
 import { renderCreateClubInlineForm } from '../inlineCreateForms'
+import { formatCityWithFifa } from '@/lib/utils/cityLabel'
 
 const STARTERS_COUNT = 11
 const BENCH_BASE_COUNT = 5
@@ -184,6 +185,7 @@ export default function MatchSquadForm({
           city_name: option.label ?? '—',
           current_country_id: null,
           current_country_name: null,
+          current_country_fifa_code: null,
         },
       ].sort((a, b) => a.city_name.localeCompare(b.city_name, 'pl'))
     })
@@ -316,7 +318,7 @@ export default function MatchSquadForm({
                     onOptionCreated={handleClubOptionCreated}
                     inlineForm={renderCreateClubInlineForm({
                       scope: `starter_${index}`,
-                      cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.city_name })),
+                      cityOptions: cityOptions.map((city) => ({ id: city.id, label: formatCityWithFifa(city.city_name, city.current_country_fifa_code) })),
                       countries: countryOptions,
                       federations,
                       onCityOptionCreated: handleCityOptionCreated,
@@ -391,7 +393,7 @@ export default function MatchSquadForm({
                       onOptionCreated={handleClubOptionCreated}
                       inlineForm={renderCreateClubInlineForm({
                         scope: `bench_${index}`,
-                        cityOptions: cityOptions.map((city) => ({ id: city.id, label: city.city_name })),
+                        cityOptions: cityOptions.map((city) => ({ id: city.id, label: formatCityWithFifa(city.city_name, city.current_country_fifa_code) })),
                         countries: countryOptions,
                         federations,
                         onCityOptionCreated: handleCityOptionCreated,

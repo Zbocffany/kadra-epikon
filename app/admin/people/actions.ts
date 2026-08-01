@@ -3,6 +3,7 @@
 import { revalidatePath, revalidateTag } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { invalidatePublicCacheVersion } from '@/lib/db/publicCache'
+import { fetchAllRows } from '@/lib/db/pagination'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import { getTrimmedNullable, getTrimmedString, redirectWithAdded, redirectWithError, redirectWithSaved } from '@/lib/actions/admin'
 import { findDuplicatePeopleByBirthDateAndCountry, type DuplicatePerson } from '@/lib/db/people'
@@ -43,16 +44,23 @@ async function resolveBirthCountryId(
     return birthCountryId
   }
 
-  const { data: periods, error: periodsError } = await supabase
-    .from('tbl_City_Country_Periods')
-    .select('country_id, valid_from, valid_to')
-    .eq('city_id', birthCityId)
-
-  if (periodsError) {
-    throw new Error('Błąd odczytu danych miasta. Spróbuj ponownie.')
+  type CityPeriodRow = {
+    country_id: string
+    valid_from: string | null
+    valid_to: string | null
   }
+  // PostgREST tnie do 1000 wierszy bez .range() — w praktyce per-city periodów jest
+  // garstka, ale lepiej paginować defensywnie.
+  const periods = await fetchAllRows<CityPeriodRow>((from, to) =>
+    supabase
+      .from('tbl_City_Country_Periods')
+      .select('country_id, valid_from, valid_to')
+      .eq('city_id', birthCityId)
+      .order('valid_from', { ascending: true, nullsFirst: true })
+      .range(from, to)
+  )
 
-  const sortedPeriods = [...(periods ?? [])].sort((a, b) => {
+  const sortedPeriods = [...periods].sort((a, b) => {
     const aCurrent = a.valid_to === null
     const bCurrent = b.valid_to === null
 

@@ -7,6 +7,7 @@ import AdminSelectField from '@/components/admin/AdminSelectField'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import type { InlineCreateState } from '@/lib/types/admin'
 import { getCityCurrentCountry } from '@/app/admin/cities/actions'
+import { formatCityWithFifa } from '@/lib/utils/cityLabel'
 
 type Props = {
   cities: AdminCity[]
@@ -91,7 +92,7 @@ export default function ClubCityCountryFields({
         name="club_city_id"
         label="Miasto"
         selectedId={selectedCityId}
-        options={cities.map((c) => ({ id: c.id, label: c.city_name }))}
+        options={cities.map((c) => ({ id: c.id, label: formatCityWithFifa(c.city_name, c.current_country_fifa_code) }))}
         displayKey="label"
         addButtonLabel="+ Dodaj miasto"
         addDialogTitle="Nowe miasto"

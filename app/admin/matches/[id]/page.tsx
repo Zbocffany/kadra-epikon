@@ -1,5 +1,4 @@
 import Link from 'next/link'
-import { notFound } from 'next/navigation'
 import type { ReactNode } from 'react'
 import MatchCoachesForm from './MatchCoachesForm'
 import type { MatchEventPersonOption } from './MatchEventsForm'
@@ -20,6 +19,7 @@ import { getMatchStatusLabel, MATCH_STATUS_OPTIONS } from '../matchStatusLabels'
 import { getResultTypeLabel, RESULT_TYPE_OPTIONS } from '../resultTypeLabels'
 import { compareByPlayerPosition } from '../playerPositionSort'
 import { renderCreateClubInlineForm } from '../inlineCreateForms'
+import { formatCityWithFifa } from '@/lib/utils/cityLabel'
 import { calculateMatchScore, getDisplayScore } from '../scoreCalculation'
 import {
   DetailsPageContainer,
@@ -27,13 +27,6 @@ import {
   DetailsPageHeader,
 } from '@/components/admin/DetailsPageLayout'
 import {
-  getAdminClubTeamOptions,
-  getLatestPlayerClubTeamByPersonIds,
-  getLatestPlayerPositionByPersonIds,
-  getAdminMatchCreateOptions,
-  getAdminMatchDetails,
-  getAdminMatchEvents,
-  getAdminMatchParticipants,
   type AdminMatchEvent,
   type AdminMatchDetails,
   type AdminMatchParticipant,
@@ -43,10 +36,11 @@ import {
 } from '@/lib/db/matches'
 import CountryFlag from '@/components/CountryFlag'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
-import { getAdminPersonBirthCityOptions, type AdminPersonBirthCityOption } from '@/lib/db/people'
-import { getAdminCountriesOptions, type AdminCountryOption } from '@/lib/db/cities'
-import { getAdminFederations, type AdminFederation } from '@/lib/db/countries'
+import { type AdminPersonBirthCityOption } from '@/lib/db/people'
+import { type AdminCountryOption } from '@/lib/db/cities'
+import { type AdminFederation } from '@/lib/db/countries'
 import type { DetailPageParams, DetailPageSearchParams } from '@/lib/types/admin'
+import { loadAdminMatchPageData } from './_data'
 
 type Params = DetailPageParams
 type SearchParams = DetailPageSearchParams
@@ -926,24 +920,19 @@ export default async function AdminMatchDetailsPage({
     : []
   const plainError = validationErrors.length ? null : error
 
-  const match = await getAdminMatchDetails(id)
-
-  if (!match) {
-    notFound()
-  }
-
-  // Split into two sequential batches to avoid overwhelming Supabase connection limits in local dev
-  const [options, participants, events] = await Promise.all([
-    getAdminMatchCreateOptions(),
-    getAdminMatchParticipants(match),
-    getAdminMatchEvents(match.id),
-  ])
-  const [cities, countries, federations, clubTeams] = await Promise.all([
-    getAdminPersonBirthCityOptions(),
-    getAdminCountriesOptions(),
-    getAdminFederations(),
-    getAdminClubTeamOptions(),
-  ])
+  const {
+    match,
+    options,
+    participants,
+    events,
+    cities,
+    countries,
+    federations,
+    clubTeams,
+    latestPlayerClubTeamByPersonId,
+    latestPlayerPositionByPersonId,
+    eventPeople,
+  } = await loadAdminMatchPageData(id)
 
   // Teams are now fetched async via /api/admin/teams/search — only include current match teams for label display
   const teamsWithCurrentMatch = [
@@ -951,35 +940,6 @@ export default async function AdminMatchDetailsPage({
     { id: match.away_team_id, label: match.away_team_name },
   ]
 
-  const personIds = participants.people.map((person) => person.id)
-  const [latestPlayerClubTeamByPersonId, latestPlayerPositionByPersonId] = await Promise.all([
-    getLatestPlayerClubTeamByPersonIds(personIds, { excludeMatchId: match.id, targetMatchDate: match.match_date }),
-    getLatestPlayerPositionByPersonIds(personIds, { excludeMatchId: match.id }),
-  ])
-
-  const eventPeopleById = new Map<string, MatchEventPersonOption>()
-
-  for (const participant of [
-    ...participants.homeParticipants,
-    ...participants.awayParticipants,
-    ...participants.referees,
-  ]) {
-    const existing = eventPeopleById.get(participant.person_id)
-    const nextTeamIds = participant.team_id
-      ? (existing?.teamIds.includes(participant.team_id)
-          ? existing.teamIds
-          : [...(existing?.teamIds ?? []), participant.team_id])
-      : (existing?.teamIds ?? [])
-
-    eventPeopleById.set(participant.person_id, {
-      id: participant.person_id,
-      label: participant.person_name,
-      teamIds: nextTeamIds,
-    })
-  }
-
-  const eventPeople = [...eventPeopleById.values()]
-    .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
   const eventTeams = [
     { id: match.home_team_id, label: match.home_team_name },
     { id: match.away_team_id, label: match.away_team_name },
@@ -1094,7 +1054,7 @@ export default async function AdminMatchDetailsPage({
           createAction={createClubInline}
           inlineForm={renderCreateClubInlineForm({
             scope: 'inline_edit_home',
-            cityOptions: options.cities.map((city) => ({ id: city.id, label: city.name })),
+            cityOptions: options.cities.map((city) => ({ id: city.id, label: formatCityWithFifa(city.name, city.current_country_fifa_code) })),
             countries,
             federations,
           })}
@@ -1119,7 +1079,7 @@ export default async function AdminMatchDetailsPage({
           createAction={createClubInline}
           inlineForm={renderCreateClubInlineForm({
             scope: 'inline_edit_away',
-            cityOptions: options.cities.map((city) => ({ id: city.id, label: city.name })),
+            cityOptions: options.cities.map((city) => ({ id: city.id, label: formatCityWithFifa(city.name, city.current_country_fifa_code) })),
             countries,
             federations,
           })}
