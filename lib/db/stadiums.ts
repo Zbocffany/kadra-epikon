@@ -164,18 +164,18 @@ async function getStadiumVsPolandStats(
   const [{ data: homeMatches }, { data: awayMatches }] = await Promise.all([
     supabase
       .from('tbl_Matches')
-      .select('id, match_stadium_id, home_team_id, away_team_id')
+      .select('id, match_stadium_id, home_team_id, away_team_id, home_goals, away_goals')
       .eq('match_status', 'FINISHED')
       .neq('result_type', 'WALKOVER')
-      .in('editorial_status', ['COMPLETE', 'VERIFIED'])
+      .eq('editorial_status', 'VERIFIED')
       .eq('home_team_id', polandTeamId)
       .not('match_stadium_id', 'is', null),
     supabase
       .from('tbl_Matches')
-      .select('id, match_stadium_id, home_team_id, away_team_id')
+      .select('id, match_stadium_id, home_team_id, away_team_id, home_goals, away_goals')
       .eq('match_status', 'FINISHED')
       .neq('result_type', 'WALKOVER')
-      .in('editorial_status', ['COMPLETE', 'VERIFIED'])
+      .eq('editorial_status', 'VERIFIED')
       .eq('away_team_id', polandTeamId)
       .not('match_stadium_id', 'is', null),
   ])
@@ -183,42 +183,13 @@ async function getStadiumVsPolandStats(
   const allMatches = [...(homeMatches ?? []), ...(awayMatches ?? [])]
   if (!allMatches.length) return empty
 
-  const matchIds = allMatches.map((m) => m.id as string)
-
-  const CHUNK_SIZE = 80
-  const allEvents: Array<{ match_id: string; team_id: string | null; event_type: string }> = []
-  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
-    const { data, error } = await supabase
-      .from('tbl_Match_Events')
-      .select('match_id, team_id, event_type')
-      .in('match_id', matchIds.slice(i, i + CHUNK_SIZE))
-      .in('event_type', ['GOAL', 'OWN_GOAL', 'PENALTY_GOAL'])
-    if (error) throw new Error(`tbl_Match_Events: ${error.message}`)
-    allEvents.push(...((data ?? []) as typeof allEvents))
-  }
-
-  const eventsByMatch = new Map<string, Array<{ team_id: string | null; event_type: string }>>()
-  for (const e of allEvents) {
-    const arr = eventsByMatch.get(e.match_id) ?? []
-    arr.push({ team_id: e.team_id, event_type: e.event_type })
-    eventsByMatch.set(e.match_id, arr)
-  }
-
   const result = new Map<string, StadiumVsPolandStat>()
 
   for (const match of allMatches) {
     const stadiumId = match.match_stadium_id as string
     const isPolandHome = (match.home_team_id as string) === polandTeamId
-
-    let homeGoals = 0
-    let awayGoals = 0
-    for (const e of eventsByMatch.get(match.id as string) ?? []) {
-      if (e.team_id === match.home_team_id) homeGoals++
-      else if (e.team_id === match.away_team_id) awayGoals++
-    }
-
-    const polandGoals = isPolandHome ? homeGoals : awayGoals
-    const opponentGoals = isPolandHome ? awayGoals : homeGoals
+    const polandGoals = isPolandHome ? match.home_goals : match.away_goals
+    const opponentGoals = isPolandHome ? match.away_goals : match.home_goals
 
     const stat = result.get(stadiumId) ?? { matches: 0, wins: 0, draws: 0, losses: 0, goals_for: 0, goals_against: 0 }
     stat.matches++

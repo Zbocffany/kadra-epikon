@@ -11,6 +11,7 @@ const menu = [
   { href: '/coaches', label: 'Trenerzy' },
   { href: '/referees', label: 'Sędziowie' },
   { href: '/countries', label: 'Kraje' },
+  { href: '/statistics', label: 'Statystyki' },
   { href: '/clubs', label: 'Kluby' },
   { href: '/cities', label: 'Miasta' },
 ]

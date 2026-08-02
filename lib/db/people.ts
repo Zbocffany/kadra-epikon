@@ -19,6 +19,28 @@ type CityCountryPeriod = {
   valid_to: string | null
 }
 
+type MatchScoreColumns = {
+  home_team_id: string
+  away_team_id: string
+  home_goals: number
+  away_goals: number
+  home_shootout_goals: number
+  away_shootout_goals: number
+}
+
+function getTeamScoreFromMatch(match: MatchScoreColumns, teamId: string): {
+  goals: number
+  shootoutGoals: number
+} {
+  if (teamId === match.home_team_id) {
+    return { goals: match.home_goals, shootoutGoals: match.home_shootout_goals }
+  }
+  if (teamId === match.away_team_id) {
+    return { goals: match.away_goals, shootoutGoals: match.away_shootout_goals }
+  }
+  return { goals: 0, shootoutGoals: 0 }
+}
+
 export type AdminPersonRole = 'PLAYER' | 'COACH' | 'REFEREE'
 
 export type CoachCompetitionFilterKey = 'WORLD_CUP' | 'EURO' | 'NATIONS_LEAGUE' | 'FRIENDLY' | 'OTHER'
@@ -1353,7 +1375,7 @@ async function getCoachPolandFilterMatchesByPersonId(
   if (!filteredParticipations.length) return new Map()
 
   const filteredMatchIds = [...new Set(filteredParticipations.map((p) => p.match_id))]
-  type MatchRow = {
+  type MatchRow = MatchScoreColumns & {
     id: string
     match_date: string
     match_time: string | null
@@ -1372,7 +1394,7 @@ async function getCoachPolandFilterMatchesByPersonId(
   for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
     const { data, error } = await supabase
       .from('tbl_Matches')
-      .select('id, match_date, match_time, home_team_id, away_team_id, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, match_level_id, match_stadium_id, match_city_id')
+      .select('id, match_date, match_time, home_team_id, away_team_id, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, match_level_id, match_stadium_id, match_city_id, home_goals, away_goals, home_shootout_goals, away_shootout_goals')
       .in('id', filteredMatchIds.slice(i, i + CHUNK_SIZE))
 
     if (error) throw new Error(`tbl_Matches (coach filter rows): ${error.message}`)
@@ -1435,59 +1457,6 @@ async function getCoachPolandFilterMatchesByPersonId(
     for (const row of (data ?? []) as Array<{ id: string; name: string }>) {
       levelNameById.set(row.id, row.name)
     }
-  }
-
-  type GoalEventRow = { match_id: string; event_type: string; team_id: string | null }
-  const goalEvents: GoalEventRow[] = []
-  const GOAL_EVENT_TYPES = ['GOAL', 'PENALTY_GOAL', 'OWN_GOAL', 'PENALTY_SHOOTOUT_SCORED']
-  for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase
-        .from('tbl_Match_Events')
-        .select('match_id, event_type, team_id')
-        .in('match_id', filteredMatchIds.slice(i, i + CHUNK_SIZE))
-        .in('event_type', GOAL_EVENT_TYPES)
-        .order('id', { ascending: true })
-        .range(from, from + PAGE_SIZE - 1)
-
-      if (error) throw new Error(`tbl_Match_Events (coach filter rows): ${error.message}`)
-
-      const rows = (data ?? []) as GoalEventRow[]
-      goalEvents.push(...rows)
-      if (rows.length < PAGE_SIZE) break
-      from += PAGE_SIZE
-    }
-  }
-
-  type TeamGoals = { goals: number; shootoutGoals: number }
-  const teamGoalsInMatch = new Map<string, TeamGoals>()
-  for (const event of goalEvents) {
-    if (!event.team_id) continue
-    const matchData = matchDataById.get(event.match_id)
-    if (!matchData) continue
-
-    if (event.event_type === 'PENALTY_SHOOTOUT_SCORED') {
-      const key = `${event.match_id}:${event.team_id}`
-      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
-      entry.shootoutGoals += 1
-      teamGoalsInMatch.set(key, entry)
-      continue
-    }
-
-    if (event.event_type === 'OWN_GOAL') {
-      const otherTeamId = matchData.home_team_id === event.team_id ? matchData.away_team_id : matchData.home_team_id
-      const key = `${event.match_id}:${otherTeamId}`
-      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
-      entry.goals += 1
-      teamGoalsInMatch.set(key, entry)
-      continue
-    }
-
-    const key = `${event.match_id}:${event.team_id}`
-    const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
-    entry.goals += 1
-    teamGoalsInMatch.set(key, entry)
   }
 
   // Fetch team names and FIFA codes (tbl_Teams has no name/fifa_code — join via country/club)
@@ -1574,13 +1543,13 @@ async function getCoachPolandFilterMatchesByPersonId(
 
     if (matchData.match_status === 'FINISHED') {
       const otherTeamId = coachIsHome ? matchData.away_team_id : matchData.home_team_id
-      const myGoalsEntry = teamGoalsInMatch.get(`${match_id}:${coachedTeamId}`) ?? { goals: 0, shootoutGoals: 0 }
-      const theirGoalsEntry = teamGoalsInMatch.get(`${match_id}:${otherTeamId}`) ?? { goals: 0, shootoutGoals: 0 }
+      const myGoalsEntry = getTeamScoreFromMatch(matchData, coachedTeamId)
+      const theirGoalsEntry = getTeamScoreFromMatch(matchData, otherTeamId)
       goalsFor = myGoalsEntry.goals
       goalsAgainst = theirGoalsEntry.goals
 
-      const homeGoalsEntry = teamGoalsInMatch.get(`${match_id}:${matchData.home_team_id}`) ?? { goals: 0, shootoutGoals: 0 }
-      const awayGoalsEntry = teamGoalsInMatch.get(`${match_id}:${matchData.away_team_id}`) ?? { goals: 0, shootoutGoals: 0 }
+      const homeGoalsEntry = getTeamScoreFromMatch(matchData, matchData.home_team_id)
+      const awayGoalsEntry = getTeamScoreFromMatch(matchData, matchData.away_team_id)
       finalScore = `${homeGoalsEntry.goals}:${awayGoalsEntry.goals}`
 
       const isPenalties = matchData.result_type === 'PENALTIES' || matchData.result_type === 'EXTRA_TIME_AND_PENALTIES'
@@ -1954,73 +1923,15 @@ async function getCoachResultStatsByPersonId(
   if (!filteredParticipations.length) return new Map()
 
   const filteredMatchIds = [...new Set(filteredParticipations.map((p) => p.match_id))]
-  type MatchRow = { id: string; home_team_id: string; away_team_id: string; result_type: string | null; match_status: string }
+  type MatchRow = MatchScoreColumns & { id: string; result_type: string | null; match_status: string }
   const matchDataMap = new Map<string, MatchRow>()
   for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
     const { data, error } = await supabase
       .from('tbl_Matches')
-      .select('id, home_team_id, away_team_id, result_type, match_status')
+      .select('id, home_team_id, away_team_id, result_type, match_status, home_goals, away_goals, home_shootout_goals, away_shootout_goals')
       .in('id', filteredMatchIds.slice(i, i + CHUNK_SIZE))
     if (error) throw new Error(`tbl_Matches (coach stats): ${error.message}`)
     for (const m of (data ?? []) as MatchRow[]) matchDataMap.set(m.id, m)
-  }
-
-  // 3. Get goal events for all coach matches
-  type GoalEventRow = { match_id: string; event_type: string; team_id: string | null }
-  const goalEvents: GoalEventRow[] = []
-  const GOAL_EVENT_TYPES = ['GOAL', 'PENALTY_GOAL', 'OWN_GOAL', 'PENALTY_SHOOTOUT_SCORED']
-  for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase
-        .from('tbl_Match_Events')
-        .select('match_id, event_type, team_id')
-        .in('match_id', filteredMatchIds.slice(i, i + CHUNK_SIZE))
-        .in('event_type', GOAL_EVENT_TYPES)
-        .order('id', { ascending: true })
-        .range(from, from + PAGE_SIZE - 1)
-      if (error) throw new Error(`tbl_Match_Events (coach stats): ${error.message}`)
-      const rows = (data ?? []) as GoalEventRow[]
-      goalEvents.push(...rows)
-      if (rows.length < PAGE_SIZE) break
-      from += PAGE_SIZE
-    }
-  }
-
-  // 4. Build per-match goal tally keyed by (matchId, teamId) — for each team separately
-  // OWN_GOAL: team_id = team whose player scored it (they concede), so OWN_GOAL with team_id T
-  //   means team T concedes → counted as a goal FOR the OTHER team
-  type TeamGoals = { goals: number; shootoutGoals: number }
-  const teamGoalsInMatch = new Map<string, TeamGoals>() // key: `${matchId}:${teamId}`
-
-  for (const event of goalEvents) {
-    if (!event.team_id) continue
-    const matchData = matchDataMap.get(event.match_id)
-    if (!matchData) continue
-
-    if (event.event_type === 'PENALTY_SHOOTOUT_SCORED') {
-      // shootout scored: team_id = team who scored
-      const key = `${event.match_id}:${event.team_id}`
-      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
-      entry.shootoutGoals += 1
-      teamGoalsInMatch.set(key, entry)
-    } else if (event.event_type === 'OWN_GOAL') {
-      // OWN_GOAL: team_id = team of the player who scored the own goal (they concede)
-      // → goal goes to the OTHER team in the match
-      const otherTeamId = matchData.home_team_id === event.team_id
-        ? matchData.away_team_id
-        : matchData.home_team_id
-      const key = `${event.match_id}:${otherTeamId}`
-      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
-      entry.goals += 1
-      teamGoalsInMatch.set(key, entry)
-    } else {
-      // GOAL, PENALTY_GOAL: team_id = team who scored
-      const key = `${event.match_id}:${event.team_id}`
-      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
-      entry.goals += 1
-      teamGoalsInMatch.set(key, entry)
-    }
   }
 
   const matchPolandTeamIdMap = await getPolandTeamIdByMatchId(supabase, filteredMatchIds)
@@ -2077,8 +1988,8 @@ async function getCoachResultStatsByPersonId(
       ? matchData.away_team_id
       : matchData.home_team_id
 
-    const myGoalsEntry = teamGoalsInMatch.get(`${match_id}:${coachedTeamId}`) ?? { goals: 0, shootoutGoals: 0 }
-    const theirGoalsEntry = teamGoalsInMatch.get(`${match_id}:${otherTeamId}`) ?? { goals: 0, shootoutGoals: 0 }
+    const myGoalsEntry = getTeamScoreFromMatch(matchData, coachedTeamId)
+    const theirGoalsEntry = getTeamScoreFromMatch(matchData, otherTeamId)
     const myGoals = myGoalsEntry.goals
     const theirGoals = theirGoalsEntry.goals
 
@@ -2188,7 +2099,7 @@ async function getRefereePolandFilterMatchesByPersonId(
   const filteredMatchIds = [...new Set(polandParticipants.map((p) => p.match_id))]
 
   // 4. Get match data + competition/level
-  type MatchRow = {
+  type MatchRow = MatchScoreColumns & {
     id: string
     match_date: string
     match_time: string | null
@@ -2207,7 +2118,7 @@ async function getRefereePolandFilterMatchesByPersonId(
   for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
     const { data, error } = await supabase
       .from('tbl_Matches')
-      .select('id, match_date, match_time, home_team_id, away_team_id, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, match_level_id, match_stadium_id, match_city_id')
+      .select('id, match_date, match_time, home_team_id, away_team_id, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, match_level_id, match_stadium_id, match_city_id, home_goals, away_goals, home_shootout_goals, away_shootout_goals')
       .in('id', filteredMatchIds.slice(i, i + CHUNK_SIZE))
     if (error) throw new Error(`tbl_Matches (referee filter rows): ${error.message}`)
     for (const row of (data ?? []) as MatchRow[]) matchDataById.set(row.id, row)
@@ -2243,55 +2154,7 @@ async function getRefereePolandFilterMatchesByPersonId(
     }
   }
 
-  // 5. Goal events
-  type GoalEventRow = { match_id: string; event_type: string; team_id: string | null }
-  const goalEvents: GoalEventRow[] = []
-  const GOAL_EVENT_TYPES = ['GOAL', 'PENALTY_GOAL', 'OWN_GOAL', 'PENALTY_SHOOTOUT_SCORED']
-  for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase
-        .from('tbl_Match_Events')
-        .select('match_id, event_type, team_id')
-        .in('match_id', filteredMatchIds.slice(i, i + CHUNK_SIZE))
-        .in('event_type', GOAL_EVENT_TYPES)
-        .order('id', { ascending: true })
-        .range(from, from + PAGE_SIZE - 1)
-      if (error) throw new Error(`tbl_Match_Events (referee filter rows): ${error.message}`)
-      const rows = (data ?? []) as GoalEventRow[]
-      goalEvents.push(...rows)
-      if (rows.length < PAGE_SIZE) break
-      from += PAGE_SIZE
-    }
-  }
-
-  type TeamGoals = { goals: number; shootoutGoals: number }
-  const teamGoalsInMatch = new Map<string, TeamGoals>()
-  for (const event of goalEvents) {
-    if (!event.team_id) continue
-    const matchData = matchDataById.get(event.match_id)
-    if (!matchData) continue
-
-    if (event.event_type === 'PENALTY_SHOOTOUT_SCORED') {
-      const key = `${event.match_id}:${event.team_id}`
-      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
-      entry.shootoutGoals += 1
-      teamGoalsInMatch.set(key, entry)
-    } else if (event.event_type === 'OWN_GOAL') {
-      const otherTeamId = matchData.home_team_id === event.team_id ? matchData.away_team_id : matchData.home_team_id
-      const key = `${event.match_id}:${otherTeamId}`
-      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
-      entry.goals += 1
-      teamGoalsInMatch.set(key, entry)
-    } else {
-      const key = `${event.match_id}:${event.team_id}`
-      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
-      entry.goals += 1
-      teamGoalsInMatch.set(key, entry)
-    }
-  }
-
-  // 6. Team names + fifa codes (via country/club join — same approach as coach version)
+  // 5. Team names + fifa codes (via country/club join — same approach as coach version)
   const allTeamIds = [...new Set(
     [...matchDataById.values()].flatMap((m) => [m.home_team_id, m.away_team_id])
   )]
@@ -2380,13 +2243,13 @@ async function getRefereePolandFilterMatchesByPersonId(
 
     if (matchData.match_status === 'FINISHED') {
       const otherTeamId = polandIsHome ? matchData.away_team_id : matchData.home_team_id
-      const myGoalsEntry = teamGoalsInMatch.get(`${match_id}:${polandTeamId}`) ?? { goals: 0, shootoutGoals: 0 }
-      const theirGoalsEntry = teamGoalsInMatch.get(`${match_id}:${otherTeamId}`) ?? { goals: 0, shootoutGoals: 0 }
+      const myGoalsEntry = getTeamScoreFromMatch(matchData, polandTeamId)
+      const theirGoalsEntry = getTeamScoreFromMatch(matchData, otherTeamId)
       goalsFor = myGoalsEntry.goals
       goalsAgainst = theirGoalsEntry.goals
 
-      const homeGoalsEntry = teamGoalsInMatch.get(`${match_id}:${matchData.home_team_id}`) ?? { goals: 0, shootoutGoals: 0 }
-      const awayGoalsEntry = teamGoalsInMatch.get(`${match_id}:${matchData.away_team_id}`) ?? { goals: 0, shootoutGoals: 0 }
+      const homeGoalsEntry = getTeamScoreFromMatch(matchData, matchData.home_team_id)
+      const awayGoalsEntry = getTeamScoreFromMatch(matchData, matchData.away_team_id)
       finalScore = `${homeGoalsEntry.goals}:${awayGoalsEntry.goals}`
 
       const isPenalties = matchData.result_type === 'PENALTIES' || matchData.result_type === 'EXTRA_TIME_AND_PENALTIES'
@@ -2501,7 +2364,7 @@ async function getPlayerFilterMatchesByPersonId(
   const filteredMatchIds = [...new Set(polandParticipants.map((p) => p.match_id))]
 
   // 4. Match data
-  type MatchRow = {
+  type MatchRow = MatchScoreColumns & {
     id: string
     match_date: string
     match_time: string | null
@@ -2520,7 +2383,7 @@ async function getPlayerFilterMatchesByPersonId(
   for (let i = 0; i < filteredMatchIds.length; i += CHUNK_SIZE) {
     const { data, error } = await supabase
       .from('tbl_Matches')
-      .select('id, match_date, match_time, home_team_id, away_team_id, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, match_level_id, match_stadium_id, match_city_id')
+      .select('id, match_date, match_time, home_team_id, away_team_id, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, match_level_id, match_stadium_id, match_city_id, home_goals, away_goals, home_shootout_goals, away_shootout_goals')
       .in('id', filteredMatchIds.slice(i, i + CHUNK_SIZE))
     if (error) throw new Error(`tbl_Matches (player filter rows): ${error.message}`)
     for (const row of (data ?? []) as MatchRow[]) matchDataById.set(row.id, row)
@@ -2631,33 +2494,6 @@ async function getPlayerFilterMatchesByPersonId(
     }
   }
 
-  // Team-level scores (from goal events)
-  type TeamGoals = { goals: number; shootoutGoals: number }
-  const teamGoalsInMatch = new Map<string, TeamGoals>()
-  for (const event of goalAndCardEvents) {
-    if (!event.team_id) continue
-    const matchData = matchDataById.get(event.match_id)
-    if (!matchData) continue
-
-    if (event.event_type === 'PENALTY_SHOOTOUT_SCORED') {
-      const key = `${event.match_id}:${event.team_id}`
-      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
-      entry.shootoutGoals += 1
-      teamGoalsInMatch.set(key, entry)
-    } else if (event.event_type === 'OWN_GOAL') {
-      const otherTeamId = matchData.home_team_id === event.team_id ? matchData.away_team_id : matchData.home_team_id
-      const key = `${event.match_id}:${otherTeamId}`
-      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
-      entry.goals += 1
-      teamGoalsInMatch.set(key, entry)
-    } else if (event.event_type === 'GOAL' || event.event_type === 'PENALTY_GOAL') {
-      const key = `${event.match_id}:${event.team_id}`
-      const entry = teamGoalsInMatch.get(key) ?? { goals: 0, shootoutGoals: 0 }
-      entry.goals += 1
-      teamGoalsInMatch.set(key, entry)
-    }
-  }
-
   // Per-(person, match) stats
   type PerPlayerStats = {
     goals: number
@@ -2677,8 +2513,6 @@ async function getPlayerFilterMatchesByPersonId(
   for (const e of goalAndCardEvents) {
     if (e.event_type === 'GOAL' || e.event_type === 'PENALTY_GOAL') {
       if (e.primary_person_id) ensurePerPlayer(e.match_id, e.primary_person_id).goals += 1
-      if (e.secondary_person_id) ensurePerPlayer(e.match_id, e.secondary_person_id).assists += 1
-    } else if (e.event_type === 'OWN_GOAL') {
       if (e.secondary_person_id) ensurePerPlayer(e.match_id, e.secondary_person_id).assists += 1
     } else if (e.event_type === 'YELLOW_CARD') {
       if (e.primary_person_id) ensurePerPlayer(e.match_id, e.primary_person_id).yellow += 1
@@ -2786,13 +2620,13 @@ async function getPlayerFilterMatchesByPersonId(
     if (matchData.match_status === 'FINISHED') {
       const myTeamId = playerTeamId ?? polandTeamId
       const otherTeamId = myTeamId === matchData.home_team_id ? matchData.away_team_id : matchData.home_team_id
-      const myGoalsEntry = teamGoalsInMatch.get(`${part.match_id}:${myTeamId}`) ?? { goals: 0, shootoutGoals: 0 }
-      const theirGoalsEntry = teamGoalsInMatch.get(`${part.match_id}:${otherTeamId}`) ?? { goals: 0, shootoutGoals: 0 }
+      const myGoalsEntry = getTeamScoreFromMatch(matchData, myTeamId)
+      const theirGoalsEntry = getTeamScoreFromMatch(matchData, otherTeamId)
       goalsFor = myGoalsEntry.goals
       goalsAgainst = theirGoalsEntry.goals
 
-      const homeGoalsEntry = teamGoalsInMatch.get(`${part.match_id}:${matchData.home_team_id}`) ?? { goals: 0, shootoutGoals: 0 }
-      const awayGoalsEntry = teamGoalsInMatch.get(`${part.match_id}:${matchData.away_team_id}`) ?? { goals: 0, shootoutGoals: 0 }
+      const homeGoalsEntry = getTeamScoreFromMatch(matchData, matchData.home_team_id)
+      const awayGoalsEntry = getTeamScoreFromMatch(matchData, matchData.away_team_id)
       finalScore = `${homeGoalsEntry.goals}:${awayGoalsEntry.goals}`
 
       const isPenalties = matchData.result_type === 'PENALTIES' || matchData.result_type === 'EXTRA_TIME_AND_PENALTIES'

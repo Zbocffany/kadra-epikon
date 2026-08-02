@@ -18,8 +18,10 @@ import {
 
 function revalidateCountryCaches(countryId: string | null = null): void {
   revalidateTag('public-countries', 'max')
+  revalidateTag('public-statistics', 'max')
   revalidatePath('/admin/countries')
   revalidatePath('/countries')
+  revalidatePath('/statistics')
   if (countryId) {
     revalidatePath(`/admin/countries/${countryId}`)
     revalidatePath(`/countries/${countryId}`)

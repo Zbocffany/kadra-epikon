@@ -345,6 +345,12 @@ type MatchListRow = {
   competition_id: string
   home_team_id: string
   away_team_id: string
+  home_goals: number
+  away_goals: number
+  home_goals_ht: number
+  away_goals_ht: number
+  home_shootout_goals: number
+  away_shootout_goals: number
 }
 
 type MatchEventRow = {
@@ -532,7 +538,7 @@ async function getTeamCountryFifaCodeMap(teamIds: string[]): Promise<Map<string,
  *
  * Data is assembled from three separate fetches to avoid PostgREST
  * FK-ambiguity issues (two FK columns from tbl_Matches → tbl_Teams).
- * Score is intentionally omitted: derive it from tbl_Match_Events if needed.
+ * Score helper columns are maintained from tbl_Match_Events by database triggers.
  */
 export async function getAdminMatches(options?: AdminMatchFilterOptions): Promise<AdminMatch[]> {
   const supabase = createServiceRoleClient()
@@ -542,7 +548,7 @@ export async function getAdminMatches(options?: AdminMatchFilterOptions): Promis
     .from('tbl_Matches')
     .select(
       'id, match_date, match_time, match_status, result_type, editorial_status, competition_id, home_team_id, away_team_id'
-      + ', walkover_winner_team_id'
+      + ', walkover_winner_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals'
     )
 
   if (options?.status) {
@@ -628,7 +634,7 @@ export async function getAdminMatchesForPlayer(personId: string): Promise<AdminP
 
   const { data: matches, error: matchesError } = await supabase
     .from('tbl_Matches')
-    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id')
+    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals')
     .in('id', allMatchIds)
     .order('match_date', { ascending: false })
     .order('match_time', { ascending: false })
@@ -708,7 +714,7 @@ export async function getAdminMatchesForCoach(personId: string): Promise<AdminCo
 
   const { data: matches, error: matchesError } = await supabase
     .from('tbl_Matches')
-    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id')
+    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals')
     .in('id', allMatchIds)
     .order('match_date', { ascending: false })
     .order('match_time', { ascending: false })
@@ -798,7 +804,7 @@ export async function getAdminMatchesForReferee(personId: string): Promise<Admin
 
   const { data: matches, error: matchesError } = await supabase
     .from('tbl_Matches')
-    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id')
+    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals')
     .in('id', allMatchIds)
     .order('match_date', { ascending: false })
     .order('match_time', { ascending: false })
@@ -1519,7 +1525,7 @@ export async function getAdminMatchesPage(
   const { data: matches, error: matchError, count } = await supabase
     .from('tbl_Matches')
     .select(
-      'id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id',
+      'id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals',
       { count: 'exact' }
     )
     .order('match_date', { ascending: false })
@@ -1602,96 +1608,25 @@ async function mapAdminMatches(
     }
   }
 
-  const [matchEvents, teamNameMap, teamFifaMap] = await Promise.all([
-    (async () => {
-      const EVENT_TYPES_FOR_SCORE = ['GOAL', 'OWN_GOAL', 'PENALTY_GOAL', 'PENALTY_SHOOTOUT_SCORED']
-      const PAGE_SIZE = 1000
-      const allEvents: Array<Pick<MatchEventRow, 'match_id' | 'team_id' | 'event_type'>> = []
-      const matchIds = matches.map((match) => match.id)
-
-      for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
-        const chunkIds = matchIds.slice(i, i + CHUNK_SIZE)
-        let from = 0
-
-        while (true) {
-          const { data, error } = await runSelectWithRetry<any>(async () =>
-            await supabase
-              .from('tbl_Match_Events')
-              .select('match_id, team_id, event_type')
-              .in('match_id', chunkIds)
-              .in('event_type', EVENT_TYPES_FOR_SCORE)
-              .order('id', { ascending: true })
-              .range(from, from + PAGE_SIZE - 1)
-          )
-
-          if (error) throw new Error(`tbl_Match_Events: ${error.message}`)
-          const rows = (data ?? []) as Array<Pick<MatchEventRow, 'match_id' | 'team_id' | 'event_type'>>
-          allEvents.push(...rows)
-
-          if (rows.length < PAGE_SIZE) break
-          from += PAGE_SIZE
-        }
-      }
-
-      return allEvents
-    })(),
+  const [teamNameMap, teamFifaMap] = await Promise.all([
     getTeamDisplayMap(teamIds),
     getTeamCountryFifaCodeMap(teamIds),
   ])
 
   // 3. Lookup maps
   const compMap = new Map(competitions?.map((c) => [c.id, c.name]) ?? [])
-  const eventsByMatchId = new Map<string, Array<Pick<MatchEventRow, 'team_id' | 'event_type'>>>()
-
-  for (const event of matchEvents) {
-    if (!event.match_id) continue
-    const existing = eventsByMatchId.get(event.match_id) ?? []
-    existing.push({ team_id: event.team_id, event_type: event.event_type })
-    eventsByMatchId.set(event.match_id, existing)
-  }
 
   function getFinalScore(match: MatchListRow): string | null {
     const walkoverScore = getWalkoverFinalScore(match)
     if (walkoverScore) return walkoverScore
 
-    const events = eventsByMatchId.get(match.id) ?? []
-    if (!events.length) {
-      // For finished non-walkover matches, absence of scoring events means a 0:0 draw.
-      if (match.match_status === 'FINISHED' && match.result_type !== 'WALKOVER') {
-        return '0:0'
-      }
-      return null
-    }
-
-    let homeGoals = 0
-    let awayGoals = 0
-
-    for (const event of events) {
-      if (event.event_type !== 'GOAL' && event.event_type !== 'OWN_GOAL' && event.event_type !== 'PENALTY_GOAL') {
-        continue
-      }
-
-      if (event.team_id === match.home_team_id) {
-        homeGoals += 1
-      } else if (event.team_id === match.away_team_id) {
-        awayGoals += 1
-      }
-    }
-
-    return `${homeGoals}:${awayGoals}`
+    if (match.match_status !== 'FINISHED') return null
+    return `${match.home_goals}:${match.away_goals}`
   }
 
   function getShootoutScore(match: MatchListRow): string | null {
     if (match.result_type !== 'PENALTIES' && match.result_type !== 'EXTRA_TIME_AND_PENALTIES') return null
-    const events = eventsByMatchId.get(match.id) ?? []
-    let homeGoals = 0
-    let awayGoals = 0
-    for (const event of events) {
-      if (event.event_type !== 'PENALTY_SHOOTOUT_SCORED') continue
-      if (event.team_id === match.home_team_id) homeGoals += 1
-      else if (event.team_id === match.away_team_id) awayGoals += 1
-    }
-    return `${homeGoals}:${awayGoals}`
+    return `${match.home_shootout_goals}:${match.away_shootout_goals}`
   }
 
   // 4. Assemble
@@ -2079,16 +2014,22 @@ export async function getPublicPolandPlayerMiniStats(match: Pick<AdminMatchDetai
       const allPolandTeamIds = ((allPolandTeams ?? []) as Array<{ id: string }>).map((row) => row.id)
       if (!allPolandTeamIds.length) return {}
 
-      const { data: playerParticipations, error: participationsError } = await supabase
-        .from('tbl_Match_Participants')
-        .select('person_id, match_id, is_starting')
-        .eq('role', 'PLAYER')
-        .in('person_id', personIds)
-        .in('team_id', allPolandTeamIds)
-
-      if (participationsError) throw new Error(`tbl_Match_Participants (Poland history): ${participationsError.message}`)
-
-      const participations = (playerParticipations ?? []) as Array<{ person_id: string; match_id: string; is_starting: boolean | null }>
+      type PlayerParticipationHistoryRow = {
+        id: string
+        person_id: string
+        match_id: string
+        is_starting: boolean | null
+      }
+      const participations = await fetchAllRows<PlayerParticipationHistoryRow>((from, to) =>
+        supabase
+          .from('tbl_Match_Participants')
+          .select('id, person_id, match_id, is_starting')
+          .eq('role', 'PLAYER')
+          .in('person_id', personIds)
+          .in('team_id', allPolandTeamIds)
+          .order('id', { ascending: true })
+          .range(from, to)
+      )
       const participationMatchIds = [...new Set(participations.map((row) => row.match_id))]
 
       const matchMetaById = new Map<string, { match_date: string; result_type: ResultType | null }>()

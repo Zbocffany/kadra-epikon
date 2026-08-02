@@ -229,6 +229,26 @@ const FIFA_FLAG_CODE_MAP: Record<string, string> = {
   ZIM: 'zw',
 }
 
+const HISTORICAL_FIFA_CODES = new Set([
+  'CIS',
+  'DDR',
+  'FRG',
+  'GDR',
+  'NRD',
+  'RFN',
+  'SCG',
+  'TCH',
+  'USR',
+  'YUG',
+])
+
+const CURRENT_FIFA_CODE_BY_FLAG_CODE = new Map<string, string>()
+for (const [fifaCode, flagCode] of Object.entries(FIFA_FLAG_CODE_MAP)) {
+  if (!HISTORICAL_FIFA_CODES.has(fifaCode)) {
+    CURRENT_FIFA_CODE_BY_FLAG_CODE.set(flagCode, fifaCode)
+  }
+}
+
 export function getFlagAssetCode(fifaCode: string | null | undefined): string | null {
   if (!fifaCode) return null
   const normalized = fifaCode.trim().toUpperCase()
@@ -239,4 +259,16 @@ export function getFlagAssetCode(fifaCode: string | null | undefined): string | 
 export function getFlagAssetPath(fifaCode: string | null | undefined): string | null {
   const code = getFlagAssetCode(fifaCode)
   return code ? `/flags/4x3/${code}.svg` : null
+}
+
+export function getCurrentFifaCodeForFlagAsset(
+  flagCode: string | null | undefined,
+): string | null {
+  if (!flagCode) return null
+  return CURRENT_FIFA_CODE_BY_FLAG_CODE.get(flagCode.trim().toLowerCase()) ?? null
+}
+
+export function isHistoricalFifaCode(fifaCode: string | null | undefined): boolean {
+  if (!fifaCode) return false
+  return HISTORICAL_FIFA_CODES.has(fifaCode.trim().toUpperCase())
 }

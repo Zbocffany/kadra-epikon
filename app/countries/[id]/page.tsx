@@ -10,6 +10,7 @@ import {
 } from '@/lib/db/matches'
 import CoachMatchesByYearSection from '@/components/matches/CoachMatchesByYearSection'
 import type { DetailPageParams } from '@/lib/types/admin'
+import { getPublicPolandMatchIdsForFootballCountry } from '@/lib/db/statistics'
 
 type Params = DetailPageParams
 
@@ -89,9 +90,10 @@ export default async function PublicCountryDetailsPage({
   params: Params
 }) {
   const { id } = await params
-  const [countries, allPublicMatches] = await Promise.all([
+  const [countries, allPublicMatches, resolvedCountryMatchIds] = await Promise.all([
     getPublicCountries(),
     getCachedPublicMatches(),
+    getPublicPolandMatchIdsForFootballCountry(id),
   ])
   const country = countries.find((item) => item.id === id)
 
@@ -124,7 +126,7 @@ export default async function PublicCountryDetailsPage({
     : country
 
   const isPolandCountry = normalizeName(country.name) === 'polska'
-  const countryFifaCode = (country.fifa_code ?? '').trim().toUpperCase()
+  const resolvedCountryMatchIdSet = new Set(resolvedCountryMatchIds)
 
   const countryMatches = allPublicMatches.filter((match: AdminMatch) => {
     if (match.editorial_status !== 'VERIFIED') return false
@@ -134,14 +136,7 @@ export default async function PublicCountryDetailsPage({
     if (!isPolandHome && !isPolandAway) return false
 
     if (isPolandCountry) return true
-
-    const opponentFifa = (isPolandHome ? match.away_team_fifa_code : match.home_team_fifa_code)?.trim().toUpperCase() ?? ''
-    if (countryFifaCode && opponentFifa) {
-      return opponentFifa === countryFifaCode
-    }
-
-    const opponentName = isPolandHome ? match.away_team_name : match.home_team_name
-    return normalizeName(opponentName) === normalizeName(country.name)
+    return resolvedCountryMatchIdSet.has(match.id)
   })
 
   const countrySectionMatches: AdminCoachMatch[] = countryMatches.map((match) => ({

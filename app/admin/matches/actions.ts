@@ -1518,8 +1518,12 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
   revalidatePath('/')
   revalidatePath('/matches')
   revalidatePath(`/matches/${id}`)
+  revalidatePath('/countries')
+  revalidatePath('/statistics')
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${id}`, 'max')
+  revalidateTag('public-countries', 'max')
+  revalidateTag('public-statistics', 'max')
 
   // Revalidate cache for all people involved (players, coaches, referees)
   for (const personId of personIds) {
@@ -1640,8 +1644,12 @@ export async function createMatch(formData: FormData): Promise<void> {
   revalidatePath('/')
   revalidatePath('/matches')
   revalidatePath(`/matches/${payload.id as string}`)
+  revalidatePath('/countries')
+  revalidatePath('/statistics')
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${payload.id as string}`, 'max')
+  revalidateTag('public-countries', 'max')
+  revalidateTag('public-statistics', 'max')
   invalidatePublicCacheVersion()
 
   redirectWithAdded('/admin/matches', `Dodano mecz z datą ${input.matchDate}`)
@@ -1715,8 +1723,12 @@ export async function updateMatch(formData: FormData): Promise<void> {
   revalidatePath('/')
   revalidatePath('/matches')
   revalidatePath(`/matches/${id}`)
+  revalidatePath('/countries')
+  revalidatePath('/statistics')
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${id}`, 'max')
+  revalidateTag('public-countries', 'max')
+  revalidateTag('public-statistics', 'max')
 
   // Revalidate cache for all people involved (players, coaches, referees)
   for (const personId of personIds) {
@@ -1776,8 +1788,12 @@ export async function deleteMatch(formData: FormData): Promise<void> {
   revalidatePath('/')
   revalidatePath('/matches')
   revalidatePath(`/matches/${id}`)
+  revalidatePath('/countries')
+  revalidatePath('/statistics')
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${id}`, 'max')
+  revalidateTag('public-countries', 'max')
+  revalidateTag('public-statistics', 'max')
   invalidatePublicCacheVersion()
 
   const label = match?.match_date ?? id
