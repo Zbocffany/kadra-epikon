@@ -379,16 +379,23 @@ function MatchLineupsSummarySection({
     const primary = event.primary_person_id ? (personNameById.get(event.primary_person_id) ?? 'Nieznany') : null
     const secondary = event.secondary_person_id ? (personNameById.get(event.secondary_person_id) ?? 'Nieznany') : null
     if (event.event_type === 'SUBSTITUTION') {
-      const incoming = secondary ?? 'Nieznany'
       const outgoing = primary ?? 'Nieznany'
+      if (!secondary) {
+        return (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="text-xs font-normal text-emerald-100/75">Bez zmiennika</span>
+            {renderPlayerBadge(outgoing, false)}
+          </span>
+        )
+      }
       return mirrored ? (
         <span className="inline-flex items-center gap-1.5">
           {renderPlayerBadge(outgoing, false)}
-          {renderPlayerBadge(incoming, true)}
+          {renderPlayerBadge(secondary, true)}
         </span>
       ) : (
         <span className="inline-flex items-center gap-1.5">
-          {renderPlayerBadge(incoming, true)}
+          {renderPlayerBadge(secondary, true)}
           {renderPlayerBadge(outgoing, false)}
         </span>
       )

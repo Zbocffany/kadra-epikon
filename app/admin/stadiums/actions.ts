@@ -1,6 +1,6 @@
 ﻿'use server'
 
-import { revalidatePath } from 'next/cache'
+import { revalidatePath, revalidateTag } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { invalidatePublicCacheVersion } from '@/lib/db/publicCache'
 import type { InlineCreateState } from '@/lib/types/admin'
@@ -15,10 +15,9 @@ import {
 } from '@/lib/actions/admin'
 
 function revalidateStadiumCaches(stadiumId: string | null = null): void {
-  // Stadiums nie maj\u0105 osobnej publicznej listy, ale s\u0105 czytane w match details
-  // (getPublicMatchDetails). Dlatego \u0142ami\u0105c lokaln\u0105 wersj\u0119 cache wymuszamy
-  // re-fetch wszystkich publicznych zapyta\u0144 sk\u0142adaj\u0105cych si\u0119 z \u015bwie\u017cymi danymi.
+  revalidateTag('public-stadiums', 'max')
   revalidatePath('/admin/stadiums')
+  revalidatePath('/stadiums')
   if (stadiumId) revalidatePath(`/admin/stadiums/${stadiumId}`)
   invalidatePublicCacheVersion()
 }

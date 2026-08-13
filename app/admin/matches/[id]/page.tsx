@@ -613,11 +613,18 @@ function MatchLineupsSummarySection({
     const secondary = event.secondary_person_id ? (personNameById.get(event.secondary_person_id) ?? 'Nieznany') : null
 
     if (event.event_type === 'SUBSTITUTION') {
-      const incoming = secondary ?? 'Nieznany'
       const outgoing = primary ?? 'Nieznany'
+      if (!secondary) {
+        return (
+          <>
+            <span className="font-normal text-neutral-500">Bez zmiennika: </span>
+            <span className="font-semibold text-neutral-100">{outgoing}</span>
+          </>
+        )
+      }
       return (
         <>
-          <span className="font-semibold text-neutral-100">{incoming}</span>
+          <span className="font-semibold text-neutral-100">{secondary}</span>
           <span className="font-normal text-neutral-500"> {outgoing}</span>
         </>
       )

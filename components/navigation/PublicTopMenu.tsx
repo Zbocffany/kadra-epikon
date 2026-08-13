@@ -14,6 +14,7 @@ const menu = [
   { href: '/statistics', label: 'Statystyki' },
   { href: '/clubs', label: 'Kluby' },
   { href: '/cities', label: 'Miasta' },
+  { href: '/stadiums', label: 'Stadiony' },
 ]
 
 function isActivePath(pathname: string, href: string) {

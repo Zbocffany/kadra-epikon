@@ -1348,13 +1348,18 @@ function collectConsistencyValidationErrors(
       const offPlayerId = event.primaryPersonId
       const onPlayerId = event.secondaryPersonId
 
-      if (!offPlayerId || !onPlayerId) {
-        errors.push(`Wiersz ${event.rowNumber}: zmiana wymaga zawodnika schodzącego i wchodzącego.`)
+      if (!offPlayerId) {
+        errors.push(`Wiersz ${event.rowNumber}: zmiana wymaga zawodnika schodzącego.`)
         continue
       }
 
-      if (personTeam.get(offPlayerId) !== event.teamId || personTeam.get(onPlayerId) !== event.teamId) {
-        errors.push(`Wiersz ${event.rowNumber}: zawodnicy zmiany muszą należeć do wybranej drużyny.`)
+      if (personTeam.get(offPlayerId) !== event.teamId) {
+        errors.push(`Wiersz ${event.rowNumber}: zawodnik schodzący musi należeć do wybranej drużyny.`)
+        continue
+      }
+
+      if (onPlayerId && personTeam.get(onPlayerId) !== event.teamId) {
+        errors.push(`Wiersz ${event.rowNumber}: zawodnik wchodzący musi należeć do wybranej drużyny.`)
         continue
       }
 
@@ -1367,12 +1372,12 @@ function collectConsistencyValidationErrors(
         hasBlockingSubstitutionError = true
       }
 
-      if (currentOnPitch.has(onPlayerId)) {
+      if (onPlayerId && currentOnPitch.has(onPlayerId)) {
         errors.push(`Wiersz ${event.rowNumber}: zawodnik wchodzący nie może już przebywać na boisku w momencie zmiany.`)
         hasBlockingSubstitutionError = true
       }
 
-      if (wentOff.has(onPlayerId)) {
+      if (onPlayerId && wentOff.has(onPlayerId)) {
         errors.push(`Wiersz ${event.rowNumber}: zawodnik, który zszedł z boiska, nie może ponownie na nie wejść.`)
         hasBlockingSubstitutionError = true
       }
@@ -1386,7 +1391,7 @@ function collectConsistencyValidationErrors(
         wentOff.add(offPlayerId)
       }
 
-      currentOnPitch.add(onPlayerId)
+      if (onPlayerId) currentOnPitch.add(onPlayerId)
       currentOnPitchByTeam.set(event.teamId, currentOnPitch)
       wentOffByTeam.set(event.teamId, wentOff)
     }
@@ -1431,6 +1436,21 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
 
     if (consistencyErrors.length > 0) {
       redirectWithError(redirectPath, `VALIDATION_LIST::${consistencyErrors.join('||')}`)
+    }
+
+    const confirmedWithoutReplacement = getTrimmedString(formData, 'confirm_substitution_without_replacement') === '1'
+    if (saveEvents && !confirmedWithoutReplacement) {
+      const { rows } = parseEventRowsForValidation(formData, input.homeTeamId, input.awayTeamId)
+      const unconfirmedRows = rows
+        .filter((event) => event.eventType === 'SUBSTITUTION' && event.primaryPersonId && !event.secondaryPersonId)
+        .map((event) => event.rowNumber)
+
+      if (unconfirmedRows.length > 0) {
+        redirectWithError(
+          redirectPath,
+          `CONFIRM_SUBSTITUTION_WITHOUT_REPLACEMENT::${unconfirmedRows.join(',')}`
+        )
+      }
     }
   }
 
@@ -1520,10 +1540,12 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
   revalidatePath(`/matches/${id}`)
   revalidatePath('/countries')
   revalidatePath('/statistics')
+  revalidatePath('/stadiums')
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${id}`, 'max')
   revalidateTag('public-countries', 'max')
   revalidateTag('public-statistics', 'max')
+  revalidateTag('public-stadiums', 'max')
 
   // Revalidate cache for all people involved (players, coaches, referees)
   for (const personId of personIds) {
@@ -1544,6 +1566,7 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
 export type SaveMatchFullState = {
   errors: string[]
   plainError: string | null
+  confirmationWarnings?: string[]
 } | null
 
 export async function saveMatchFullWithState(
@@ -1566,6 +1589,14 @@ export async function saveMatchFullWithState(
         .map((item) => item.trim())
         .filter(Boolean)
       return { errors: list, plainError: null }
+    }
+    if (errorParam.startsWith('CONFIRM_SUBSTITUTION_WITHOUT_REPLACEMENT::')) {
+      const rows = errorParam
+        .slice('CONFIRM_SUBSTITUTION_WITHOUT_REPLACEMENT::'.length)
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+      return { errors: [], plainError: null, confirmationWarnings: rows }
     }
     return { errors: [], plainError: errorParam }
   }
@@ -1646,10 +1677,12 @@ export async function createMatch(formData: FormData): Promise<void> {
   revalidatePath(`/matches/${payload.id as string}`)
   revalidatePath('/countries')
   revalidatePath('/statistics')
+  revalidatePath('/stadiums')
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${payload.id as string}`, 'max')
   revalidateTag('public-countries', 'max')
   revalidateTag('public-statistics', 'max')
+  revalidateTag('public-stadiums', 'max')
   invalidatePublicCacheVersion()
 
   redirectWithAdded('/admin/matches', `Dodano mecz z datą ${input.matchDate}`)
@@ -1725,10 +1758,12 @@ export async function updateMatch(formData: FormData): Promise<void> {
   revalidatePath(`/matches/${id}`)
   revalidatePath('/countries')
   revalidatePath('/statistics')
+  revalidatePath('/stadiums')
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${id}`, 'max')
   revalidateTag('public-countries', 'max')
   revalidateTag('public-statistics', 'max')
+  revalidateTag('public-stadiums', 'max')
 
   // Revalidate cache for all people involved (players, coaches, referees)
   for (const personId of personIds) {
@@ -1790,10 +1825,12 @@ export async function deleteMatch(formData: FormData): Promise<void> {
   revalidatePath(`/matches/${id}`)
   revalidatePath('/countries')
   revalidatePath('/statistics')
+  revalidatePath('/stadiums')
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${id}`, 'max')
   revalidateTag('public-countries', 'max')
   revalidateTag('public-statistics', 'max')
+  revalidateTag('public-stadiums', 'max')
   invalidatePublicCacheVersion()
 
   const label = match?.match_date ?? id

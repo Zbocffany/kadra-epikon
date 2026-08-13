@@ -107,12 +107,14 @@ function EventPersonPicker({
   value,
   options,
   disabled,
+  emptyLabel = 'Brak',
   onChange,
 }: {
   name: string
   value: string
   options: MatchEventPersonOption[]
   disabled?: boolean
+  emptyLabel?: string
   onChange: (id: string) => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
@@ -205,7 +207,7 @@ function EventPersonPicker({
               setSearchText('')
             }
           }}
-          placeholder="Brak"
+          placeholder={emptyLabel}
           className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-2 py-2 pr-6 text-sm text-neutral-100 placeholder:text-neutral-500"
         />
         {value && (
@@ -239,7 +241,7 @@ function EventPersonPicker({
               }}
               className="w-full border-b border-neutral-800 px-3 py-1.5 text-left text-sm text-neutral-500 hover:bg-neutral-800"
             >
-              Brak
+              {emptyLabel}
             </button>
             {filtered.length > 0 ? (
               filtered.map((opt) => (
@@ -529,6 +531,7 @@ export default function MatchEventsForm({
                       value={row.secondaryPersonId}
                       options={peopleOptionsForTeam}
                       disabled={isPerson2Disabled}
+                      emptyLabel={row.eventType === 'SUBSTITUTION' ? 'Brak - zejście bez zmiennika' : 'Brak'}
                       onChange={(id) => updateRow(index, { secondaryPersonId: id })}
                     />
                   </td>

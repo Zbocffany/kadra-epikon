@@ -19,9 +19,11 @@ import {
 
 function revalidateCityCaches(cityId: string): void {
   revalidateTag('public-cities', 'max')
+  revalidateTag('public-stadiums', 'max')
   revalidatePath('/admin/cities')
   revalidatePath(`/admin/cities/${cityId}`)
   revalidatePath('/cities')
+  revalidatePath('/stadiums')
   revalidatePath(`/cities/${cityId}`)
   invalidatePublicCacheVersion()
 }
