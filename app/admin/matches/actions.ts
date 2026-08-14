@@ -82,6 +82,19 @@ const MATCH_EVENT_TYPES = [
 ] as const
 const STARTERS_COUNT = 11
 
+function revalidateMatchParticipantCaches(matchId: string): void {
+  revalidateTag('public-people', 'max')
+  revalidateTag('public-matches', 'max')
+  revalidateTag(`public-match:${matchId}`, 'max')
+  revalidatePath('/')
+  revalidatePath('/matches')
+  revalidatePath(`/matches/${matchId}`)
+  revalidatePath('/players')
+  revalidatePath('/coaches')
+  revalidatePath('/referees')
+  invalidatePublicCacheVersion()
+}
+
 const EVENT_TYPE_LABEL_PL: Record<MatchEventType, string> = {
   GOAL: 'Gol',
   OWN_GOAL: 'Gol samobójczy',
@@ -477,6 +490,7 @@ export async function addMatchParticipant(formData: FormData): Promise<void> {
     redirectWithError(redirectPath, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
+  revalidateMatchParticipantCaches(matchId)
   redirectWithSaved(redirectPath)
 }
 
@@ -502,6 +516,7 @@ export async function removeMatchParticipant(formData: FormData): Promise<void> 
     redirectWithError(redirectPath, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
   }
 
+  revalidateMatchParticipantCaches(matchId)
   redirectWithSaved(redirectPath)
 }
 
@@ -633,6 +648,7 @@ export async function saveMatchTeamSquad(formData: FormData): Promise<void> {
     redirectWithError(redirectPath, 'Nie udało się zapisać składu. Spróbuj ponownie.')
   }
 
+  revalidateMatchParticipantCaches(matchId)
   redirectWithSaved(redirectPath)
 }
 
@@ -690,6 +706,7 @@ export async function saveMatchTeamCoaches(formData: FormData): Promise<void> {
   }
 
   if (uniqueCoachIds.length === 0) {
+    revalidateMatchParticipantCaches(matchId)
     redirectWithSaved(redirectPath)
   }
 
@@ -731,6 +748,7 @@ export async function saveMatchTeamCoaches(formData: FormData): Promise<void> {
     redirectWithError(redirectPath, 'Nie udało się zapisać sztabu trenerskiego. Spróbuj ponownie.')
   }
 
+  revalidateMatchParticipantCaches(matchId)
   redirectWithSaved(redirectPath)
 }
 
@@ -1541,11 +1559,15 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
   revalidatePath('/countries')
   revalidatePath('/statistics')
   revalidatePath('/stadiums')
+  revalidatePath('/players')
+  revalidatePath('/coaches')
+  revalidatePath('/referees')
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${id}`, 'max')
   revalidateTag('public-countries', 'max')
   revalidateTag('public-statistics', 'max')
   revalidateTag('public-stadiums', 'max')
+  revalidateTag('public-people', 'max')
 
   // Revalidate cache for all people involved (players, coaches, referees)
   for (const personId of personIds) {
@@ -1678,11 +1700,15 @@ export async function createMatch(formData: FormData): Promise<void> {
   revalidatePath('/countries')
   revalidatePath('/statistics')
   revalidatePath('/stadiums')
+  revalidatePath('/players')
+  revalidatePath('/coaches')
+  revalidatePath('/referees')
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${payload.id as string}`, 'max')
   revalidateTag('public-countries', 'max')
   revalidateTag('public-statistics', 'max')
   revalidateTag('public-stadiums', 'max')
+  revalidateTag('public-people', 'max')
   invalidatePublicCacheVersion()
 
   redirectWithAdded('/admin/matches', `Dodano mecz z datą ${input.matchDate}`)
@@ -1759,11 +1785,15 @@ export async function updateMatch(formData: FormData): Promise<void> {
   revalidatePath('/countries')
   revalidatePath('/statistics')
   revalidatePath('/stadiums')
+  revalidatePath('/players')
+  revalidatePath('/coaches')
+  revalidatePath('/referees')
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${id}`, 'max')
   revalidateTag('public-countries', 'max')
   revalidateTag('public-statistics', 'max')
   revalidateTag('public-stadiums', 'max')
+  revalidateTag('public-people', 'max')
 
   // Revalidate cache for all people involved (players, coaches, referees)
   for (const personId of personIds) {
@@ -1826,11 +1856,15 @@ export async function deleteMatch(formData: FormData): Promise<void> {
   revalidatePath('/countries')
   revalidatePath('/statistics')
   revalidatePath('/stadiums')
+  revalidatePath('/players')
+  revalidatePath('/coaches')
+  revalidatePath('/referees')
   revalidateTag('public-matches', 'max')
   revalidateTag(`public-match:${id}`, 'max')
   revalidateTag('public-countries', 'max')
   revalidateTag('public-statistics', 'max')
   revalidateTag('public-stadiums', 'max')
+  revalidateTag('public-people', 'max')
   invalidatePublicCacheVersion()
 
   const label = match?.match_date ?? id
