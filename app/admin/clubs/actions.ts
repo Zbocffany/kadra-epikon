@@ -5,6 +5,7 @@ import { createServiceRoleClient } from '@/lib/supabase/server'
 import { requireAdminAccess } from '@/lib/auth/admin'
 import { invalidatePublicCacheVersion } from '@/lib/db/publicCache'
 import { fetchAllRows } from '@/lib/db/pagination'
+import { formatClubWithLocation } from '@/lib/utils/clubLabel'
 import type { InlineCreateState } from '@/lib/types/admin'
 import {
   getTrimmedNullable,
@@ -85,9 +86,29 @@ export async function createClubInline(
     return inlineError(prevState, 'Nie udało się pobrać drużyny dla nowego klubu.')
   }
 
+  let cityName: string | null = null
+  let fifaCode: string | null = null
+  if (clubCityId) {
+    const { data: city } = await supabase
+      .from('tbl_Cities')
+      .select('city_name, current_country_id')
+      .eq('id', clubCityId)
+      .maybeSingle()
+    cityName = city?.city_name ?? null
+
+    if (city?.current_country_id) {
+      const { data: country } = await supabase
+        .from('tbl_Countries')
+        .select('fifa_code')
+        .eq('id', city.current_country_id)
+        .maybeSingle()
+      fifaCode = country?.fifa_code ?? null
+    }
+  }
+
   revalidateClubCaches(clubId)
 
-  return inlineSuccess(prevState, teamData.id, name)
+  return inlineSuccess(prevState, teamData.id, formatClubWithLocation(name, cityName, fifaCode))
 }
 
 export async function createClub(formData: FormData): Promise<void> {

@@ -2,6 +2,7 @@ import { unstable_cache, unstable_noStore as noStore } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
 import { fetchAllRows, getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
 import { getPublicCacheKey } from '@/lib/db/publicCache'
+import { formatClubWithLocation } from '@/lib/utils/clubLabel'
 
 type QueryError = { message: string } | null
 type QueryResult<T> = { data: T[] | null; error: QueryError }
@@ -2446,19 +2447,65 @@ export async function getAdminMatchEvents(matchId: string): Promise<AdminMatchEv
 export async function getAdminClubTeamOptions(): Promise<AdminTeamOption[]> {
   const supabase = createServiceRoleClient()
 
-  // Single query with JOIN to avoid fetching all IDs then doing a huge .in() lookup
-  const { data: clubTeams, error } = await supabase
+  type ClubTeamRow = {
+    id: string
+    tbl_Clubs: { name: string; club_city_id: string | null } | { name: string; club_city_id: string | null }[] | null
+  }
+  const clubTeams = await fetchAllRows<ClubTeamRow>((from, to) => supabase
     .from('tbl_Teams')
-    .select('id, tbl_Clubs(name)')
+    .select('id, tbl_Clubs(name, club_city_id)')
     .not('club_id', 'is', null)
+    .order('id', { ascending: true })
+    .range(from, to))
 
-  if (error) throw new Error(`tbl_Teams: ${error.message}`)
+  const clubsByTeamId = new Map(clubTeams.map((team) => {
+    const club = Array.isArray(team.tbl_Clubs) ? team.tbl_Clubs[0] : team.tbl_Clubs
+    return [team.id, club ?? null] as const
+  }))
+  const cityIds = [...new Set([...clubsByTeamId.values()]
+    .map((club) => club?.club_city_id)
+    .filter((id): id is string => Boolean(id)))]
 
-  return (clubTeams ?? [])
-    .map((t) => {
-      const club = t.tbl_Clubs as { name: string } | { name: string }[] | null
-      const name = Array.isArray(club) ? (club[0]?.name ?? '—') : (club?.name ?? '—')
-      return { id: t.id, label: name }
+  type ClubCityRow = { id: string; city_name: string; current_country_id: string | null }
+  const cities: ClubCityRow[] = []
+  for (let index = 0; index < cityIds.length; index += CHUNK_SIZE) {
+    const cityIdChunk = cityIds.slice(index, index + CHUNK_SIZE)
+    const rows = await fetchAllRows<ClubCityRow>((from, to) => supabase
+        .from('tbl_Cities')
+        .select('id, city_name, current_country_id')
+        .in('id', cityIdChunk)
+        .order('id', { ascending: true })
+        .range(from, to))
+    cities.push(...rows)
+  }
+  const cityById = new Map(cities.map((city) => [city.id, city]))
+  const countryIds = [...new Set(cities
+    .map((city) => city.current_country_id)
+    .filter((id): id is string => Boolean(id)))]
+  const countries: Array<{ id: string; fifa_code: string | null }> = []
+  for (let index = 0; index < countryIds.length; index += CHUNK_SIZE) {
+    const countryIdChunk = countryIds.slice(index, index + CHUNK_SIZE)
+    const rows = await fetchAllRows<{ id: string; fifa_code: string | null }>((from, to) => supabase
+        .from('tbl_Countries')
+        .select('id, fifa_code')
+        .in('id', countryIdChunk)
+        .order('id', { ascending: true })
+        .range(from, to))
+    countries.push(...rows)
+  }
+  const fifaCodeByCountryId = new Map(countries.map((country) => [country.id, country.fifa_code]))
+
+  return clubTeams
+    .map((team) => {
+      const club = clubsByTeamId.get(team.id)
+      const city = club?.club_city_id ? cityById.get(club.club_city_id) : null
+      const fifaCode = city?.current_country_id
+        ? fifaCodeByCountryId.get(city.current_country_id)
+        : null
+      return {
+        id: team.id,
+        label: formatClubWithLocation(club?.name, city?.city_name, fifaCode),
+      }
     })
     .sort((a, b) => a.label.localeCompare(b.label, 'pl'))
 }

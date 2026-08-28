@@ -301,6 +301,27 @@ export default function MatchEventsForm({
     () => [...people].sort((a, b) => a.label.localeCompare(b.label, 'pl')),
     [people]
   )
+  const eventCounts = useMemo(() => {
+    const counts = { firstHalf: 0, secondHalf: 0, extraTime: 0, shootout: 0 }
+
+    for (const row of rows) {
+      if (SHOOTOUT_TYPES.has(row.eventType)) {
+        counts.shootout += 1
+        continue
+      }
+
+      const minute = Number.parseInt(row.minute, 10)
+      if (!Number.isFinite(minute)) continue
+      if (minute <= 45) counts.firstHalf += 1
+      else if (minute <= 90) counts.secondHalf += 1
+      else counts.extraTime += 1
+    }
+
+    return {
+      ...counts,
+      total: counts.firstHalf + counts.secondHalf + counts.extraTime + counts.shootout,
+    }
+  }, [rows])
 
   const DIGITS_ONLY = /\D/g
 
@@ -590,6 +611,27 @@ export default function MatchEventsForm({
         >
           Dodaj inne
         </button>
+      </div>
+
+      <div className="rounded-lg border border-neutral-800 bg-neutral-950 px-4 py-3 text-sm text-neutral-300">
+        <span className="font-semibold text-neutral-100">Zdarzenia: {eventCounts.total}</span>
+        <span className="text-neutral-500"> (</span>
+        <span>1. połowa: {eventCounts.firstHalf}</span>
+        <span className="text-neutral-500">, </span>
+        <span>2. połowa: {eventCounts.secondHalf}</span>
+        {eventCounts.extraTime > 0 ? (
+          <>
+            <span className="text-neutral-500">, </span>
+            <span>dogrywka: {eventCounts.extraTime}</span>
+          </>
+        ) : null}
+        {eventCounts.shootout > 0 ? (
+          <>
+            <span className="text-neutral-500">, </span>
+            <span>rzuty karne: {eventCounts.shootout}</span>
+          </>
+        ) : null}
+        <span className="text-neutral-500">)</span>
       </div>
     </div>
   )
