@@ -60,6 +60,7 @@ export default function PublicTopMenu() {
           <ThemeToggle />
           <SmartPrefetchLink
             href="/login"
+            prefetchOnMount
             className="rounded-md border border-emerald-900/70 bg-emerald-950/55 px-3 py-1.5 text-xs font-semibold text-emerald-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.22)] hover:border-emerald-300/45 hover:text-emerald-50"
           >
             Zaloguj

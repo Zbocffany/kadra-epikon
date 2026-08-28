@@ -1,4 +1,4 @@
-import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createServerAuthClient } from '@/lib/supabase/auth'
 import { signInAction } from './actions'
 
@@ -14,12 +14,40 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     data: { user },
   } = await authClient.auth.getUser()
 
-  if (user) {
-    redirect('/admin/matches')
-  }
-
   const params = await searchParams
   const hasError = params.error === 'invalid_credentials' || params.error === 'missing_credentials'
+
+  if (user) {
+    return (
+      <main className="min-h-screen px-4 py-10 sm:px-8">
+        <div className="mx-auto max-w-md rounded-xl border border-neutral-800 bg-neutral-950 p-6">
+          <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">
+            Admin
+          </p>
+          <h1 className="mt-2 text-2xl font-bold tracking-tight">Jesteś zalogowany</h1>
+          <p className="mt-3 text-sm text-neutral-400">
+            Konto: <span className="text-neutral-200">{user.email ?? user.id}</span>
+          </p>
+          <div className="mt-6 flex flex-col gap-2">
+            <Link
+              href="/admin/matches"
+              prefetch={false}
+              className="w-full rounded-md border border-neutral-700 bg-neutral-100 px-3 py-2 text-center text-sm font-semibold text-neutral-900 hover:bg-white"
+            >
+              Wejdź do panelu admina
+            </Link>
+            <Link
+              href="/"
+              prefetch={false}
+              className="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-center text-sm font-semibold text-neutral-200 hover:bg-neutral-800"
+            >
+              Wróć na stronę główną
+            </Link>
+          </div>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-screen px-4 py-10 sm:px-8">
