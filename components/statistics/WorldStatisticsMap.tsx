@@ -275,10 +275,6 @@ export default function WorldStatisticsMap({
               const isHovered = Boolean(fifaCode && fifaCode === hoveredCode)
               const pathData = path(mapFeature.geometry)
               if (!pathData) return null
-              const [centerX, centerY] = path.centroid(mapFeature.geometry)
-              const hoverTransform = isHovered && Number.isFinite(centerX) && Number.isFinite(centerY)
-                ? `translate(${centerX} ${centerY}) scale(1.08) translate(${-centerX} ${-centerY})`
-                : undefined
 
               return (
                 <path
@@ -291,10 +287,11 @@ export default function WorldStatisticsMap({
                   stroke={isHovered ? '#052e1b' : '#64756c'}
                   strokeWidth={isHovered ? 1.6 / transform.k : 0.55 / transform.k}
                   vectorEffect="non-scaling-stroke"
-                  transform={hoverTransform}
                   className={statistic ? 'cursor-pointer transition-[filter] duration-150 ease-out' : ''}
                   style={{
-                    filter: isHovered ? 'drop-shadow(0 5px 5px rgba(0,0,0,0.34))' : undefined,
+                    filter: isHovered
+                      ? 'drop-shadow(0 6px 6px rgba(0,0,0,0.34)) drop-shadow(0 2px 2px rgba(0,0,0,0.24)) brightness(1.06)'
+                      : undefined,
                   }}
                   tabIndex={statistic ? 0 : undefined}
                   role={statistic ? 'link' : undefined}
