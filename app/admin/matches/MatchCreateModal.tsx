@@ -230,6 +230,22 @@ export default function MatchCreateModal({
             </div>
 
             <div className="flex flex-col gap-1.5">
+              <label htmlFor="attendance" className="text-sm font-medium text-neutral-300">
+                Liczba widzów
+              </label>
+              <input
+                id="attendance"
+                name="attendance"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1}
+                placeholder="Brak danych"
+                className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
               <AdminSelectField
                 name="competition_id"
                 label="Rozgrywki"

@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation'
 import ThemeToggle from '@/components/ThemeToggle'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
+import { ViewModeToggle } from '@/components/admin/AdminTopNav'
 
 const menu = [
   { href: '/', label: 'Home' },
@@ -11,6 +12,7 @@ const menu = [
   { href: '/coaches', label: 'Trenerzy' },
   { href: '/referees', label: 'Sędziowie' },
   { href: '/countries', label: 'Kraje' },
+  { href: '/poland', label: 'Polska' },
   { href: '/statistics', label: 'Statystyki' },
   { href: '/clubs', label: 'Kluby' },
   { href: '/cities', label: 'Miasta' },
@@ -22,7 +24,11 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`)
 }
 
-export default function PublicTopMenu() {
+type PublicTopMenuProps = {
+  adminRole?: 'ADMIN' | 'EDITOR' | null
+}
+
+export default function PublicTopMenu({ adminRole = null }: PublicTopMenuProps) {
   const pathname = usePathname()
   const menuWidthClass = 'max-w-[74rem]'
 
@@ -57,6 +63,7 @@ export default function PublicTopMenu() {
         </div>
 
         <div className="flex items-center gap-2">
+          {adminRole ? <ViewModeToggle currentMode="PUBLIC" role={adminRole} /> : null}
           <ThemeToggle />
           <SmartPrefetchLink
             href="/login"

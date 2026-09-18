@@ -109,6 +109,7 @@ export type AdminMatch = {
   match_status: MatchStatus
   result_type: ResultType | null
   walkover_winner_team_id: string | null
+  attendance: number | null
   editorial_status: EditorialStatus
   competition_name: string
   match_level_name: string | null
@@ -174,6 +175,9 @@ export type AdminStadiumOption = {
   stadium_city_id: string | null
 }
 
+export type SquadRole = 'STARTING' | 'BENCH' | 'CALLED_UP'
+export const SQUAD_ROLES: readonly SquadRole[] = ['STARTING', 'BENCH', 'CALLED_UP'] as const
+
 export type AdminMatchParticipant = {
   id: string
   team_id: string | null
@@ -182,6 +186,8 @@ export type AdminMatchParticipant = {
   birth_date: string | null
   role: MatchParticipantRole
   is_starting: boolean | null
+  squad_role: SquadRole | null
+  is_captain: boolean
   player_position: PlayerPosition | null
   club_team_id: string | null
   club_team_name: string | null
@@ -289,6 +295,8 @@ type MatchParticipantRow = {
   person_id: string
   role: MatchParticipantRole
   is_starting: boolean | null
+  squad_role: SquadRole | null
+  is_captain: boolean | null
   player_position: PlayerPosition | null
   club_team_id: string | null
 }
@@ -342,6 +350,7 @@ type MatchListRow = {
   match_status: MatchStatus
   result_type: ResultType | null
   walkover_winner_team_id: string | null
+  attendance: number | null
   editorial_status: EditorialStatus
   competition_id: string
   home_team_id: string
@@ -549,7 +558,7 @@ export async function getAdminMatches(options?: AdminMatchFilterOptions): Promis
     .from('tbl_Matches')
     .select(
       'id, match_date, match_time, match_status, result_type, editorial_status, competition_id, home_team_id, away_team_id'
-      + ', walkover_winner_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals'
+      + ', walkover_winner_team_id, attendance, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals'
     )
 
   if (options?.status) {
@@ -635,7 +644,7 @@ export async function getAdminMatchesForPlayer(personId: string): Promise<AdminP
 
   const { data: matches, error: matchesError } = await supabase
     .from('tbl_Matches')
-    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals')
+    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, attendance, editorial_status, competition_id, home_team_id, away_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals')
     .in('id', allMatchIds)
     .order('match_date', { ascending: false })
     .order('match_time', { ascending: false })
@@ -715,7 +724,7 @@ export async function getAdminMatchesForCoach(personId: string): Promise<AdminCo
 
   const { data: matches, error: matchesError } = await supabase
     .from('tbl_Matches')
-    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals')
+    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, attendance, editorial_status, competition_id, home_team_id, away_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals')
     .in('id', allMatchIds)
     .order('match_date', { ascending: false })
     .order('match_time', { ascending: false })
@@ -805,7 +814,7 @@ export async function getAdminMatchesForReferee(personId: string): Promise<Admin
 
   const { data: matches, error: matchesError } = await supabase
     .from('tbl_Matches')
-    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals')
+    .select('id, match_date, match_time, match_status, result_type, walkover_winner_team_id, attendance, editorial_status, competition_id, home_team_id, away_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals')
     .in('id', allMatchIds)
     .order('match_date', { ascending: false })
     .order('match_time', { ascending: false })
@@ -1526,7 +1535,7 @@ export async function getAdminMatchesPage(
   const { data: matches, error: matchError, count } = await supabase
     .from('tbl_Matches')
     .select(
-      'id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals',
+      'id, match_date, match_time, match_status, result_type, walkover_winner_team_id, attendance, editorial_status, competition_id, home_team_id, away_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals',
       { count: 'exact' }
     )
     .order('match_date', { ascending: false })
@@ -1638,6 +1647,7 @@ async function mapAdminMatches(
     match_status: m.match_status,
     result_type: m.result_type,
     walkover_winner_team_id: m.walkover_winner_team_id,
+    attendance: m.attendance ?? null,
     editorial_status: m.editorial_status,
     competition_name: compMap.get(m.competition_id) ?? '—',
     match_level_name: (() => {
@@ -1660,7 +1670,7 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
   const { data: match, error: matchError } = await supabase
     .from('tbl_Matches')
     .select(
-      'id, match_date, match_time, match_status, result_type, walkover_winner_team_id, editorial_status, competition_id, home_team_id, away_team_id, match_city_id, match_stadium_id'
+      'id, match_date, match_time, match_status, result_type, walkover_winner_team_id, attendance, editorial_status, competition_id, home_team_id, away_team_id, match_city_id, match_stadium_id'
     )
     .eq('id', id)
     .maybeSingle()
@@ -1720,6 +1730,7 @@ export async function getAdminMatchDetails(id: string): Promise<AdminMatchDetail
     match_status: match.match_status,
     result_type: match.result_type,
     walkover_winner_team_id: match.walkover_winner_team_id ?? null,
+    attendance: (match as { attendance?: number | null }).attendance ?? null,
     editorial_status: match.editorial_status,
     competition_name: competition?.name ?? '—',
     match_level_name: matchLevelName,
@@ -1768,7 +1779,7 @@ export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 
 
   const { data: participants, error: participantsError } = await supabase
     .from('tbl_Match_Participants')
-    .select('id, team_id, person_id, role, is_starting, player_position, club_team_id')
+    .select('id, team_id, person_id, role, is_starting, squad_role, is_captain, player_position, club_team_id')
     .eq('match_id', match.id)
 
   if (participantsError) throw new Error(`tbl_Match_Participants: ${participantsError.message}`)
@@ -1900,6 +1911,8 @@ export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 
       birth_date: person.birth_date,
       role: participant.role,
       is_starting: participant.is_starting,
+      squad_role: participant.squad_role,
+      is_captain: participant.is_captain === true,
       player_position: participant.player_position,
       club_team_id: participant.club_team_id,
       club_team_name: participant.club_team_id
@@ -2151,7 +2164,7 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
 
   const { data: participants, error: participantsError } = await supabase
     .from('tbl_Match_Participants')
-    .select('id, team_id, person_id, role, is_starting, player_position, club_team_id')
+    .select('id, team_id, person_id, role, is_starting, squad_role, is_captain, player_position, club_team_id')
     .eq('match_id', match.id)
 
   if (participantsError) throw new Error(`tbl_Match_Participants: ${participantsError.message}`)
@@ -2284,6 +2297,8 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
       birth_date: peopleRows.find((person) => person.id === participant.person_id)?.birth_date ?? null,
       role: participant.role,
       is_starting: participant.is_starting,
+      squad_role: participant.squad_role,
+      is_captain: participant.is_captain === true,
       player_position: participant.player_position,
       club_team_id: participant.club_team_id,
       club_team_name: participant.club_team_id

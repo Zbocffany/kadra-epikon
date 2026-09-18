@@ -450,6 +450,143 @@ async function getExplicitRepresentedCountryIdsByPersonId(
   return map
 }
 
+/**
+ * Wyprowadza reprezentowane kraje z historii meczów gracza:
+ * każdy uczestnik z `role='PLAYER'` w drużynie narodowej (team z
+ * `club_id IS NULL`) daje kraj = `team.country_id`.
+ *
+ * Używane razem z `getExplicitRepresentedCountryDataByPersonId` — łączony
+ * wynik pokazuje flagi „raz zagrałeś dla reprezentacji = ten kraj Ci
+ * zostaje" bez potrzeby backfillu `tbl_Person_Countries`.
+ */
+async function getDerivedRepresentedCountryDataByPersonId(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  personIds: string[]
+): Promise<Map<string, { name: string; fifaCode: string | null }[]>> {
+  if (!personIds.length) {
+    return new Map()
+  }
+
+  const CHUNK_SIZE = 80
+  const PAGE_SIZE = 1000
+
+  type ParticipationRow = { person_id: string; team_id: string | null }
+  const participations: ParticipationRow[] = []
+
+  for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
+    let from = 0
+    while (true) {
+      const { data, error } = await supabase
+        .from('tbl_Match_Participants')
+        .select('person_id, team_id')
+        .eq('role', 'PLAYER')
+        .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
+        .not('team_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, from + PAGE_SIZE - 1)
+
+      if (error) throw new Error(`tbl_Match_Participants (represented derived): ${error.message}`)
+
+      const rows = (data ?? []) as ParticipationRow[]
+      participations.push(...rows)
+      if (rows.length < PAGE_SIZE) break
+      from += PAGE_SIZE
+    }
+  }
+
+  const teamIds = [
+    ...new Set(participations.map((row) => row.team_id).filter((id): id is string => Boolean(id))),
+  ]
+  if (!teamIds.length) return new Map()
+
+  const nationalTeamCountryById = new Map<string, string>()
+  for (let i = 0; i < teamIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Teams')
+      .select('id, country_id, club_id')
+      .in('id', teamIds.slice(i, i + CHUNK_SIZE))
+
+    if (error) throw new Error(`tbl_Teams (represented derived): ${error.message}`)
+
+    for (const team of (data ?? []) as Array<{ id: string; country_id: string | null; club_id: string | null }>) {
+      if (team.club_id === null && team.country_id) {
+        nationalTeamCountryById.set(team.id, team.country_id)
+      }
+    }
+  }
+
+  if (nationalTeamCountryById.size === 0) return new Map()
+
+  const countryIds = [...new Set([...nationalTeamCountryById.values()])]
+  const countryById = new Map<string, { name: string; fifaCode: string | null }>()
+  for (let i = 0; i < countryIds.length; i += CHUNK_SIZE) {
+    const { data, error } = await supabase
+      .from('tbl_Countries')
+      .select('id, name, fifa_code')
+      .in('id', countryIds.slice(i, i + CHUNK_SIZE))
+
+    if (error) throw new Error(`tbl_Countries (represented derived): ${error.message}`)
+
+    for (const country of (data ?? []) as Array<{ id: string; name: string; fifa_code: string | null }>) {
+      if (country.name) {
+        countryById.set(country.id, { name: country.name, fifaCode: country.fifa_code ?? null })
+      }
+    }
+  }
+
+  const map = new Map<string, { name: string; fifaCode: string | null }[]>()
+  for (const participation of participations) {
+    if (!participation.team_id) continue
+    const countryId = nationalTeamCountryById.get(participation.team_id)
+    if (!countryId) continue
+    const country = countryById.get(countryId)
+    if (!country) continue
+
+    const existing = map.get(participation.person_id) ?? []
+    if (existing.some((entry) => entry.name === country.name)) continue
+    existing.push({ name: country.name, fifaCode: country.fifaCode })
+    existing.sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+    map.set(participation.person_id, existing)
+  }
+
+  return map
+}
+
+/**
+ * Efektywna lista reprezentowanych krajów = jawne wpisy z `tbl_Person_Countries`
+ * PLUS kraje wyprowadzone z historii meczów (drużyny narodowe, w których gracz
+ * wystąpił jako PLAYER). Duplikaty po nazwie są usuwane, wynik jest posortowany
+ * alfabetycznie.
+ */
+async function getEffectiveRepresentedCountryDataByPersonId(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  personIds: string[]
+): Promise<Map<string, { name: string; fifaCode: string | null }[]>> {
+  if (!personIds.length) return new Map()
+
+  const [explicit, derived] = await Promise.all([
+    getExplicitRepresentedCountryDataByPersonId(supabase, personIds),
+    getDerivedRepresentedCountryDataByPersonId(supabase, personIds),
+  ])
+
+  const merged = new Map<string, { name: string; fifaCode: string | null }[]>()
+  const allPersonIds = new Set<string>([...explicit.keys(), ...derived.keys()])
+  for (const personId of allPersonIds) {
+    const seen = new Set<string>()
+    const list: { name: string; fifaCode: string | null }[] = []
+    for (const source of [explicit.get(personId) ?? [], derived.get(personId) ?? []]) {
+      for (const entry of source) {
+        if (seen.has(entry.name)) continue
+        seen.add(entry.name)
+        list.push(entry)
+      }
+    }
+    list.sort((a, b) => a.name.localeCompare(b.name, 'pl'))
+    merged.set(personId, list)
+  }
+  return merged
+}
+
 async function getPolandCountryId(supabase: ReturnType<typeof createServiceRoleClient>): Promise<string | null> {
   const { data, error } = await supabase
     .from('tbl_Countries')
@@ -775,7 +912,7 @@ async function getPlayedAgainstPolandByPersonId(
 
   const CHUNK_SIZE = 80
   const PAGE_SIZE = 1000
-  type ParticipantRow = { person_id: string; match_id: string; is_starting: boolean | null; team_id: string | null }
+  type ParticipantRow = { person_id: string; match_id: string; is_starting: boolean | null; squad_role: 'STARTING' | 'BENCH' | 'CALLED_UP' | null; team_id: string | null }
   const allParticipants: ParticipantRow[] = []
 
   for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
@@ -783,7 +920,7 @@ async function getPlayedAgainstPolandByPersonId(
     while (true) {
       const { data, error } = await supabase
         .from('tbl_Match_Participants')
-        .select('person_id, match_id, is_starting, team_id')
+        .select('person_id, match_id, is_starting, squad_role, team_id')
         .eq('role', 'PLAYER')
         .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
         .order('id', { ascending: true })
@@ -2322,12 +2459,13 @@ async function getPlayerFilterMatchesByPersonId(
   const CHUNK_SIZE = 80
   const PAGE_SIZE = 1000
 
-  // 1. PLAYER participations (with team_id + is_starting)
+  // 1. PLAYER participations (with team_id + is_starting + squad_role)
   type PlayerParticipantRow = {
     person_id: string
     match_id: string
     team_id: string | null
     is_starting: boolean | null
+    squad_role: 'STARTING' | 'BENCH' | 'CALLED_UP' | null
   }
   const allParticipants: PlayerParticipantRow[] = []
   for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
@@ -2335,7 +2473,7 @@ async function getPlayerFilterMatchesByPersonId(
     while (true) {
       const { data, error } = await supabase
         .from('tbl_Match_Participants')
-        .select('person_id, match_id, team_id, is_starting')
+        .select('person_id, match_id, team_id, is_starting, squad_role')
         .eq('role', 'PLAYER')
         .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
         .order('id', { ascending: true })
@@ -2352,7 +2490,8 @@ async function getPlayerFilterMatchesByPersonId(
   // 2. Drop walkovers
   const allMatchIds = [...new Set(allParticipants.map((p) => p.match_id))]
   const nonWalkoverMatchIdsSet = await getNonWalkoverMatchIdSet(supabase, allMatchIds)
-  const nonWalkoverParticipants = allParticipants.filter((p) => nonWalkoverMatchIdsSet.has(p.match_id))
+  // Wyklucz CALLED_UP z listy meczów — powołany nie zagrał, nie siedział na ławce, nie liczy się jako mecz
+  const nonWalkoverParticipants = allParticipants.filter((p) => nonWalkoverMatchIdsSet.has(p.match_id) && p.squad_role !== 'CALLED_UP')
   if (!nonWalkoverParticipants.length) return new Map()
 
   // 3. Keep only matches where Poland played (mirrors coach/referee POV)
@@ -2743,14 +2882,14 @@ async function getPersonStats(
   const CHUNK_SIZE = 80
   const PAGE_SIZE = 1000
 
-  type ParticipantRow = { person_id: string; match_id: string; is_starting: boolean | null }
+  type ParticipantRow = { person_id: string; match_id: string; is_starting: boolean | null; squad_role: 'STARTING' | 'BENCH' | 'CALLED_UP' | null }
   const allParticipants: ParticipantRow[] = []
   for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
     let from = 0
     while (true) {
       const { data, error } = await supabase
         .from('tbl_Match_Participants')
-        .select('person_id, match_id, is_starting')
+        .select('person_id, match_id, is_starting, squad_role')
         .eq('role', 'PLAYER')
         .in('person_id', personIds.slice(i, i + CHUNK_SIZE))
         .order('id', { ascending: true })
@@ -2767,7 +2906,8 @@ async function getPersonStats(
 
   const allMatchIds = [...new Set(allParticipants.map((p) => p.match_id))]
   const nonWalkoverMatchIds = await getNonWalkoverMatchIdSet(supabase, allMatchIds)
-  const filteredParticipants = allParticipants.filter((p) => nonWalkoverMatchIds.has(p.match_id))
+  // Wyklucz CALLED_UP z liczenia bench_count — powołani nie siedzą na ławce
+  const filteredParticipants = allParticipants.filter((p) => nonWalkoverMatchIds.has(p.match_id) && p.squad_role !== 'CALLED_UP')
   if (!filteredParticipants.length) return new Map()
 
   const filteredMatchIds = [...new Set(filteredParticipants.map((p) => p.match_id))]
@@ -3162,7 +3302,7 @@ export async function getAdminPeople(
 
   const countryMap = new Map((countries ?? []).map((c) => [c.id, c.name]))
   const countryFifaCodeMap = new Map((countries ?? []).map((c) => [c.id, c.fifa_code]))
-  const representedCountryDataByPersonId = await getExplicitRepresentedCountryDataByPersonId(
+  const representedCountryDataByPersonId = await getEffectiveRepresentedCountryDataByPersonId(
     supabase,
     people.map((person) => person.id)
   )
@@ -3458,7 +3598,7 @@ export async function getAdminPeoplePage(
 
   const countryMap = new Map((countries ?? []).map((c) => [c.id, c.name]))
   const countryFifaCodeMap = new Map((countries ?? []).map((c) => [c.id, c.fifa_code]))
-  const representedCountryDataByPersonId = await getExplicitRepresentedCountryDataByPersonId(
+  const representedCountryDataByPersonId = await getEffectiveRepresentedCountryDataByPersonId(
     supabase,
     people.map((person) => person.id)
   )
@@ -3628,7 +3768,7 @@ export async function getAdminPersonDetails(id: string): Promise<AdminPersonDeta
   if (cityError) throw new Error(`tbl_Cities: ${cityError.message}`)
   if (countryError) throw new Error(`tbl_Countries: ${countryError.message}`)
 
-  const representedCountryDataByPersonId = await getExplicitRepresentedCountryDataByPersonId(supabase, [person.id])
+  const representedCountryDataByPersonId = await getEffectiveRepresentedCountryDataByPersonId(supabase, [person.id])
   const representedCountryIdsByPersonId = await getExplicitRepresentedCountryIdsByPersonId(supabase, [person.id])
   const coachedCountryDataByPersonId = await getCoachedCountryDataByPersonId(supabase, [person.id])
   const rolesByPersonId = await getRolesByPersonId(supabase, [person.id])

@@ -225,10 +225,12 @@ function MatchTeamParticipantsView({
   const sortByPos = (a: AdminMatchParticipant, b: AdminMatchParticipant) =>
     compareByPlayerPosition(a, b, (player) => player.player_position)
 
-  const starters = participants.filter((p) => p.role === 'PLAYER' && p.is_starting).sort(sortByPos)
-  const bench = participants.filter((p) => p.role === 'PLAYER' && !p.is_starting).sort(sortByPos)
+  const starters = participants.filter((p) => p.role === 'PLAYER' && (p.squad_role === 'STARTING' || (p.squad_role === null && p.is_starting === true))).sort(sortByPos)
+  const bench = participants.filter((p) => p.role === 'PLAYER' && (p.squad_role === 'BENCH' || (p.squad_role === null && p.is_starting === false))).sort(sortByPos)
+  const calledUp = participants.filter((p) => p.role === 'PLAYER' && p.squad_role === 'CALLED_UP').sort(sortByPos)
   const coaches = participants.filter((p) => p.role === 'COACH')
-  const hasPlayers = starters.length > 0 || bench.length > 0
+  const captain = participants.find((p) => p.role === 'PLAYER' && p.is_captain) ?? null
+  const hasPlayers = starters.length > 0 || bench.length > 0 || calledUp.length > 0
 
   type PlayerEventIcon = { iconName: AppIconName; minute: string | null; minuteLeft: boolean }
 
@@ -284,6 +286,15 @@ function MatchTeamParticipantsView({
         ) : (
           <span className={`min-w-0 truncate ${textClassName}`}>{player.person_name}</span>
         )}
+        {player.is_captain ? (
+          <span
+            aria-label="Kapitan"
+            title="Kapitan"
+            className="ml-1.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-emerald-100/80 bg-emerald-950/90 text-[9px] font-black uppercase leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_4px_rgba(0,0,0,0.45)]"
+          >
+            C
+          </span>
+        ) : null}
         {icons.length > 0 ? (
           <span className="inline-flex shrink-0 items-center">
             <span aria-hidden>{'\u00A0'.repeat(5)}</span>
@@ -345,6 +356,22 @@ function MatchTeamParticipantsView({
                   <td className="bg-neutral-900/40 px-3 py-1.5 text-sm">{renderPlayerNameWithIcons(player, 'text-neutral-300')}</td>
                 </tr>
               ))}
+              {calledUp.length > 0 && (
+                <tr>
+                  <td colSpan={3} className="bg-neutral-950 px-3 py-2.5 text-xs font-semibold uppercase tracking-widest text-neutral-500">
+                    Pozostali powołani
+                  </td>
+                </tr>
+              )}
+              {calledUp.map((player, index) => (
+                <tr key={player.id}>
+                  <td className="bg-neutral-900/20 px-3 py-1.5 text-sm text-neutral-600">{starters.length + bench.length + index + 1}</td>
+                  <td className="bg-neutral-900/20 py-1.5 pl-0 pr-2">
+                    <PositionBadge position={player.player_position} />
+                  </td>
+                  <td className="bg-neutral-900/20 px-3 py-1.5 text-sm">{renderPlayerNameWithIcons(player, 'text-neutral-400')}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -365,6 +392,21 @@ function MatchTeamParticipantsView({
           </ul>
         </div>
       )}
+
+      {captain ? (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-neutral-500">Kapitan</p>
+          <div className="mt-2 inline-flex w-fit rounded-lg border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-sm font-semibold text-neutral-200">
+            {captain.person_id ? (
+              <SmartPrefetchLink href={`/people/${captain.person_id}`} className="hover:underline">
+                {captain.person_name}
+              </SmartPrefetchLink>
+            ) : (
+              <span>{captain.person_name}</span>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }
@@ -436,6 +478,35 @@ function MatchTeamParticipantsSection({
                 countries={countries}
                 federations={federations}
               />
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <label
+              htmlFor={`${namePrefix}captain_person_id`}
+              className="text-xs font-semibold uppercase tracking-widest text-neutral-500"
+            >
+              Kapitan
+            </label>
+            <div className="mt-3">
+              <select
+                id={`${namePrefix}captain_person_id`}
+                name={`${namePrefix}captain_person_id`}
+                defaultValue={players.find((player) => player.is_captain)?.person_id ?? ''}
+                className="w-full max-w-md rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+              >
+                <option value="">Brak danych</option>
+                {players
+                  .filter((player) => player.squad_role === 'STARTING')
+                  .map((player) => (
+                    <option key={player.person_id} value={player.person_id}>
+                      {player.person_name}
+                    </option>
+                  ))}
+              </select>
+              <p className="mt-1 text-xs text-neutral-500">
+                Kapitan musi być zawodnikiem pierwszego składu. Zmieniasz skład — najpierw zapisz mecz, potem wybierz kapitana.
+              </p>
             </div>
           </div>
         </>
@@ -1158,6 +1229,25 @@ export default async function AdminMatchDetailsPage({
         </div>
       </MatchDetailCard>
 
+      <MatchDetailCard label="Liczba widzów">
+        <div className="flex flex-col gap-1.5">
+          <input
+            id="attendance"
+            name="attendance"
+            type="number"
+            inputMode="numeric"
+            min={0}
+            step={1}
+            defaultValue={match.attendance ?? ''}
+            placeholder="Brak danych"
+            className="rounded-lg border border-neutral-700 bg-neutral-900 px-3 py-2 text-sm text-neutral-100"
+          />
+          <p className="text-xs text-neutral-500">
+            Nieujemna liczba całkowita. Puste pole = brak danych.
+          </p>
+        </div>
+      </MatchDetailCard>
+
       <MatchDetailCard label="Status redakcji" spanTwo>
         <div className="flex flex-col gap-1.5">
           <select
@@ -1192,7 +1282,7 @@ export default async function AdminMatchDetailsPage({
   if (isEdit) {
     return (
       <EditMatchFormWrapper>
-        <DetailsPageContainer maxWidthClass="max-w-5xl">
+        <DetailsPageContainer maxWidthClass="max-w-6xl">
           <MatchEditFormShell
             matchId={match.id}
             initialErrors={validationErrors}

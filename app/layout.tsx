@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Geist_Mono, Barlow_Condensed } from "next/font/google";
 import "./globals.css";
 import PublicTopMenu from '../components/navigation/PublicTopMenu';
+import { getOptionalAdminAccess } from '@/lib/auth/admin';
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -20,7 +21,7 @@ export const metadata: Metadata = {
   description: "Panel administracyjny KadraEpikon",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
@@ -37,6 +38,9 @@ export default function RootLayout({
     }
   })();`;
 
+  // Zalogowany admin/editor widzi w publicznym menu przełącznik PUBLIC/ADMIN.
+  const adminAccess = await getOptionalAdminAccess();
+
   return (
     <html lang="en" className="theme-dark" suppressHydrationWarning>
       <head>
@@ -46,7 +50,7 @@ export default function RootLayout({
         className={`${geistMono.variable} ${barlowCondensed.variable} antialiased`}
       >
         {/* Górne menu publiczne */}
-        <PublicTopMenu />
+        <PublicTopMenu adminRole={adminAccess?.role ?? null} />
         {children}
       </body>
     </html>

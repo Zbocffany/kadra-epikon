@@ -35,6 +35,7 @@ type MatchInput = {
   matchStatus: 'SCHEDULED' | 'FINISHED' | 'ABANDONED' | 'CANCELLED'
   resultType: 'REGULAR_TIME' | 'EXTRA_TIME' | 'PENALTIES' | 'EXTRA_TIME_AND_PENALTIES' | 'GOLDEN_GOAL' | 'WALKOVER' | null
   walkoverWinnerTeamId: string | null
+  attendance: number | null
   editorialStatus: 'DRAFT' | 'PARTIAL' | 'COMPLETE' | 'VERIFIED'
 }
 
@@ -82,6 +83,14 @@ const MATCH_EVENT_TYPES = [
 ] as const
 const STARTERS_COUNT = 11
 
+type SquadRole = 'STARTING' | 'BENCH' | 'CALLED_UP'
+const SQUAD_ROLES = ['STARTING', 'BENCH', 'CALLED_UP'] as const
+
+function parseSquadRole(raw: string | null | undefined): SquadRole | null {
+  if (!raw) return null
+  return SQUAD_ROLES.includes(raw as SquadRole) ? raw as SquadRole : null
+}
+
 function revalidateMatchParticipantCaches(matchId: string): void {
   revalidateTag('public-people', 'max')
   revalidateTag('public-matches', 'max')
@@ -92,6 +101,77 @@ function revalidateMatchParticipantCaches(matchId: string): void {
   revalidatePath('/players')
   revalidatePath('/coaches')
   revalidatePath('/referees')
+  invalidatePublicCacheVersion()
+}
+
+/**
+ * Zapewnia wpisy w `tbl_Person_Countries` dla każdej osoby, która wystąpiła
+ * w meczu jako PLAYER dla drużyny narodowej (team z `club_id IS NULL`).
+ *
+ * Reguła: raz zagrałeś dla reprezentacji = ten kraj jest Twoim reprezentowanym
+ * krajem na zawsze. Uwzględnia zmiany geopolityczne (np. Serbia i Czarnogóra
+ * 2005 → późniejsze osobne reprezentacje — mecz stary trzyma wpis do dawnego
+ * kraju, nowy mecz doda wpis do nowego). Wpisy są append-only — funkcja
+ * niczego nie usuwa z `tbl_Person_Countries`.
+ *
+ * Idempotentne: composite PK `(person_id, country_id)` chroni przed
+ * duplikatami dzięki `ignoreDuplicates: true`. Błędy nie blokują zapisu
+ * meczu — best-effort, żeby ewentualny problem z tą synchronizacją nie
+ * zablokował całej edycji składu.
+ */
+async function ensureRepresentedCountriesFromTeams(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  entries: Array<{ personId: string; teamId: string | null }>
+): Promise<void> {
+  if (entries.length === 0) return
+
+  const uniqueTeamIds = [
+    ...new Set(entries.map((e) => e.teamId).filter((id): id is string => Boolean(id))),
+  ]
+  if (uniqueTeamIds.length === 0) return
+
+  const { data: teams, error: teamsError } = await supabase
+    .from('tbl_Teams')
+    .select('id, country_id, club_id')
+    .in('id', uniqueTeamIds)
+
+  if (teamsError) return
+
+  const nationalTeamCountryById = new Map<string, string>()
+  for (const team of (teams ?? []) as Array<{ id: string; country_id: string | null; club_id: string | null }>) {
+    if (team.club_id === null && team.country_id) {
+      nationalTeamCountryById.set(team.id, team.country_id)
+    }
+  }
+
+  if (nationalTeamCountryById.size === 0) return
+
+  const seen = new Set<string>()
+  const inserts: Array<{ person_id: string; country_id: string }> = []
+  for (const { personId, teamId } of entries) {
+    if (!personId || !teamId) continue
+    const countryId = nationalTeamCountryById.get(teamId)
+    if (!countryId) continue
+    const key = `${personId}:${countryId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    inserts.push({ person_id: personId, country_id: countryId })
+  }
+
+  if (inserts.length === 0) return
+
+  const { error: upsertError } = await supabase
+    .from('tbl_Person_Countries')
+    .upsert(inserts, { onConflict: 'person_id,country_id', ignoreDuplicates: true })
+
+  if (upsertError) return
+
+  // Publiczne widoki muszą odświeżyć profil osoby — nowa flaga na liście.
+  const affectedPersonIds = [...new Set(inserts.map((row) => row.person_id))]
+  for (const personId of affectedPersonIds) {
+    revalidateTag(`public-person:${personId}`, 'max')
+  }
+  revalidateTag('public-people', 'max')
   invalidatePublicCacheVersion()
 }
 
@@ -197,6 +277,20 @@ function readMatchInput(
   const effectiveResultType = matchStatus === 'FINISHED' ? resultType : null
   const walkoverWinnerTeamIdRaw = getTrimmedNullable(formData, 'walkover_winner_team_id')
 
+  const attendanceRaw = getTrimmedNullable(formData, 'attendance')
+  let attendance: number | null = null
+  if (attendanceRaw !== null && attendanceRaw !== '') {
+    const digitsOnly = attendanceRaw.replace(/[\s\u00A0]/g, '')
+    if (!/^\d+$/.test(digitsOnly)) {
+      redirectWithError(redirectPath, 'Liczba widzów musi być nieujemną liczbą całkowitą.')
+    }
+    const parsed = Number.parseInt(digitsOnly, 10)
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      redirectWithError(redirectPath, 'Liczba widzów musi być nieujemną liczbą całkowitą.')
+    }
+    attendance = parsed
+  }
+
   return {
     matchDate: getTrimmedString(formData, 'match_date'),
     matchTime: getTrimmedNullable(formData, 'match_time'),
@@ -209,6 +303,7 @@ function readMatchInput(
     matchStatus,
     resultType: effectiveResultType,
     walkoverWinnerTeamId: effectiveResultType === 'WALKOVER' ? walkoverWinnerTeamIdRaw : null,
+    attendance,
     editorialStatus,
   }
 }
@@ -414,10 +509,21 @@ export async function addMatchParticipant(formData: FormData): Promise<void> {
   const playerPosition = rawPlayerPosition && PLAYER_POSITIONS.includes(rawPlayerPosition as PlayerPosition)
     ? rawPlayerPosition as PlayerPosition
     : null
+  const squadRoleRaw = getTrimmedNullable(formData, 'squad_role')
   const isStartingRaw = getTrimmedNullable(formData, 'is_starting')
-  const isStarting = role === 'PLAYER'
-    ? (isStartingRaw === '1' ? true : isStartingRaw === '0' ? false : null)
-    : null
+  let squadRole: SquadRole | null = null
+  if (role === 'PLAYER') {
+    const parsed = parseSquadRole(squadRoleRaw)
+    if (parsed) {
+      squadRole = parsed
+    } else if (isStartingRaw === '1') {
+      squadRole = 'STARTING'
+    } else if (isStartingRaw === '0') {
+      squadRole = 'BENCH'
+    } else {
+      squadRole = 'BENCH'
+    }
+  }
 
   if (!personId) {
     redirectWithError(redirectPath, 'Wybierz osobę.')
@@ -477,7 +583,7 @@ export async function addMatchParticipant(formData: FormData): Promise<void> {
     team_id: effectiveTeamId,
     person_id: personId,
     role,
-    is_starting: isStarting,
+    squad_role: squadRole,
     player_position: role === 'PLAYER' ? playerPosition : null,
     club_team_id: clubTeamId,
   })
@@ -488,6 +594,10 @@ export async function addMatchParticipant(formData: FormData): Promise<void> {
     }
 
     redirectWithError(redirectPath, 'Wystąpił błąd bazy danych. Spróbuj ponownie.')
+  }
+
+  if (role === 'PLAYER' && effectiveTeamId) {
+    await ensureRepresentedCountriesFromTeams(supabase, [{ personId, teamId: effectiveTeamId }])
   }
 
   revalidateMatchParticipantCaches(matchId)
@@ -543,12 +653,20 @@ export async function saveMatchTeamSquad(formData: FormData): Promise<void> {
   const playerPositionsRaw = formData
     .getAll('player_position')
     .map((value) => (typeof value === 'string' ? value.trim() : ''))
+  const playerSquadRolesRaw = formData
+    .getAll('player_squad_role')
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
 
-  if (playerPersonIds.length !== playerPositionsRaw.length) {
+  const captainPersonId = getTrimmedNullable(formData, 'captain_person_id')
+
+  if (
+    playerPersonIds.length !== playerPositionsRaw.length
+    || (playerSquadRolesRaw.length > 0 && playerSquadRolesRaw.length !== playerPersonIds.length)
+  ) {
     redirectWithError(redirectPath, 'Wystąpił błąd formularza składu. Odśwież stronę i spróbuj ponownie.')
   }
 
-  const rows: Array<{ personId: string; playerPosition: PlayerPosition; isStarting: boolean }> = []
+  const rows: Array<{ personId: string; playerPosition: PlayerPosition; squadRole: SquadRole }> = []
 
   for (let index = 0; index < playerPersonIds.length; index += 1) {
     const personId = playerPersonIds[index] ?? ''
@@ -556,7 +674,9 @@ export async function saveMatchTeamSquad(formData: FormData): Promise<void> {
     const playerPosition = PLAYER_POSITIONS.includes(playerPositionRaw as PlayerPosition)
       ? playerPositionRaw as PlayerPosition
       : null
-    const isStarterRow = index < STARTERS_COUNT
+    const explicitSquadRole = parseSquadRole(playerSquadRolesRaw[index])
+    const squadRole: SquadRole = explicitSquadRole ?? (index < STARTERS_COUNT ? 'STARTING' : 'BENCH')
+    const isStarterRow = squadRole === 'STARTING'
 
     if (isStarterRow && (!personId || !playerPosition)) {
       redirectWithError(redirectPath, 'Uzupełnij wszystkie 11 pól podstawowego składu (zawodnik i pozycja).')
@@ -573,12 +693,13 @@ export async function saveMatchTeamSquad(formData: FormData): Promise<void> {
     rows.push({
       personId,
       playerPosition,
-      isStarting: isStarterRow,
+      squadRole,
     })
   }
 
-  if (rows.filter((row) => row.isStarting).length < STARTERS_COUNT) {
-    redirectWithError(redirectPath, 'Skład musi zawierać 11 zawodników podstawowych.')
+  const startersCount = rows.filter((row) => row.squadRole === 'STARTING').length
+  if (startersCount !== STARTERS_COUNT) {
+    redirectWithError(redirectPath, 'Skład musi zawierać dokładnie 11 zawodników podstawowych.')
   }
 
   const uniquePlayerIds = [...new Set(rows.map((row) => row.personId))]
@@ -616,10 +737,22 @@ export async function saveMatchTeamSquad(formData: FormData): Promise<void> {
     team_id: string
     person_id: string
     role: 'PLAYER'
-    is_starting: boolean
+    squad_role: SquadRole
+    is_captain: boolean
     player_position: PlayerPosition
     club_team_id: string | null
   }>
+
+  // Walidacja kapitana: musi być zawodnikiem STARTING
+  if (captainPersonId) {
+    const captainRow = rows.find((row) => row.personId === captainPersonId)
+    if (!captainRow) {
+      redirectWithError(redirectPath, 'Wybrany kapitan nie jest w składzie drużyny.')
+    }
+    if (captainRow && captainRow.squadRole !== 'STARTING') {
+      redirectWithError(redirectPath, 'Kapitan musi być w pierwszym składzie.')
+    }
+  }
 
   for (const row of rows) {
     let clubTeamId: string | null = null
@@ -636,7 +769,8 @@ export async function saveMatchTeamSquad(formData: FormData): Promise<void> {
       team_id: teamId,
       person_id: row.personId,
       role: 'PLAYER',
-      is_starting: row.isStarting,
+      squad_role: row.squadRole,
+      is_captain: captainPersonId === row.personId && row.squadRole === 'STARTING',
       player_position: row.playerPosition,
       club_team_id: clubTeamId,
     })
@@ -647,6 +781,11 @@ export async function saveMatchTeamSquad(formData: FormData): Promise<void> {
   if (insertError) {
     redirectWithError(redirectPath, 'Nie udało się zapisać składu. Spróbuj ponownie.')
   }
+
+  await ensureRepresentedCountriesFromTeams(
+    supabase,
+    inserts.map((row) => ({ personId: row.person_id, teamId: row.team_id }))
+  )
 
   revalidateMatchParticipantCaches(matchId)
   redirectWithSaved(redirectPath)
@@ -716,7 +855,6 @@ export async function saveMatchTeamCoaches(formData: FormData): Promise<void> {
     team_id: string
     person_id: string
     role: 'COACH'
-    is_starting: null
     player_position: null
     club_team_id: string | null
   }>
@@ -736,7 +874,6 @@ export async function saveMatchTeamCoaches(formData: FormData): Promise<void> {
       team_id: teamId,
       person_id: personId,
       role: 'COACH',
-      is_starting: null,
       player_position: null,
       club_team_id: clubTeamId,
     })
@@ -769,10 +906,16 @@ async function saveSquadForTeam(
   const playerClubTeamIdsRaw = formData
     .getAll(`${prefix}player_club_team_id`)
     .map((v) => (typeof v === 'string' ? v.trim() : ''))
+  const playerSquadRolesRaw = formData
+    .getAll(`${prefix}player_squad_role`)
+    .map((v) => (typeof v === 'string' ? v.trim() : ''))
+
+  const captainPersonId = getTrimmedNullable(formData, `${prefix}captain_person_id`)
 
   if (
     playerPersonIds.length !== playerPositionsRaw.length
     || playerPersonIds.length !== playerClubTeamIdsRaw.length
+    || (playerSquadRolesRaw.length > 0 && playerSquadRolesRaw.length !== playerPersonIds.length)
   ) {
     redirectWithError(redirectPath, 'Wystąpił błąd formularza składu. Odśwież stronę i spróbuj ponownie.')
   }
@@ -799,7 +942,7 @@ async function saveSquadForTeam(
   const rows: Array<{
     personId: string
     playerPosition: PlayerPosition
-    isStarting: boolean
+    squadRole: SquadRole
     clubTeamId: string | null
   }> = []
 
@@ -808,7 +951,8 @@ async function saveSquadForTeam(
     const positionRaw = playerPositionsRaw[i] ?? ''
     const clubTeamIdRaw = playerClubTeamIdsRaw[i] ?? ''
     const position = PLAYER_POSITIONS.includes(positionRaw as PlayerPosition) ? positionRaw as PlayerPosition : null
-    const isStarter = i < STARTERS_COUNT
+    const explicitSquadRole = parseSquadRole(playerSquadRolesRaw[i])
+    const squadRole: SquadRole = explicitSquadRole ?? (i < STARTERS_COUNT ? 'STARTING' : 'BENCH')
     const clubTeamId = clubTeamIdRaw || null
 
     if (!personId && !position && !clubTeamId) continue
@@ -817,7 +961,12 @@ async function saveSquadForTeam(
       redirectWithError(redirectPath, 'W każdym uzupełnionym wierszu wybierz zawodnika i pozycję.')
     }
 
-    rows.push({ personId, playerPosition: position, isStarting: isStarter, clubTeamId })
+    rows.push({ personId, playerPosition: position, squadRole, clubTeamId })
+  }
+
+  const startersCountHelper = rows.filter((r) => r.squadRole === 'STARTING').length
+  if (rows.length > 0 && startersCountHelper !== STARTERS_COUNT) {
+    redirectWithError(redirectPath, 'Skład musi zawierać dokładnie 11 zawodników podstawowych.')
   }
 
   const uniquePlayerIds = [...new Set(rows.map((r) => r.personId))]
@@ -860,13 +1009,25 @@ async function saveSquadForTeam(
 
   if (deleteError) redirectWithError(redirectPath, 'Nie udało się usunąć poprzedniego składu drużyny.')
 
+  // Walidacja kapitana: musi być zawodnikiem STARTING
+  if (captainPersonId) {
+    const captainRow = rows.find((r) => r.personId === captainPersonId)
+    if (!captainRow) {
+      redirectWithError(redirectPath, 'Wybrany kapitan nie jest w składzie drużyny.')
+    }
+    if (captainRow && captainRow.squadRole !== 'STARTING') {
+      redirectWithError(redirectPath, 'Kapitan musi być w pierwszym składzie.')
+    }
+  }
+
   const inserts: Array<{
     id: string
     match_id: string
     team_id: string
     person_id: string
     role: 'PLAYER'
-    is_starting: boolean
+    squad_role: SquadRole
+    is_captain: boolean
     player_position: PlayerPosition
     club_team_id: string | null
   }> = []
@@ -878,7 +1039,8 @@ async function saveSquadForTeam(
       team_id: teamId,
       person_id: row.personId,
       role: 'PLAYER',
-      is_starting: row.isStarting,
+      squad_role: row.squadRole,
+      is_captain: captainPersonId === row.personId && row.squadRole === 'STARTING',
       player_position: row.playerPosition,
       club_team_id: row.clubTeamId,
     })
@@ -886,6 +1048,11 @@ async function saveSquadForTeam(
 
   const { error: insertError } = await supabase.from('tbl_Match_Participants').insert(inserts)
   if (insertError) redirectWithError(redirectPath, 'Nie udało się zapisać składu. Spróbuj ponownie.')
+
+  await ensureRepresentedCountriesFromTeams(
+    supabase,
+    inserts.map((row) => ({ personId: row.person_id, teamId: row.team_id }))
+  )
 }
 
 async function saveCoachesForTeam(
@@ -935,7 +1102,6 @@ async function saveCoachesForTeam(
     team_id: string
     person_id: string
     role: 'COACH'
-    is_starting: null
     player_position: null
     club_team_id: string | null
   }> = []
@@ -955,7 +1121,6 @@ async function saveCoachesForTeam(
       team_id: teamId,
       person_id: personId,
       role: 'COACH',
-      is_starting: null,
       player_position: null,
       club_team_id: clubTeamId,
     })
@@ -963,6 +1128,70 @@ async function saveCoachesForTeam(
 
   const { error: insertError } = await supabase.from('tbl_Match_Participants').insert(inserts)
   if (insertError) redirectWithError(redirectPath, 'Nie udało się zapisać sztabu trenerskiego. Spróbuj ponownie.')
+}
+
+// Zapisuje flagę kapitana dla drużyny. Wywoływane zawsze (niezależnie od
+// squad_touched), bo dropdown kapitana jest poza MatchSquadForm i sam nie
+// oznacza składu jako "touched". Idempotentne — jeśli saveSquadForTeam już
+// wcześniej ustawił is_captain przy INSERT, ta funkcja tylko ponownie potwierdzi
+// wartość.
+async function saveCaptainForTeam(
+  supabase: ReturnType<typeof createServiceRoleClient>,
+  formData: FormData,
+  matchId: string,
+  teamId: string,
+  prefix: string,
+  redirectPath: string
+): Promise<void> {
+  const raw = formData.get(`${prefix}captain_person_id`)
+  if (raw === null) return // pole nie zostało wysłane (np. widok read-only) — no-op
+
+  const captainPersonId = typeof raw === 'string' ? raw.trim() : ''
+
+  // 1) Wyczyść dotychczasowego kapitana w tej drużynie w tym meczu.
+  const { error: clearError } = await supabase
+    .from('tbl_Match_Participants')
+    .update({ is_captain: false })
+    .eq('match_id', matchId)
+    .eq('team_id', teamId)
+    .eq('role', 'PLAYER')
+    .eq('is_captain', true)
+
+  if (clearError) {
+    redirectWithError(redirectPath, 'Nie udało się wyczyścić poprzedniego kapitana.')
+  }
+
+  // 2) "Brak danych" → kapitan pozostaje wyczyszczony.
+  if (!captainPersonId) return
+
+  // 3) Znajdź uczestnika i zweryfikuj, że to STARTING PLAYER w tej drużynie.
+  const { data: participant, error: findError } = await supabase
+    .from('tbl_Match_Participants')
+    .select('id, role, squad_role')
+    .eq('match_id', matchId)
+    .eq('team_id', teamId)
+    .eq('person_id', captainPersonId)
+    .maybeSingle()
+
+  if (findError) {
+    redirectWithError(redirectPath, 'Nie udało się zweryfikować kapitana.')
+  }
+  if (!participant) {
+    redirectWithError(redirectPath, 'Wybrany kapitan nie jest w składzie drużyny.')
+  }
+  if (participant!.role !== 'PLAYER' || participant!.squad_role !== 'STARTING') {
+    redirectWithError(redirectPath, 'Kapitan musi być w pierwszym składzie.')
+  }
+
+  // 4) Ustaw flagę.
+  const { error: setError } = await supabase
+    .from('tbl_Match_Participants')
+    .update({ is_captain: true })
+    .eq('id', participant!.id)
+
+  if (setError) {
+    redirectWithError(redirectPath, 'Nie udało się zapisać kapitana.')
+  }
 }
 
 async function saveMatchEvents(
@@ -1127,6 +1356,9 @@ function readPlayerIdsFromSquadForm(formData: FormData, prefix: string): { all: 
   const ids = formData
     .getAll(`${prefix}player_person_id`)
     .map((value) => (typeof value === 'string' ? value.trim() : ''))
+  const squadRoles = formData
+    .getAll(`${prefix}player_squad_role`)
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
 
   const all = new Set<string>()
   const starters = new Set<string>()
@@ -1135,8 +1367,16 @@ function readPlayerIdsFromSquadForm(formData: FormData, prefix: string): { all: 
     const personId = ids[index]
     if (!personId) continue
 
+    const explicitSquadRole = parseSquadRole(squadRoles[index])
+    const squadRole: SquadRole = explicitSquadRole ?? (index < STARTERS_COUNT ? 'STARTING' : 'BENCH')
+
+    if (squadRole === 'CALLED_UP') {
+      // CALLED_UP nie liczy się jako uczestnik meczu (nie może być powiązany ze zdarzeniami)
+      continue
+    }
+
     all.add(personId)
-    if (index < STARTERS_COUNT) {
+    if (squadRole === 'STARTING') {
       starters.add(personId)
     }
   }
@@ -1494,6 +1734,7 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
     match_status: input.matchStatus,
     result_type: input.resultType,
     walkover_winner_team_id: input.walkoverWinnerTeamId,
+    attendance: input.attendance,
     editorial_status: input.editorialStatus,
   }
 
@@ -1525,7 +1766,6 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
       team_id: null,
       person_id: refereePersonId,
       role: 'REFEREE',
-      is_starting: null,
       player_position: null,
       club_team_id: null,
     })
@@ -1540,6 +1780,12 @@ export async function saveMatchFull(formData: FormData): Promise<void> {
   }
   await saveCoachesForTeam(supabase, formData, id, matchDate, homeTeamId, 'home_', redirectPath)
   await saveCoachesForTeam(supabase, formData, id, matchDate, awayTeamId, 'away_', redirectPath)
+
+  // Kapitan — zawsze, bo dropdown jest poza MatchSquadForm i nie ustawia
+  // squad_touched. Musi być po saveSquadForTeam (gdy odpalone), żeby operować
+  // na aktualnych uczestnikach.
+  await saveCaptainForTeam(supabase, formData, id, homeTeamId, 'home_', redirectPath)
+  await saveCaptainForTeam(supabase, formData, id, awayTeamId, 'away_', redirectPath)
 
   if (saveEvents) {
     await saveMatchEvents(supabase, formData, id, homeTeamId, awayTeamId, redirectPath)
@@ -1675,6 +1921,7 @@ export async function createMatch(formData: FormData): Promise<void> {
     match_status: input.matchStatus,
     result_type: input.resultType,
     walkover_winner_team_id: input.walkoverWinnerTeamId,
+    attendance: input.attendance,
     editorial_status: 'DRAFT',
   }
 
@@ -1749,6 +1996,7 @@ export async function updateMatch(formData: FormData): Promise<void> {
     match_status: input.matchStatus,
     result_type: input.resultType,
     walkover_winner_team_id: input.walkoverWinnerTeamId,
+    attendance: input.attendance,
     editorial_status: input.editorialStatus,
   }
 

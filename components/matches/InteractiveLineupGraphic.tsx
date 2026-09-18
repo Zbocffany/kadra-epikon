@@ -29,6 +29,7 @@ type PitchPlayer = {
   personId: string
   label: string
   position: PlayerPosition | null
+  isCaptain: boolean
 }
 
 type EnteredPlayer = {
@@ -117,7 +118,7 @@ function normalizeLetters(value: string): string {
     .toUpperCase()
 }
 
-function buildLineupLabels(players: AdminMatchParticipant[]): Array<{ id: string; personId: string; label: string; position: PlayerPosition | null }> {
+function buildLineupLabels(players: AdminMatchParticipant[]): Array<{ id: string; personId: string; label: string; position: PlayerPosition | null; isCaptain: boolean }> {
   const firstEleven = players.slice(0, 11)
   const base = firstEleven.map((player) => {
     const surname = extractSurname(player.person_name)
@@ -128,6 +129,7 @@ function buildLineupLabels(players: AdminMatchParticipant[]): Array<{ id: string
       surname,
       firstName,
       position: player.player_position,
+      isCaptain: player.is_captain === true,
     }
   })
 
@@ -174,6 +176,7 @@ function buildLineupLabels(players: AdminMatchParticipant[]): Array<{ id: string
     personId: player.personId,
     label: prefixedLabelById.get(player.id) ?? player.surname,
     position: player.position,
+    isCaptain: player.isCaptain,
   }))
 }
 
@@ -594,6 +597,15 @@ export default function InteractiveLineupGraphic({
                     <span className="relative z-10 w-full text-center leading-none">{getPositionInitial(player.position)}</span>
                   </span>
                   <span className="truncate text-xs font-semibold uppercase tracking-[0.08em] text-emerald-50">{player.label}</span>
+                  {player.isCaptain ? (
+                    <span
+                      aria-label="Kapitan"
+                      title="Kapitan"
+                      className="ml-auto inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-emerald-100/80 bg-emerald-950/90 text-[9px] font-black uppercase leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_4px_rgba(0,0,0,0.45)]"
+                    >
+                      C
+                    </span>
+                  ) : null}
                 </li>
               ))}
               {lineup.length === 0 ? (
@@ -702,7 +714,16 @@ export default function InteractiveLineupGraphic({
                           <span className="relative z-10">{getPositionInitial(player.position)}</span>
                           <PlayerEventsDisplay events={displayedEvents} isHovered={isHoveredPitchPlayer} offsetPx={5} />
                         </span>
-                        <div className="max-w-[14rem]" style={{ width: `${widthRem}rem` }}>
+                        <div className="relative max-w-[14rem]" style={{ width: `${widthRem}rem` }}>
+                          {player.isCaptain ? (
+                            <span
+                              aria-label="Kapitan"
+                              title="Kapitan"
+                              className="pointer-events-none absolute -top-1 -left-1 z-20 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-emerald-100/80 bg-emerald-950/90 text-[8px] font-black uppercase leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_4px_rgba(0,0,0,0.45)]"
+                            >
+                              C
+                            </span>
+                          ) : null}
                           <FlippingSurnameBanner
                             frontLabel={player.label}
                             backLabel={displayLabel}

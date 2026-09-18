@@ -166,10 +166,12 @@ function renderPlayerEventIcons(playerId: string, playerRowId: string, personEve
 
 function MatchTeamParticipantsView({ title, participants, events }: { title: string; participants: AdminMatchParticipant[]; events: AdminMatchEvent[] }) {
   const sortByPos = (a: AdminMatchParticipant, b: AdminMatchParticipant) => compareByPlayerPosition(a, b, (player) => player.player_position)
-  const starters = participants.filter((p) => p.role === 'PLAYER' && p.is_starting).sort(sortByPos)
-  const bench = participants.filter((p) => p.role === 'PLAYER' && !p.is_starting).sort(sortByPos)
+  const starters = participants.filter((p) => p.role === 'PLAYER' && (p.squad_role === 'STARTING' || (p.squad_role === null && p.is_starting === true))).sort(sortByPos)
+  const bench = participants.filter((p) => p.role === 'PLAYER' && (p.squad_role === 'BENCH' || (p.squad_role === null && p.is_starting === false))).sort(sortByPos)
+  const calledUp = participants.filter((p) => p.role === 'PLAYER' && p.squad_role === 'CALLED_UP').sort(sortByPos)
   const coaches = participants.filter((p) => p.role === 'COACH')
-  const hasPlayers = starters.length > 0 || bench.length > 0
+  const captain = participants.find((p) => p.role === 'PLAYER' && p.is_captain) ?? null
+  const hasPlayers = starters.length > 0 || bench.length > 0 || calledUp.length > 0
   const personEventIcons = buildPersonEventIcons(events)
 
   function renderPlayerNameWithIcons(player: AdminMatchParticipant, textClassName: string) {
@@ -227,6 +229,15 @@ function MatchTeamParticipantsView({ title, participants, events }: { title: str
                     ) : (
                       <span className="inline-flex items-center rounded-md border border-white/12 bg-transparent px-1.5 py-0.5 text-sm font-semibold text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)]">{player.person_name}</span>
                     )}
+                    {player.is_captain ? (
+                      <span
+                        aria-label="Kapitan"
+                        title="Kapitan"
+                        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-emerald-100/80 bg-emerald-950/90 text-[9px] font-black uppercase leading-none text-emerald-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.35),0_2px_4px_rgba(0,0,0,0.45)]"
+                      >
+                        C
+                      </span>
+                    ) : null}
                     {personEventIcons.get(player.person_id)?.length ? renderPlayerEventIcons(player.person_id, player.id, personEventIcons) : null}
                   </span>
                 </td>
@@ -259,6 +270,32 @@ function MatchTeamParticipantsView({ title, participants, events }: { title: str
                 </td>
               </tr>
             ))}
+            {calledUp.length > 0 ? (
+              <tr>
+                <td colSpan={3} className="px-3 py-2 text-[11px] font-semibold uppercase tracking-widest text-emerald-100/60">Pozostali powołani</td>
+              </tr>
+            ) : null}
+            {calledUp.map((player, index) => (
+              <tr key={player.id}>
+                <td className="px-3 py-1.5 text-sm font-semibold text-emerald-100/40">{starters.length + bench.length + index + 1}</td>
+                <td className="py-1.5 pl-0 pr-2"><PositionBadge position={player.player_position} /></td>
+                <td className="px-2 py-1.5 text-sm">
+                  <span className="inline-flex items-center gap-1.5">
+                    {player.person_id ? (
+                      <SmartPrefetchLink
+                        href={`/people/${player.person_id}`}
+                        className="group inline-flex items-center rounded-md border border-white/10 bg-transparent px-1.5 py-0.5 text-sm font-normal text-emerald-100/60 shadow-[0_4px_10px_rgba(0,0,0,0.35)] transition-colors hover:border-white/20"
+                      >
+                        {player.person_name}
+                        <span aria-hidden className="ml-1 text-[10px] text-emerald-100/20 opacity-0 transition-opacity group-hover:opacity-100">↗</span>
+                      </SmartPrefetchLink>
+                    ) : (
+                      <span className="inline-flex items-center rounded-md border border-white/10 bg-transparent px-1.5 py-0.5 text-sm font-normal text-emerald-100/60 shadow-[0_4px_10px_rgba(0,0,0,0.35)]">{player.person_name}</span>
+                    )}
+                  </span>
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       ) : <p className="text-sm text-emerald-100/60">Brak zawodników.</p>}
@@ -274,6 +311,21 @@ function MatchTeamParticipantsView({ title, participants, events }: { title: str
               </li>
             ))}
           </ul>
+        </div>
+      ) : null}
+
+      {captain ? (
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-emerald-100/60">Kapitan</p>
+          <div className="mt-2 inline-flex w-fit items-center rounded-md border border-white/12 bg-transparent px-1.5 py-0.5 text-sm font-semibold text-emerald-50 shadow-[0_4px_10px_rgba(0,0,0,0.35)]">
+            {captain.person_id ? (
+              <SmartPrefetchLink href={`/people/${captain.person_id}`} prefetch className="hover:underline">
+                {captain.person_name}
+              </SmartPrefetchLink>
+            ) : (
+              <span>{captain.person_name}</span>
+            )}
+          </div>
         </div>
       ) : null}
     </div>
@@ -646,6 +698,9 @@ export default function MatchReadOnlyPage({
                     ) : null}
                     {currentReferee ? (
                       <span className="inline-flex items-center rounded-md border border-white/20 bg-slate-950/24 px-2 py-0.5 shadow-[0_2px_6px_rgba(0,0,0,0.24)]">Sędzia: {currentReferee.person_name}{currentReferee.country_code ? ` (${currentReferee.country_code})` : ''}</span>
+                    ) : null}
+                    {match.attendance != null ? (
+                      <span className="inline-flex items-center rounded-md border border-white/20 bg-slate-950/24 px-2 py-0.5 shadow-[0_2px_6px_rgba(0,0,0,0.24)]">Widzowie: {match.attendance.toLocaleString('pl-PL')}</span>
                     ) : null}
                   </div>
                 ) : null}
