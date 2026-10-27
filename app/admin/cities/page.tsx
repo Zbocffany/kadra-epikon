@@ -130,6 +130,7 @@ export default async function AdminCitiesPage({ searchParams }: { searchParams: 
 
   const warnDup = warnDupParam === '1'
   const pendingCityName = typeof pcNameParam === 'string' ? decodeURIComponent(pcNameParam) : ''
+  const isCreateModalOpen = create === '1' || Boolean(formError) || warnDup
 
   let cities: AdminCityListItem[] = []
   let countries: AdminCountryOption[] = []
@@ -139,8 +140,8 @@ export default async function AdminCitiesPage({ searchParams }: { searchParams: 
   try {
     const [fetchedCities, fetchedCountries, fetchedFederations] = await Promise.all([
       getAdminCitiesList(),
-      getAdminCountriesOptions(),
-      getAdminFederations(),
+      isCreateModalOpen ? getAdminCountriesOptions() : Promise.resolve([]),
+      isCreateModalOpen ? getAdminFederations() : Promise.resolve([]),
     ])
     cities = fetchedCities
     countries = fetchedCountries
@@ -148,8 +149,6 @@ export default async function AdminCitiesPage({ searchParams }: { searchParams: 
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
-
-  const isCreateModalOpen = create === '1' || Boolean(formError) || warnDup
 
   return (
     <AdminListLayout

@@ -136,6 +136,13 @@ export async function getAdminCountries(): Promise<AdminCountry[]> {
   })
 }
 
+export async function getAdminCountriesList(): Promise<AdminCountry[]> {
+  const supabase = createServiceRoleClient()
+  const { data, error } = await supabase.rpc('get_admin_countries_list')
+  if (error) throw new Error(`get_admin_countries_list: ${error.message}`)
+  return (data ?? []) as AdminCountry[]
+}
+
 export async function getPublicCountries(): Promise<PublicCountry[]> {
   const cacheKey = await getPublicCacheKey('public-countries')
   return unstable_cache(

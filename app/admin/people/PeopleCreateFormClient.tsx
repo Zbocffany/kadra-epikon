@@ -20,12 +20,15 @@ export default function PeopleCreateFormClient({ cities, countries }: Props) {
   const formRef = useRef<HTMLFormElement>(null)
   const [duplicates, setDuplicates] = useState<DuplicatePerson[]>([])
   const [pendingFormData, setPendingFormData] = useState<FormData | null>(null)
-  const [isChecking, setIsChecking] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  // Synchronous guard: state-based `disabled` lags behind a fast double click.
+  const submittingRef = useRef(false)
 
   const syncScope = 'admin-people-create'
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    if (submittingRef.current) return
 
     const form = e.currentTarget
     const formData = new FormData(form)
@@ -34,28 +37,37 @@ export default function PeopleCreateFormClient({ cities, countries }: Props) {
     const birthCityId = (formData.get('birth_city_id') as string | null)?.trim() || null
     const birthCountryId = (formData.get('birth_country_id') as string | null)?.trim() || null
 
-    if (birthDate) {
-      setIsChecking(true)
-      try {
+    submittingRef.current = true
+    setIsSubmitting(true)
+    try {
+      if (birthDate) {
         const found = await checkDuplicatePeople(birthDate, birthCityId, birthCountryId)
         if (found.length > 0) {
           setDuplicates(found)
           setPendingFormData(formData)
           return
         }
-      } finally {
-        setIsChecking(false)
       }
-    }
 
-    await createPerson(formData)
+      await createPerson(formData)
+    } finally {
+      submittingRef.current = false
+      setIsSubmitting(false)
+    }
   }
 
   async function handleConfirmDespiteDuplicates() {
-    if (!pendingFormData) return
+    if (!pendingFormData || submittingRef.current) return
+    submittingRef.current = true
+    setIsSubmitting(true)
     setDuplicates([])
     setPendingFormData(null)
-    await createPerson(pendingFormData)
+    try {
+      await createPerson(pendingFormData)
+    } finally {
+      submittingRef.current = false
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -124,10 +136,10 @@ export default function PeopleCreateFormClient({ cities, countries }: Props) {
         <div className="flex items-center justify-end gap-2 pt-2">
           <button
             type="submit"
-            disabled={isChecking}
+            disabled={isSubmitting}
             className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-semibold text-neutral-900 hover:bg-white disabled:opacity-50"
           >
-            {isChecking ? 'Sprawdzanie...' : 'Dodaj osobę'}
+            {isSubmitting ? 'Zapisywanie...' : 'Dodaj osobę'}
           </button>
           <AdminCancelLink
             href="/admin/people"

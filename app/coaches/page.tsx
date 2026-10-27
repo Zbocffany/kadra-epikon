@@ -1,9 +1,10 @@
-import { getPublicPeople } from '@/lib/db/people'
-import PublicPeopleSearchTable from '@/components/people/PublicPeopleSearchTable'
+import { getPublicStaffPayload } from '@/lib/db/staffPayload'
+import PublicStaffTable from '@/components/people/PublicStaffTable'
+import { toSearchString } from '@/lib/utils/searchString'
+import type { RawSearchParams } from '@/lib/pagination'
 
-export default async function PublicCoachesPage() {
-	const people = await getPublicPeople('coaches')
-	const coaches = people.filter((person) => person.roles.includes('COACH'))
+export default async function PublicCoachesPage({ searchParams }: { searchParams: Promise<RawSearchParams> }) {
+	const [payload, resolvedSearchParams] = await Promise.all([getPublicStaffPayload(), searchParams])
 
 	return (
 		<div className="public-theme">
@@ -12,12 +13,7 @@ export default async function PublicCoachesPage() {
 					<section className="relative overflow-hidden rounded-xl border border-emerald-800/70 bg-[linear-gradient(165deg,#1f9f4a_0%,#0e8a3a_18%,#087531_40%,#0f8a3d_58%,#0a6f31_78%,#0a5a2a_100%)] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),inset_0_-2px_10px_rgba(0,0,0,0.2),0_8px_18px_rgba(0,0,0,0.2)] sm:p-6">
 						<span aria-hidden className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.16)_0%,rgba(255,255,255,0.03)_30%,rgba(0,0,0,0.12)_100%)]" />
 						<div className="relative z-10">
-							<PublicPeopleSearchTable
-								people={coaches}
-								basePath="/people"
-								variant="coaches"
-								publicCoachMode="poland"
-							/>
+							<PublicStaffTable payload={payload} variant="coaches" initialSearch={toSearchString(resolvedSearchParams)} />
 						</div>
 					</section>
 				</div>

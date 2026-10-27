@@ -6,7 +6,7 @@ import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCountryOption } from '@/lib/db/cities'
 import { getAdminCities } from '@/lib/db/clubs'
 import type { AdminCity } from '@/lib/db/clubs'
-import { getAdminStadiums } from '@/lib/db/stadiums'
+import { getAdminStadiumsList } from '@/lib/db/stadiums'
 import type { AdminStadiumListItem } from '@/lib/db/stadiums'
 import { VOIVODESHIP_OPTIONS } from '@/lib/constants/voivodeships'
 import { formatCityWithFifa } from '@/lib/utils/cityLabel'
@@ -106,6 +106,7 @@ function StadiumCreateFields({ cities, countries }: { cities: AdminCity[]; count
 export default async function AdminStadiumsPage({ searchParams }: { searchParams: SearchParams }) {
   const resolvedSearchParams = await searchParams
   const { error: formError, create } = resolvedSearchParams
+  const isCreateModalOpen = create === '1' || Boolean(formError)
 
   let stadiums: AdminStadiumListItem[] = []
   let cities: AdminCity[] = []
@@ -114,9 +115,9 @@ export default async function AdminStadiumsPage({ searchParams }: { searchParams
 
   try {
     const [fetchedStadiums, fetchedCities, fetchedCountries] = await Promise.all([
-      getAdminStadiums(),
-      getAdminCities(),
-      getAdminCountriesOptions(),
+      getAdminStadiumsList(),
+      isCreateModalOpen ? getAdminCities() : Promise.resolve([]),
+      isCreateModalOpen ? getAdminCountriesOptions() : Promise.resolve([]),
     ])
     stadiums = fetchedStadiums
     cities = fetchedCities
@@ -131,8 +132,6 @@ export default async function AdminStadiumsPage({ searchParams }: { searchParams
     if (count < 5) return 'stadiony'
     return 'stadionów'
   })()
-
-  const isCreateModalOpen = create === '1' || Boolean(formError)
 
   return (
     <AdminListLayout

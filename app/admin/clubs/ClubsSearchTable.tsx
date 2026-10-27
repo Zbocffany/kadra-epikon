@@ -4,7 +4,7 @@ import { useState } from 'react'
 import SmartPrefetchLink from '@/components/navigation/SmartPrefetchLink'
 import AdminSearchableTable from '@/components/admin/AdminSearchableTable'
 import type { AdminTableColumn } from '@/components/admin/AdminTable'
-import type { AdminClub } from '@/lib/db/clubs'
+import type { AdminClubListRow } from '@/lib/db/clubs'
 import CountryFlagWithHistory from '@/components/CountryFlagWithHistory'
 import PlayerSilhouetteIcon from '@/components/icons/PlayerSilhouetteIcon'
 import PitchIcon from '@/components/icons/PitchIcon'
@@ -15,7 +15,7 @@ export default function ClubsSearchTable({
   clubs,
   basePath = '/admin/clubs',
 }: {
-  clubs: AdminClub[]
+  clubs: AdminClubListRow[]
   basePath?: string
 }) {
   type SortKey = 'player_count' | 'appearance_count' | 'goal_count'
@@ -27,7 +27,7 @@ export default function ClubsSearchTable({
     return <SortableStatHeader active={sortKey === key} onClick={() => setSortKey(key)} icon={icon} label={label} />
   }
 
-  const columns: AdminTableColumn<AdminClub>[] = [
+  const columns: AdminTableColumn<AdminClubListRow>[] = [
     {
       key: 'index',
       label: '',

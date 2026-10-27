@@ -1,7 +1,7 @@
 ﻿import { createCountry, createFederationInline } from './actions'
 import Link from 'next/link'
 import CountriesSearchTable from './CountriesSearchTable'
-import { getAdminCountries, getAdminFederations } from '@/lib/db/countries'
+import { getAdminCountriesList, getAdminFederations } from '@/lib/db/countries'
 import type { AdminCountry, AdminFederation } from '@/lib/db/countries'
 import AdminSelectField from '@/components/admin/AdminSelectField'
 import AdminListLayout from '@/components/admin/AdminListLayout'
@@ -109,6 +109,7 @@ type SearchParams = Promise<RawSearchParams>
 export default async function AdminCountriesPage({ searchParams }: { searchParams: SearchParams }) {
   const resolvedSearchParams = await searchParams
   const { error: formError, create } = resolvedSearchParams
+  const isCreateModalOpen = create === '1' || Boolean(formError)
 
   let countries: AdminCountry[] = []
   let federations: AdminFederation[] = []
@@ -116,16 +117,14 @@ export default async function AdminCountriesPage({ searchParams }: { searchParam
 
   try {
     const [fetchedCountries, fetchedFederations] = await Promise.all([
-      getAdminCountries(),
-      getAdminFederations(),
+      getAdminCountriesList(),
+      isCreateModalOpen ? getAdminFederations() : Promise.resolve([]),
     ])
     countries = fetchedCountries
     federations = fetchedFederations
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
   }
-
-  const isCreateModalOpen = create === '1' || Boolean(formError)
 
   return (
     <AdminListLayout

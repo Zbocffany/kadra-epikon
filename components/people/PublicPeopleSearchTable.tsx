@@ -50,6 +50,99 @@ type PublicPeopleViewState = {
 }
 const VIEW_STATE_KEY = '__publicPeopleViewState'
 
+const COMPETITION_FILTER_KEYS: readonly VisibleCoachCompetitionFilter[] = ['WORLD_CUP', 'EURO', 'NATIONS_LEAGUE', 'FRIENDLY']
+const STAGE_FILTER_KEYS: readonly CoachStageFilterKey[] = ['TOURNAMENT', 'QUALIFIERS', 'PLAYOFFS']
+const VENUE_TYPE_KEYS: readonly VenueType[] = ['HOME', 'AWAY', 'NEUTRAL']
+const SORT_KEYS_BY_VARIANT: Record<PeopleCardVariant, readonly string[]> = {
+  players: ['appearance_count', 'goal_count', 'assist_count', 'yellow_card_count', 'red_card_count', 'minute_count', 'bench_count'],
+  coaches: ['coach_match_count', 'coach_wins', 'coach_draws', 'coach_losses', 'coach_goals_scored', 'coach_goals_conceded', 'coach_points_per_match'],
+  referees: ['referee_match_count', 'referee_wins', 'referee_draws', 'referee_losses', 'referee_goals_scored', 'referee_goals_conceded'],
+}
+const URL_FILTER_PARAMS = ['q', 'country', 'playerMode', 'coachMode', 'view', 'sort', 'comp', 'stage', 'from', 'to', 'venue', 'vcountry', 'vcity', 'vstadium'] as const
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Filtry widoku zapisywane w adresie strony (do udostępniania linków i odświeżania).
+type PublicPeopleUrlFilters = {
+  query: string
+  countryFilter: string
+  playerMode: PublicPlayerMode | null
+  coachMode: PublicCoachMode | null
+  coachDisplayMode: CoachDisplayMode | null
+  sort: string | null
+  competitionFilters: VisibleCoachCompetitionFilter[]
+  stageFilters: CoachStageFilterKey[]
+  coachDateFrom: string
+  coachDateTo: string
+  venueTypeFilters: VenueType[]
+  venueCountryId: string | null
+  venueCityId: string | null
+  venueStadiumId: string | null
+}
+
+function parseList<T extends string>(raw: string | null, allowed: readonly T[]): T[] {
+  if (!raw) return []
+  return [...new Set(raw.split(',').filter((value): value is T => (allowed as readonly string[]).includes(value)))]
+}
+
+function sameList<T>(a: readonly T[], b: readonly T[]): boolean {
+  return a.length === b.length && a.every((value, i) => value === b[i])
+}
+
+function parseYear(raw: string | null): string {
+  return raw && /^\d{4}$/.test(raw) ? raw : ''
+}
+
+function parseUuid(raw: string | null): string | null {
+  return raw && UUID_PATTERN.test(raw) ? raw : null
+}
+
+function parseMode(raw: string | null): 'poland' | 'rivals' | null {
+  return raw === 'poland' || raw === 'rivals' ? raw : null
+}
+
+export function parsePublicPeopleUrlFilters(params: URLSearchParams, variant: PeopleCardVariant): PublicPeopleUrlFilters {
+  const view = params.get('view')
+  const sort = params.get('sort')
+  return {
+    query: params.get('q') ?? '',
+    countryFilter: params.get('country') ?? '',
+    playerMode: parseMode(params.get('playerMode')),
+    coachMode: parseMode(params.get('coachMode')),
+    coachDisplayMode: view === 'tenure' || view === 'stats' ? view : null,
+    sort: sort && SORT_KEYS_BY_VARIANT[variant].includes(sort) ? sort : null,
+    competitionFilters: parseList(params.get('comp'), COMPETITION_FILTER_KEYS),
+    stageFilters: parseList(params.get('stage'), STAGE_FILTER_KEYS),
+    coachDateFrom: parseYear(params.get('from')),
+    coachDateTo: parseYear(params.get('to')),
+    venueTypeFilters: parseList(params.get('venue'), VENUE_TYPE_KEYS),
+    venueCountryId: parseUuid(params.get('vcountry')),
+    venueCityId: parseUuid(params.get('vcity')),
+    venueStadiumId: parseUuid(params.get('vstadium')),
+  }
+}
+
+// Wartości domyślne nie trafiają do adresu; inne parametry adresu zostają bez zmian.
+function buildPublicPeopleUrlSearch(currentSearch: string, filters: PublicPeopleUrlFilters, defaults: { sort: string; coachDisplayMode: CoachDisplayMode }): string {
+  const params = new URLSearchParams(currentSearch)
+  for (const key of URL_FILTER_PARAMS) params.delete(key)
+  if (filters.query.trim()) params.set('q', filters.query)
+  if (filters.countryFilter) params.set('country', filters.countryFilter)
+  if (filters.playerMode === 'rivals') params.set('playerMode', 'rivals')
+  if (filters.coachMode === 'rivals') params.set('coachMode', 'rivals')
+  if (filters.coachDisplayMode && filters.coachDisplayMode !== defaults.coachDisplayMode) params.set('view', filters.coachDisplayMode)
+  if (filters.sort && filters.sort !== defaults.sort) params.set('sort', filters.sort)
+  if (filters.competitionFilters.length) params.set('comp', filters.competitionFilters.join(','))
+  if (filters.stageFilters.length) params.set('stage', filters.stageFilters.join(','))
+  if (/^\d{4}$/.test(filters.coachDateFrom)) params.set('from', filters.coachDateFrom)
+  if (/^\d{4}$/.test(filters.coachDateTo)) params.set('to', filters.coachDateTo)
+  if (filters.venueTypeFilters.length) params.set('venue', filters.venueTypeFilters.join(','))
+  if (filters.venueCountryId) params.set('vcountry', filters.venueCountryId)
+  if (filters.venueCityId) params.set('vcity', filters.venueCityId)
+  if (filters.venueStadiumId) params.set('vstadium', filters.venueStadiumId)
+  const search = params.toString().replace(/%2C/g, ',')
+  return search ? `?${search}` : ''
+}
+
 type CoachComputedStats = {
   coach_match_count: number
   coach_wins: number
@@ -318,6 +411,7 @@ export default function PublicPeopleSearchTable({
   publicCoachMode,
   publicRefereesView,
   defaultCountryFilter,
+  initialSearch,
 }: {
   people: AdminPersonListItem[]
   basePath?: string
@@ -326,35 +420,46 @@ export default function PublicPeopleSearchTable({
   publicCoachMode?: PublicCoachMode
   publicRefereesView?: boolean
   defaultCountryFilter?: string
+  // Query string z serwera — pierwszy render (SSR) od razu z filtrami z adresu.
+  initialSearch?: string
 }) {
   type PlayerSortKey = 'appearance_count' | 'goal_count' | 'assist_count' | 'yellow_card_count' | 'red_card_count' | 'minute_count' | 'bench_count'
   type CoachSortKey = 'coach_match_count' | 'coach_wins' | 'coach_draws' | 'coach_losses' | 'coach_goals_scored' | 'coach_goals_conceded' | 'coach_points_per_match'
   type RefereeSortKey = 'referee_match_count' | 'referee_wins' | 'referee_draws' | 'referee_losses' | 'referee_goals_scored' | 'referee_goals_conceded'
 
-  const [sortKey, setSortKey] = useState<PlayerSortKey>('appearance_count')
-  const [coachSortKey, setCoachSortKey] = useState<CoachSortKey>('coach_match_count')
-  const [refereeSortKey, setRefereeSortKey] = useState<RefereeSortKey>('referee_match_count')
-  const [query, setQuery] = useState('')
-  const [countryFilter, setCountryFilter] = useState(defaultCountryFilter ?? '')
-  const [playerMode, setPlayerMode] = useState<PublicPlayerMode>(publicPlayerMode ?? 'poland')
-  const [coachMode, setCoachMode] = useState<PublicCoachMode>(publicCoachMode ?? 'poland')
+  const [initialUrl] = useState(() => parsePublicPeopleUrlFilters(new URLSearchParams(initialSearch ?? ''), variant))
+  const initialPlayerMode: PublicPlayerMode = initialUrl.playerMode ?? publicPlayerMode ?? 'poland'
+  const initialCoachMode: PublicCoachMode = initialUrl.coachMode ?? publicCoachMode ?? 'poland'
+  const defaultCoachDisplayMode = (mode: PublicCoachMode): CoachDisplayMode => (variant === 'coaches' && mode === 'poland' ? 'tenure' : 'stats')
+  const defaultSortKey = SORT_KEYS_BY_VARIANT[variant][0]
+
+  const [sortKey, setSortKey] = useState<PlayerSortKey>((variant === 'players' ? initialUrl.sort : null) as PlayerSortKey ?? 'appearance_count')
+  const [coachSortKey, setCoachSortKey] = useState<CoachSortKey>((variant === 'coaches' ? initialUrl.sort : null) as CoachSortKey ?? 'coach_match_count')
+  const [refereeSortKey, setRefereeSortKey] = useState<RefereeSortKey>((variant === 'referees' ? initialUrl.sort : null) as RefereeSortKey ?? 'referee_match_count')
+  const [query, setQuery] = useState(initialUrl.query)
+  const [countryFilter, setCountryFilter] = useState(initialUrl.countryFilter || defaultCountryFilter || '')
+  const [playerMode, setPlayerMode] = useState<PublicPlayerMode>(initialPlayerMode)
+  const [coachMode, setCoachMode] = useState<PublicCoachMode>(initialCoachMode)
   const [coachDisplayMode, setCoachDisplayMode] = useState<CoachDisplayMode>(
-    variant === 'coaches' && publicCoachMode === 'poland' ? 'tenure' : 'stats'
+    initialUrl.coachDisplayMode ?? defaultCoachDisplayMode(initialCoachMode)
   )
-  const [competitionFilters, setCompetitionFilters] = useState<VisibleCoachCompetitionFilter[]>([])
-  const [stageFilters, setStageFilters] = useState<CoachStageFilterKey[]>([])
-  const [coachDateFrom, setCoachDateFrom] = useState('')
-  const [coachDateTo, setCoachDateTo] = useState('')
-  const [hasInitializedCoachDateRange, setHasInitializedCoachDateRange] = useState(false)
+  const [competitionFilters, setCompetitionFilters] = useState<VisibleCoachCompetitionFilter[]>(initialUrl.competitionFilters)
+  const [stageFilters, setStageFilters] = useState<CoachStageFilterKey[]>(initialUrl.stageFilters)
+  const [coachDateFrom, setCoachDateFrom] = useState(initialUrl.coachDateFrom)
+  const [coachDateTo, setCoachDateTo] = useState(initialUrl.coachDateTo)
+  const [hasInitializedCoachDateRange, setHasInitializedCoachDateRange] = useState(Boolean(initialUrl.coachDateFrom || initialUrl.coachDateTo))
   const [isCoachRibbonExpanded, setIsCoachRibbonExpanded] = useState(false)
-  const [venueTypeFilters, setVenueTypeFilters] = useState<VenueType[]>([])
-  const [venueCountryId, setVenueCountryId] = useState<string | null>(null)
-  const [venueCityId, setVenueCityId] = useState<string | null>(null)
-  const [venueStadiumId, setVenueStadiumId] = useState<string | null>(null)
+  const [venueTypeFilters, setVenueTypeFilters] = useState<VenueType[]>(initialUrl.venueTypeFilters)
+  const [venueCountryId, setVenueCountryId] = useState<string | null>(initialUrl.venueCountryId)
+  const [venueCityId, setVenueCityId] = useState<string | null>(initialUrl.venueCityId)
+  const [venueStadiumId, setVenueStadiumId] = useState<string | null>(initialUrl.venueStadiumId)
   const [isVenueExtraExpanded, setIsVenueExtraExpanded] = useState(false)
   const [expandedPersonId, setExpandedPersonId] = useState<string | null>(null)
   const viewStateHydratedRef = useRef(false)
-  const skipNextCoachModeResetRef = useRef(false)
+  // Liczba kolejnych uruchomień efektu resetu filtrów trenerów do pominięcia (1 = pierwsze zamontowanie).
+  const skipCoachModeResetCountRef = useRef(1)
+  const coachModeRef = useRef(coachMode)
+  coachModeRef.current = coachMode
   const [visibleCount, setVisibleCount] = useState(50)
   const isPublicPlayersView = variant === 'players' && Boolean(publicPlayerMode)
   const isPublicCoachesView = variant === 'coaches' && Boolean(publicCoachMode)
@@ -383,33 +488,20 @@ export default function PublicPeopleSearchTable({
     }
   }, [publicCoachMode])
 
-  const writeModeToUrl = (mode: PublicCoachMode | PublicPlayerMode | null, kind: 'coach' | 'player') => {
-    if (typeof window === 'undefined') return
-    const url = new URL(window.location.href)
-    const param = kind === 'coach' ? 'coachMode' : 'playerMode'
-    if (mode && mode !== 'poland') url.searchParams.set(param, mode)
-    else url.searchParams.delete(param)
-    const newUrl = url.pathname + (url.search ? url.search : '') + url.hash
-    window.history.replaceState(window.history.state, '', newUrl)
-  }
-
   const handleSetCoachMode = (next: PublicCoachMode) => {
     setCoachMode(next)
     setCoachDisplayMode(next === 'poland' ? 'tenure' : 'stats')
-    writeModeToUrl(next, 'coach')
   }
 
   const handleSetPlayerMode = (next: PublicPlayerMode) => {
     setPlayerMode(next)
-    writeModeToUrl(next, 'player')
   }
 
-  // Hydrate full view state from history.state on mount and on browser Back/Forward.
+  // Filtry pochodzą z adresu strony; history.state/sessionStorage przechowują tylko stan UI
+  // (rozwinięte wiersze, liczba widocznych, przewinięcie). Działa przy wejściu i przy Wstecz/Dalej.
   useEffect(() => {
     const storageKey = `${VIEW_STATE_KEY}:${typeof window !== 'undefined' ? window.location.pathname : ''}`
     const readSaved = (allowSessionFallback: boolean): PublicPeopleViewState | null => {
-      // Prefer history.state (per-entry, survives Back/Forward), fallback to sessionStorage
-      // (per-pathname, survives Next.js internal history rewrites that may drop our key).
       const fromHistory = (window.history.state as { [VIEW_STATE_KEY]?: PublicPeopleViewState } | null)?.[VIEW_STATE_KEY]
       if (fromHistory) return fromHistory
       if (!allowSessionFallback) return null
@@ -423,46 +515,36 @@ export default function PublicPeopleSearchTable({
     }
     const applyState = (allowSessionFallback: boolean) => {
       const saved = readSaved(allowSessionFallback)
-      // URL search params are authoritative for the active mode (Polska/Rywale),
-      // because the URL is reliably restored by the browser on Back/Forward.
-      const params = new URLSearchParams(window.location.search)
-      const urlCoachMode = params.get('coachMode') as PublicCoachMode | null
-      const urlPlayerMode = params.get('playerMode') as PublicPlayerMode | null
-      if (!saved && !urlCoachMode && !urlPlayerMode) {
-        viewStateHydratedRef.current = true
-        return
-      }
-      const merged: PublicPeopleViewState = { ...(saved ?? {}) }
-      if (urlCoachMode === 'poland' || urlCoachMode === 'rivals') merged.coachMode = urlCoachMode
-      if (urlPlayerMode === 'poland' || urlPlayerMode === 'rivals') merged.playerMode = urlPlayerMode
-      if (merged.query !== undefined) setQuery(merged.query)
-      if (merged.countryFilter !== undefined) setCountryFilter(merged.countryFilter)
-      if (merged.playerMode !== undefined) setPlayerMode(merged.playerMode)
-      if (merged.coachMode !== undefined) {
-        skipNextCoachModeResetRef.current = true
-        setCoachMode(merged.coachMode)
-      }
-      if (merged.coachDisplayMode !== undefined) setCoachDisplayMode(merged.coachDisplayMode)
-      else if (merged.coachMode !== undefined) setCoachDisplayMode(merged.coachMode === 'poland' ? 'tenure' : 'stats')
-      if (merged.sortKey !== undefined) setSortKey(merged.sortKey as PlayerSortKey)
-      if (merged.coachSortKey !== undefined) setCoachSortKey(merged.coachSortKey as CoachSortKey)
-      if (merged.refereeSortKey !== undefined) setRefereeSortKey(merged.refereeSortKey as RefereeSortKey)
-      if (merged.competitionFilters !== undefined) setCompetitionFilters(merged.competitionFilters)
-      if (merged.stageFilters !== undefined) setStageFilters(merged.stageFilters)
-      if (merged.coachDateFrom !== undefined) setCoachDateFrom(merged.coachDateFrom)
-      if (merged.coachDateTo !== undefined) setCoachDateTo(merged.coachDateTo)
-      if (merged.isCoachRibbonExpanded !== undefined) setIsCoachRibbonExpanded(merged.isCoachRibbonExpanded)
-      if (merged.venueTypeFilters !== undefined) setVenueTypeFilters(merged.venueTypeFilters)
-      if (merged.venueCountryId !== undefined) setVenueCountryId(merged.venueCountryId)
-      if (merged.venueCityId !== undefined) setVenueCityId(merged.venueCityId)
-      if (merged.venueStadiumId !== undefined) setVenueStadiumId(merged.venueStadiumId)
-      if (merged.isVenueExtraExpanded !== undefined) setIsVenueExtraExpanded(merged.isVenueExtraExpanded)
-      if (merged.expandedPersonId !== undefined) setExpandedPersonId(merged.expandedPersonId)
-      if (merged.visibleCount !== undefined) setVisibleCount(merged.visibleCount)
+      const url = parsePublicPeopleUrlFilters(new URLSearchParams(window.location.search), variant)
+      const nextPlayerMode = url.playerMode ?? publicPlayerMode ?? 'poland'
+      const nextCoachMode = url.coachMode ?? publicCoachMode ?? 'poland'
+
+      if (nextCoachMode !== coachModeRef.current) skipCoachModeResetCountRef.current += 1
+      setQuery(url.query)
+      setCountryFilter(url.countryFilter || defaultCountryFilter || '')
+      setPlayerMode(nextPlayerMode)
+      setCoachMode(nextCoachMode)
+      setCoachDisplayMode(url.coachDisplayMode ?? defaultCoachDisplayMode(nextCoachMode))
+      if (variant === 'players') setSortKey((url.sort ?? 'appearance_count') as PlayerSortKey)
+      if (variant === 'coaches') setCoachSortKey((url.sort ?? 'coach_match_count') as CoachSortKey)
+      if (variant === 'referees') setRefereeSortKey((url.sort ?? 'referee_match_count') as RefereeSortKey)
+      setCompetitionFilters((prev) => (sameList(prev, url.competitionFilters) ? prev : url.competitionFilters))
+      setStageFilters((prev) => (sameList(prev, url.stageFilters) ? prev : url.stageFilters))
+      setCoachDateFrom(url.coachDateFrom)
+      setCoachDateTo(url.coachDateTo)
+      setVenueTypeFilters((prev) => (sameList(prev, url.venueTypeFilters) ? prev : url.venueTypeFilters))
+      setVenueCountryId(url.venueCountryId)
+      setVenueCityId(url.venueCityId)
+      setVenueStadiumId(url.venueStadiumId)
+
+      if (saved?.isCoachRibbonExpanded !== undefined) setIsCoachRibbonExpanded(saved.isCoachRibbonExpanded)
+      if (saved?.isVenueExtraExpanded !== undefined) setIsVenueExtraExpanded(saved.isVenueExtraExpanded)
+      if (saved?.expandedPersonId !== undefined) setExpandedPersonId(saved.expandedPersonId)
+      if (saved?.visibleCount !== undefined) setVisibleCount(saved.visibleCount)
       setHasInitializedCoachDateRange(true)
       viewStateHydratedRef.current = true
-      if (typeof merged.scrollY === 'number') {
-        const targetY = merged.scrollY
+      if (typeof saved?.scrollY === 'number') {
+        const targetY = saved.scrollY
         requestAnimationFrame(() => {
           requestAnimationFrame(() => window.scrollTo(0, targetY))
         })
@@ -483,8 +565,8 @@ export default function PublicPeopleSearchTable({
 
   useEffect(() => {
     if (!isPublicCoachesView) return
-    if (skipNextCoachModeResetRef.current) {
-      skipNextCoachModeResetRef.current = false
+    if (skipCoachModeResetCountRef.current > 0) {
+      skipCoachModeResetCountRef.current -= 1
       return
     }
     setCompetitionFilters([])
@@ -526,7 +608,27 @@ export default function PublicPeopleSearchTable({
       scrollY: typeof window !== 'undefined' ? window.scrollY : 0,
     }
     const merged = { ...(window.history.state ?? {}), [VIEW_STATE_KEY]: next }
-    window.history.replaceState(merged, '')
+    const search = buildPublicPeopleUrlSearch(
+      window.location.search,
+      {
+        query,
+        countryFilter,
+        playerMode,
+        coachMode,
+        coachDisplayMode,
+        sort: variant === 'players' ? sortKey : variant === 'coaches' ? coachSortKey : refereeSortKey,
+        competitionFilters,
+        stageFilters,
+        coachDateFrom,
+        coachDateTo,
+        venueTypeFilters,
+        venueCountryId,
+        venueCityId,
+        venueStadiumId,
+      },
+      { sort: defaultSortKey, coachDisplayMode: defaultCoachDisplayMode(coachMode) }
+    )
+    window.history.replaceState(merged, '', window.location.pathname + search + window.location.hash)
     try {
       const storageKey = `${VIEW_STATE_KEY}:${window.location.pathname}`
       window.sessionStorage.setItem(storageKey, JSON.stringify(next))

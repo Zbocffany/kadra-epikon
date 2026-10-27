@@ -47,6 +47,8 @@ export default function AddPersonModal({
   const pendingCityCountryIdRef = useRef('')
   const [isActive, setIsActive] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
+  // Synchronous guard: state-based `disabled` lags behind a fast double click.
+  const submittingRef = useRef(false)
   const [error, setError] = useState('')
   const [duplicates, setDuplicates] = useState<DuplicatePerson[]>([])
   const [pendingPersonData, setPendingPersonData] = useState<null | {
@@ -197,44 +199,60 @@ export default function AddPersonModal({
   }
 
   async function handleAddPerson() {
+    if (submittingRef.current) return
+    submittingRef.current = true
     setError('')
 
-    if (birthDate && selectedCountryId) {
-      const found = await checkDuplicatePeople(birthDate, selectedCountryId)
-      if (found.length > 0) {
-        setDuplicates(found)
-        setPendingPersonData({
-          firstName,
-          lastName,
-          nickname,
-          birthDate: birthDate || null,
-          deathDate: deathDate || null,
-          cityId: selectedCityId || null,
-          countryId: selectedCountryId || null,
-          representedCountryIds: selectedRepresentedCountryId ? [selectedRepresentedCountryId] : [],
-          isActive,
-        })
-        return
+    try {
+      if (birthDate && selectedCountryId) {
+        setIsLoading(true)
+        const found = await checkDuplicatePeople(birthDate, selectedCountryId)
+        if (found.length > 0) {
+          setDuplicates(found)
+          setPendingPersonData({
+            firstName,
+            lastName,
+            nickname,
+            birthDate: birthDate || null,
+            deathDate: deathDate || null,
+            cityId: selectedCityId || null,
+            countryId: selectedCountryId || null,
+            representedCountryIds: selectedRepresentedCountryId ? [selectedRepresentedCountryId] : [],
+            isActive,
+          })
+          setIsLoading(false)
+          return
+        }
       }
-    }
 
-    await doAddPerson(
-      firstName,
-      lastName,
-      nickname,
-      birthDate || null,
-      deathDate || null,
-      selectedCityId || null,
-      selectedCountryId || null,
-      selectedRepresentedCountryId ? [selectedRepresentedCountryId] : [],
-      isActive
-    )
+      await doAddPerson(
+        firstName,
+        lastName,
+        nickname,
+        birthDate || null,
+        deathDate || null,
+        selectedCityId || null,
+        selectedCountryId || null,
+        selectedRepresentedCountryId ? [selectedRepresentedCountryId] : [],
+        isActive
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Nie udało się sprawdzić duplikatów.')
+      setIsLoading(false)
+    } finally {
+      submittingRef.current = false
+    }
   }
 
   async function handleConfirmDespiteDuplicates() {
-    if (!pendingPersonData) return
+    if (!pendingPersonData || submittingRef.current) return
+    submittingRef.current = true
     const { firstName: fN, lastName: lN, nickname: nN, birthDate: bD, deathDate: dD, cityId, countryId, representedCountryIds, isActive: active } = pendingPersonData
-    await doAddPerson(fN, lN, nN, bD, dD, cityId, countryId, representedCountryIds, active)
+    try {
+      await doAddPerson(fN, lN, nN, bD, dD, cityId, countryId, representedCountryIds, active)
+    } finally {
+      submittingRef.current = false
+    }
   }
 
   if (!isOpen) return null

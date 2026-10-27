@@ -1,9 +1,7 @@
 import MatchesListView from '@/components/matches/MatchesListView'
 import PublicMatchesClient from '@/components/matches/PublicMatchesClient'
 import {
-  getCachedPublicMatchYearBounds,
-  getCachedPublicMatches,
-  getCachedPublicMatchesYearStats,
+  getPublicMatchesList,
   type AdminMatch,
   type MatchYearStatsData,
 } from '@/lib/db/matches'
@@ -17,11 +15,6 @@ type PublicMatchesPageProps = {
 }
 
 const PUBLIC_CONTENT_MAX_WIDTH_CLASS = 'max-w-[74rem]'
-
-type DecadeFilter = {
-  startYear: number
-  endYear: number
-}
 
 type PolandGlobalStats = {
   totalMatches: number
@@ -126,41 +119,6 @@ function parseSingleSearchParam(value: string | string[] | undefined): string | 
   return Array.isArray(value) ? value[0] : value
 }
 
-function decadeStartForYear(year: number): number {
-  return Math.floor((year - 1) / 10) * 10 + 1
-}
-
-function buildDecades(minYear: number, maxYear: number): DecadeFilter[] {
-  const firstStart = decadeStartForYear(minYear)
-  const lastStart = decadeStartForYear(maxYear)
-  const decades: DecadeFilter[] = []
-
-  for (let start = firstStart; start <= lastStart; start += 10) {
-    decades.push({
-      startYear: start,
-      endYear: start + 9,
-    })
-  }
-
-  return decades.sort((a, b) => b.startYear - a.startYear)
-}
-
-function parseRequestedDecade(period: string | undefined, decades: DecadeFilter[]): DecadeFilter | null {
-  if (!period) {
-    return decades[0] ?? null
-  }
-  if (period === 'upcoming') {
-    return null
-  }
-
-  const parsed = Number.parseInt(period, 10)
-  if (!Number.isFinite(parsed)) {
-    return decades[0] ?? null
-  }
-
-  return decades.find((decade) => decade.startYear === parsed) ?? (decades[0] ?? null)
-}
-
 export default async function PublicMatchesPage({
   searchParams,
   basePath,
@@ -169,39 +127,15 @@ export default async function PublicMatchesPage({
 }: PublicMatchesPageProps) {
   const period = parseSingleSearchParam(searchParams.period)
   let matches: AdminMatch[] = []
-  let decadeFilters: DecadeFilter[] = []
-  let selectedPeriod = 'upcoming'
   let fetchError: string | null = null
   let yearStats: MatchYearStatsData | undefined = undefined
   let globalPolandStats: PolandGlobalStats | undefined = undefined
 
   try {
-    const yearBounds = await getCachedPublicMatchYearBounds()
-
-    if (yearBounds) {
-      decadeFilters = buildDecades(yearBounds.minYear, yearBounds.maxYear)
-    }
-
-    const selectedDecade = parseRequestedDecade(period, decadeFilters)
-    selectedPeriod = period === 'upcoming' ? 'upcoming' : (selectedDecade ? String(selectedDecade.startYear) : 'upcoming')
-
-    const allPublicMatchesPromise = getCachedPublicMatches()
-
-    if (selectedPeriod === 'upcoming') {
-      matches = await getCachedPublicMatches({ status: 'SCHEDULED' })
-    } else if (selectedDecade) {
-      matches = await getCachedPublicMatches({
-        fromDate: `${selectedDecade.startYear}-01-01`,
-        toDate: `${selectedDecade.endYear}-12-31`,
-      })
-    }
-
-    const allPublicMatches = await allPublicMatchesPromise
-    const historyMatches = allPublicMatches.filter((match) => match.match_status !== 'SCHEDULED')
-    globalPolandStats = getPolandGlobalStats(historyMatches)
-    if (historyMatches.length > 0) {
-      yearStats = await getCachedPublicMatchesYearStats(historyMatches)
-    }
+    const list = await getPublicMatchesList()
+    matches = list.matches
+    yearStats = list.yearStats
+    globalPolandStats = getPolandGlobalStats(matches.filter((match) => match.match_status !== 'SCHEDULED'))
   } catch (err) {
     fetchError = err instanceof Error ? err.message : 'Unknown error'
     matches = []
@@ -232,8 +166,7 @@ export default async function PublicMatchesPage({
         detailBasePath={detailBasePath}
         maxWidthClass={PUBLIC_CONTENT_MAX_WIDTH_CLASS}
         matches={matches}
-        decadeFilters={decadeFilters}
-        selectedPeriod={selectedPeriod}
+        initialPeriod={period}
         yearStats={yearStats}
         globalPolandStats={globalPolandStats}
       />

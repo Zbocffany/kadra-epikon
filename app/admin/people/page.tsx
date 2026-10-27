@@ -1,8 +1,8 @@
 ﻿import Link from 'next/link'
 import { getAdminCountriesOptions } from '@/lib/db/cities'
 import type { AdminCountryOption } from '@/lib/db/cities'
-import { getAdminPeople, getAdminPersonBirthCityOptions } from '@/lib/db/people'
-import type { AdminPersonBirthCityOption, AdminPersonListItem } from '@/lib/db/people'
+import { getAdminPeopleList, getAdminPersonBirthCityOptions } from '@/lib/db/people'
+import type { AdminPeopleListRow, AdminPersonBirthCityOption } from '@/lib/db/people'
 import AdminListLayout from '@/components/admin/AdminListLayout'
 import type { RawSearchParams } from '@/lib/pagination'
 import PeopleSearchTable from './PeopleSearchTable'
@@ -13,17 +13,18 @@ type SearchParams = Promise<RawSearchParams>
 export default async function AdminPeoplePage({ searchParams }: { searchParams: SearchParams }) {
   const resolvedSearchParams = await searchParams
   const { error: formError, create } = resolvedSearchParams
+  const isCreateModalOpen = create === '1' || Boolean(formError)
 
-  let people: AdminPersonListItem[] = []
+  let people: AdminPeopleListRow[] = []
   let cities: AdminPersonBirthCityOption[] = []
   let countries: AdminCountryOption[] = []
   let fetchError: string | null = null
 
   try {
     const [fetchedPeople, fetchedCities, fetchedCountries] = await Promise.all([
-      getAdminPeople(),
-      getAdminPersonBirthCityOptions(),
-      getAdminCountriesOptions(),
+      getAdminPeopleList(),
+      isCreateModalOpen ? getAdminPersonBirthCityOptions() : Promise.resolve([]),
+      isCreateModalOpen ? getAdminCountriesOptions() : Promise.resolve([]),
     ])
     people = fetchedPeople
     cities = fetchedCities
@@ -38,8 +39,6 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
     if (count < 5) return 'osoby'
     return 'osób'
   })()
-
-  const isCreateModalOpen = create === '1' || Boolean(formError)
 
   return (
     <AdminListLayout
@@ -59,7 +58,7 @@ export default async function AdminPeoplePage({ searchParams }: { searchParams: 
     >
       {!fetchError && (
         <>
-          <PeopleSearchTable people={people} variant="all" />
+          <PeopleSearchTable people={people} />
 
           {isCreateModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4 py-6">

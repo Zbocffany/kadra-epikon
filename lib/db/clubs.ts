@@ -570,6 +570,27 @@ export async function getAdminClubs(): Promise<AdminClub[]> {
   })
 }
 
+export type AdminClubListRow = Pick<
+  AdminClub,
+  | 'id'
+  | 'name'
+  | 'city_name'
+  | 'country_name'
+  | 'country_fifa_code'
+  | 'country_current_name'
+  | 'country_current_fifa_code'
+  | 'player_count'
+  | 'appearance_count'
+  | 'goal_count'
+>
+
+export async function getAdminClubsList(): Promise<AdminClubListRow[]> {
+  const supabase = createServiceRoleClient()
+  const { data, error } = await supabase.rpc('get_admin_clubs_list')
+  if (error) throw new Error(`get_admin_clubs_list: ${error.message}`)
+  return (data ?? []) as AdminClubListRow[]
+}
+
 export async function getPublicClubs(): Promise<AdminClub[]> {
   const cacheKey = await getPublicCacheKey('public-clubs')
   return unstable_cache(

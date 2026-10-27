@@ -36,7 +36,7 @@ type EnteredPlayer = {
   id: string
   label: string
   minute: string
-  replacedPersonId: string | null
+  pitchPersonId: string
 }
 
 type HoveredPlayerState = {
@@ -126,6 +126,8 @@ function buildLineupLabels(players: AdminMatchParticipant[]): Array<{ id: string
     return {
       id: player.id,
       personId: player.person_id,
+      fullName: player.person_name,
+      hasNickname: player.has_nickname === true,
       surname,
       firstName,
       position: player.player_position,
@@ -135,6 +137,7 @@ function buildLineupLabels(players: AdminMatchParticipant[]): Array<{ id: string
 
   const bySurname = new Map<string, Array<{ id: string; surname: string; firstName: string; position: PlayerPosition | null }>>()
   for (const player of base) {
+    if (player.hasNickname) continue
     const arr = bySurname.get(player.surname) ?? []
     arr.push(player)
     bySurname.set(player.surname, arr)
@@ -174,7 +177,7 @@ function buildLineupLabels(players: AdminMatchParticipant[]): Array<{ id: string
   return base.map((player) => ({
     id: player.id,
     personId: player.personId,
-    label: prefixedLabelById.get(player.id) ?? player.surname,
+    label: player.hasNickname ? player.fullName : (prefixedLabelById.get(player.id) ?? player.surname),
     position: player.position,
     isCaptain: player.isCaptain,
   }))
@@ -249,7 +252,7 @@ function buildEnteredPlayers(participants: AdminMatchParticipant[] | undefined, 
   )
   const seen = new Set<string>()
   // collect raw entries in order
-  const raw: Array<{ id: string; personName: string; minute: string; replacedPersonId: string | null }> = []
+  const raw: Array<{ id: string; personName: string; hasNickname: boolean; minute: string; replacedPersonId: string | null }> = []
 
   for (const event of [...events].sort(compareEventsChronologically)) {
     if (event.event_type !== 'SUBSTITUTION' || event.team_id !== teamId || !event.secondary_person_id) continue
@@ -259,13 +262,14 @@ function buildEnteredPlayers(participants: AdminMatchParticipant[] | undefined, 
     raw.push({
       id: event.secondary_person_id,
       personName: participant?.person_name ?? 'Nieznany',
+      hasNickname: participant?.has_nickname === true,
       minute: formatEventMinute(event),
       replacedPersonId: event.primary_person_id ?? null,
     })
   }
 
   // build surname labels with first-initial disambiguation (same logic as buildLineupLabels)
-  const base = raw.map((entry) => ({
+  const base = raw.filter((entry) => !entry.hasNickname).map((entry) => ({
     ...entry,
     surname: extractSurname(entry.personName),
     firstName: extractFirstName(entry.personName),
@@ -304,12 +308,24 @@ function buildEnteredPlayers(participants: AdminMatchParticipant[] | undefined, 
     }
   }
 
-  return raw.map((entry) => ({
-    id: entry.id,
-    label: labelById.get(entry.id) ?? extractSurname(entry.personName),
-    minute: entry.minute,
-    replacedPersonId: entry.replacedPersonId,
-  }))
+  const replacedPersonById = new Map(raw.map((entry) => [entry.id, entry.replacedPersonId]))
+
+  return raw.map((entry) => {
+    let pitchPersonId = entry.replacedPersonId ?? entry.id
+    const visited = new Set([entry.id])
+
+    while (replacedPersonById.has(pitchPersonId) && !visited.has(pitchPersonId)) {
+      visited.add(pitchPersonId)
+      pitchPersonId = replacedPersonById.get(pitchPersonId) ?? pitchPersonId
+    }
+
+    return {
+      id: entry.id,
+      label: entry.hasNickname ? entry.personName : (labelById.get(entry.id) ?? extractSurname(entry.personName)),
+      minute: entry.minute,
+      pitchPersonId,
+    }
+  })
 }
 
 function getPlayerEvents(personId: string, events: AdminMatchEvent[], teamId: string | undefined): AdminMatchEvent[] {
@@ -634,10 +650,10 @@ export default function InteractiveLineupGraphic({
                         onMouseEnter={() => {
                           setHoveredPlayerState({
                             sourcePlayerId: player.id,
-                            targetPersonId: player.replacedPersonId ?? player.id,
+                            targetPersonId: player.pitchPersonId,
                             hoveredPersonId: player.id,
                             label: player.label,
-                            usesFlipAnimation: Boolean(player.replacedPersonId),
+                            usesFlipAnimation: player.pitchPersonId !== player.id,
                           })
                         }}
                         onMouseLeave={() => setHoveredPlayerState(null)}
@@ -679,9 +695,12 @@ export default function InteractiveLineupGraphic({
                 const fontSize = longestLabel > 15 ? 'text-[8px]' : longestLabel > 12 ? 'text-[9px]' : 'text-[10px]'
                 
                 const playerEvents = getPlayerEvents(player.personId, events, current.teamId)
-                const enteredPlayerData = enteredPlayers.find((ep) => ep.replacedPersonId === player.personId)
-                const enteredPlayerEvents = enteredPlayerData ? getPlayerEvents(enteredPlayerData.id, events, current.teamId) : []
-                const displayedEvents = isHoveredPitchPlayer && hoveredPlayerState?.usesFlipAnimation ? enteredPlayerEvents : playerEvents
+                const hoveredEnteredPlayer = isHoveredPitchPlayer && hoveredPlayerState?.usesFlipAnimation
+                  ? enteredPlayers.find((enteredPlayer) => enteredPlayer.id === hoveredPlayerState.hoveredPersonId)
+                  : undefined
+                const displayedEvents = hoveredEnteredPlayer
+                  ? getPlayerEvents(hoveredEnteredPlayer.id, events, current.teamId)
+                  : playerEvents
 
                 return (
                   <div

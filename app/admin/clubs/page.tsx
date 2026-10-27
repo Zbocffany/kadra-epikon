@@ -1,5 +1,5 @@
-﻿import { getAdminClubs, getAdminCities } from '@/lib/db/clubs'
-import type { AdminClub, AdminCity } from '@/lib/db/clubs'
+﻿import { getAdminClubsList, getAdminCities } from '@/lib/db/clubs'
+import type { AdminClubListRow, AdminCity } from '@/lib/db/clubs'
 import { createClub } from './actions'
 import Link from 'next/link'
 import ClubsSearchTable from './ClubsSearchTable'
@@ -20,17 +20,18 @@ export default async function AdminClubsPage({
 }) {
   const resolvedSearchParams = await searchParams
   const { error: formError, create } = resolvedSearchParams
+  const isCreateModalOpen = create === '1' || Boolean(formError)
 
-  let clubs: AdminClub[] = []
+  let clubs: AdminClubListRow[] = []
   let cities: AdminCity[] = []
   let countries: AdminCountryOption[] = []
   let fetchError: string | null = null
 
   try {
     const [fetchedClubs, fetchedCities, fetchedCountries] = await Promise.all([
-      getAdminClubs(),
-      getAdminCities(),
-      getAdminCountriesOptions(),
+      getAdminClubsList(),
+      isCreateModalOpen ? getAdminCities() : Promise.resolve([]),
+      isCreateModalOpen ? getAdminCountriesOptions() : Promise.resolve([]),
     ])
     clubs = fetchedClubs
     cities = fetchedCities
@@ -45,8 +46,6 @@ export default async function AdminClubsPage({
     if (count < 5) return 'kluby'
     return 'klubów'
   })()
-
-  const isCreateModalOpen = create === '1' || Boolean(formError)
 
   return (
     <AdminListLayout

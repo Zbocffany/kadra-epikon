@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getCachedPublicMatches, getCachedPublicMatchesYearStats, type AdminMatch, type MatchYearStatsData } from '@/lib/db/matches'
+import { getPublicMatchesList, type AdminMatch, type MatchYearStatsData } from '@/lib/db/matches'
 
 export type PublicMatchesApiResponse = {
   matches: AdminMatch[]
@@ -8,13 +8,10 @@ export type PublicMatchesApiResponse = {
 
 export async function GET(req: NextRequest): Promise<NextResponse<PublicMatchesApiResponse>> {
   const period = req.nextUrl.searchParams.get('period') ?? 'upcoming'
-  const allPublicMatchesPromise = getCachedPublicMatches()
+  const { matches: allMatches, yearStats } = await getPublicMatchesList()
 
   if (period === 'upcoming') {
-    const matches = await getCachedPublicMatches({ status: 'SCHEDULED' })
-    const allPublicMatches = await allPublicMatchesPromise
-    const historyMatches = allPublicMatches.filter((m) => m.match_status !== 'SCHEDULED')
-    const yearStats = historyMatches.length > 0 ? await getCachedPublicMatchesYearStats(historyMatches) : null
+    const matches = allMatches.filter((m) => m.match_status === 'SCHEDULED')
     return NextResponse.json({ matches, yearStats })
   }
 
@@ -23,14 +20,9 @@ export async function GET(req: NextRequest): Promise<NextResponse<PublicMatchesA
     return NextResponse.json({ matches: [], yearStats: null }, { status: 400 })
   }
 
-  const matches = await getCachedPublicMatches({
-    fromDate: `${startYear}-01-01`,
-    toDate: `${startYear + 9}-12-31`,
-  })
-
-  const allPublicMatches = await allPublicMatchesPromise
-  const historyMatches = allPublicMatches.filter((m) => m.match_status !== 'SCHEDULED')
-  const yearStats = historyMatches.length > 0 ? await getCachedPublicMatchesYearStats(historyMatches) : null
+  const from = `${startYear}-01-01`
+  const to = `${startYear + 9}-12-31`
+  const matches = allMatches.filter((m) => m.match_date >= from && m.match_date <= to)
 
   return NextResponse.json({ matches, yearStats })
 }

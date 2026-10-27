@@ -1,9 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import MatchesListView from '@/components/matches/MatchesListView'
 import type { AdminMatch, MatchYearStatsData } from '@/lib/db/matches'
-import type { PublicMatchesApiResponse } from '@/app/api/public/matches/route'
 
 type DecadeFilter = {
   startYear: number
@@ -16,8 +15,7 @@ type PublicMatchesClientProps = {
   detailBasePath: string
   maxWidthClass: string
   matches: AdminMatch[]
-  decadeFilters: DecadeFilter[]
-  selectedPeriod: string
+  initialPeriod?: string
   yearStats?: MatchYearStatsData
   globalPolandStats?: {
     totalMatches: number
@@ -29,75 +27,67 @@ type PublicMatchesClientProps = {
   }
 }
 
+function decadeStartForYear(year: number): number {
+  return Math.floor((year - 1) / 10) * 10 + 1
+}
+
+function buildDecades(matches: AdminMatch[]): DecadeFilter[] {
+  const years = matches.map((match) => Number(match.match_date.slice(0, 4))).filter(Number.isFinite)
+  if (!years.length) return []
+  const decades: DecadeFilter[] = []
+  for (let start = decadeStartForYear(Math.max(...years)); start >= decadeStartForYear(Math.min(...years)); start -= 10) {
+    decades.push({ startYear: start, endYear: start + 9 })
+  }
+  return decades
+}
+
+// Bez parametru (lub z nieznanym) otwiera się najnowsza dekada.
+function normalizePeriod(period: string | null | undefined, decades: DecadeFilter[]): string {
+  if (period === 'upcoming') return 'upcoming'
+  if (period && decades.some((decade) => String(decade.startYear) === period)) return period
+  return decades[0] ? String(decades[0].startYear) : 'upcoming'
+}
+
 export default function PublicMatchesClient({
   title,
   basePath,
   detailBasePath,
   maxWidthClass,
-  matches: initialMatches,
-  decadeFilters,
-  selectedPeriod: initialPeriod,
-  yearStats: initialYearStats,
+  matches,
+  initialPeriod,
+  yearStats,
   globalPolandStats,
 }: PublicMatchesClientProps) {
-  const [selectedPeriod, setSelectedPeriod] = useState(initialPeriod)
-  const [visibleMatches, setVisibleMatches] = useState(initialMatches)
-  const [visibleYearStats, setVisibleYearStats] = useState<MatchYearStatsData | null>(initialYearStats ?? null)
-  const [isLoading, setIsLoading] = useState(false)
+  const decadeFilters = useMemo(() => buildDecades(matches), [matches])
+  const [selectedPeriod, setSelectedPeriod] = useState(() => normalizePeriod(initialPeriod, decadeFilters))
 
-  // Client-side decade cache — avoids re-fetching already-loaded decades
-  const cache = useRef<Map<string, PublicMatchesApiResponse>>(new Map())
-
-  // Seed cache with initial SSR data
   useEffect(() => {
-    cache.current.set(initialPeriod, {
-      matches: initialMatches,
-      yearStats: initialYearStats ?? null,
-    })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    const onPopState = () => {
+      setSelectedPeriod(normalizePeriod(new URLSearchParams(window.location.search).get('period'), decadeFilters))
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [decadeFilters])
 
-  const switchPeriod = useCallback(async (period: string) => {
+  function switchPeriod(period: string) {
     if (period === selectedPeriod) return
+    setSelectedPeriod(period)
+    window.history.pushState(null, '', `${basePath}?period=${period}`)
+  }
 
-    // Instant switch if already cached
-    const cached = cache.current.get(period)
-    if (cached) {
-      setSelectedPeriod(period)
-      setVisibleMatches(cached.matches)
-      setVisibleYearStats(cached.yearStats)
-      const url = period === 'upcoming' ? `${basePath}?period=upcoming` : `${basePath}?period=${period}`
-      window.history.pushState(null, '', url)
-      return
-    }
+  const visibleMatches = useMemo(() => {
+    if (selectedPeriod === 'upcoming') return matches.filter((match) => match.match_status === 'SCHEDULED')
+    const decade = decadeFilters.find((d) => String(d.startYear) === selectedPeriod)
+    if (!decade) return []
+    const from = `${decade.startYear}-01-01`
+    const to = `${decade.endYear}-12-31`
+    return matches.filter((match) => match.match_date >= from && match.match_date <= to)
+  }, [matches, decadeFilters, selectedPeriod])
 
-    // First load: fetch from API
-    setIsLoading(true)
-    try {
-      const res = await fetch(`/api/public/matches?period=${encodeURIComponent(period)}`)
-      if (!res.ok) throw new Error('fetch failed')
-      const data: PublicMatchesApiResponse = await res.json()
-      cache.current.set(period, data)
-      setSelectedPeriod(period)
-      setVisibleMatches(data.matches)
-      setVisibleYearStats(data.yearStats)
-      const url = period === 'upcoming' ? `${basePath}?period=upcoming` : `${basePath}?period=${period}`
-      window.history.pushState(null, '', url)
-    } catch {
-      // Fallback: full navigation
-      window.location.href =
-        period === 'upcoming' ? `${basePath}?period=upcoming` : `${basePath}?period=${period}`
-    } finally {
-      setIsLoading(false)
-    }
-  }, [selectedPeriod, basePath])
-
-  const currentListHref =
-    selectedPeriod === 'upcoming'
-      ? `${basePath}?period=upcoming`
-      : `${basePath}?period=${selectedPeriod}`
+  const currentListHref = `${basePath}?period=${selectedPeriod}`
 
   return (
-    <div className={isLoading ? 'opacity-60 pointer-events-none transition-opacity' : undefined}>
+    <div>
       <MatchesListView
         title={title}
         totalMatches={visibleMatches.length}
@@ -109,7 +99,7 @@ export default function PublicMatchesClient({
         showEditorialStatus={false}
         displayMode={selectedPeriod === 'upcoming' ? 'upcoming' : 'history'}
         buildMatchHref={(match) => `${detailBasePath}/${match.id}?from=${encodeURIComponent(currentListHref)}`}
-        yearStats={visibleYearStats ?? undefined}
+        yearStats={yearStats}
         globalPolandStatsOverride={globalPolandStats}
         leftFilters={[
         {

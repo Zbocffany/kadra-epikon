@@ -210,6 +210,13 @@ export async function getAdminStadiums(): Promise<AdminStadiumListItem[]> {
   })
 }
 
+export async function getAdminStadiumsList(): Promise<AdminStadiumListItem[]> {
+  const supabase = createServiceRoleClient()
+  const { data, error } = await supabase.rpc('get_admin_stadiums_list')
+  if (error) throw new Error(`get_admin_stadiums_list: ${error.message}`)
+  return (data ?? []) as AdminStadiumListItem[]
+}
+
 export async function getPublicStadiums(): Promise<AdminStadiumListItem[]> {
   const cacheKey = await getPublicCacheKey('public-stadiums')
   return unstable_cache(

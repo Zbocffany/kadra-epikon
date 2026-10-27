@@ -41,6 +41,8 @@ function formatEventPersonDisplayName(person: AdminMatchParticipantPersonOption)
   const lastName = person.lastName.trim()
   const nickname = person.nickname.trim()
 
+  if (nickname) return nickname
+
   if (lastName) {
     const firstNameParts = firstName.split(/\s+/).filter(Boolean).slice(0, 2)
     const initials = firstNameParts.map((part) => part[0]?.toUpperCase()).filter(Boolean).join('.')
@@ -48,7 +50,6 @@ function formatEventPersonDisplayName(person: AdminMatchParticipantPersonOption)
     return lastName
   }
 
-  if (nickname) return nickname
   if (firstName) return firstName
   return 'Nieznany'
 }

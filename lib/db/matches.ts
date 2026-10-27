@@ -1,6 +1,6 @@
 import { unstable_cache, unstable_noStore as noStore } from 'next/cache'
 import { createServiceRoleClient } from '@/lib/supabase/server'
-import { fetchAllRows, getPageRange, type PaginatedDbResult } from '@/lib/db/pagination'
+import { fetchAllRows } from '@/lib/db/pagination'
 import { getPublicCacheKey } from '@/lib/db/publicCache'
 import { formatClubWithLocation } from '@/lib/utils/clubLabel'
 
@@ -183,6 +183,7 @@ export type AdminMatchParticipant = {
   team_id: string | null
   person_id: string
   person_name: string
+  has_nickname?: boolean
   birth_date: string | null
   role: MatchParticipantRole
   is_starting: boolean | null
@@ -582,18 +583,6 @@ export async function getAdminMatches(options?: AdminMatchFilterOptions): Promis
   return mapAdminMatches(supabase, matches as unknown as MatchListRow[])
 }
 
-export async function getPublicMatches(): Promise<AdminMatch[]> {
-  const cacheKey = await getPublicCacheKey('public-matches')
-  return unstable_cache(
-    async () => getAdminMatches(),
-    cacheKey,
-    {
-      revalidate: 3600,
-      tags: ['public-matches'],
-    }
-  )()
-}
-
 /**
  * Public list view — cached for 30 min per period key.
  * Key includes serialised options so different decades don't share cache entries.
@@ -608,16 +597,48 @@ export async function getCachedPublicMatches(options?: AdminMatchFilterOptions):
   )()
 }
 
-/**
- * Admin list view — cached for 30 s so rapid page navigations don't hammer the DB.
- * Key includes serialised options so filters don't bleed into each other.
- */
-export async function getCachedAdminMatches(options?: AdminMatchFilterOptions): Promise<AdminMatch[]> {
-  const key = options ? JSON.stringify(options) : 'all'
+export async function getAdminMatchesList(): Promise<{ matches: AdminMatch[]; yearStats: MatchYearStatsData }> {
+  const supabase = createServiceRoleClient()
+  const { data, error } = await supabase.rpc('get_admin_matches_list')
+  if (error) throw new Error(`get_admin_matches_list: ${error.message}`)
+
+  type StatRow = { year: string; personId: string; name: string; count: number }
+  const payload = (data ?? {}) as {
+    matches?: AdminMatch[]
+    coaches?: StatRow[]
+    topAppearances?: StatRow[]
+    topScorers?: StatRow[]
+  }
+
+  function groupByYear(rows: StatRow[] | undefined, limit?: number): Record<string, StatRow[]> {
+    const grouped: Record<string, StatRow[]> = {}
+    for (const row of rows ?? []) (grouped[row.year] ??= []).push(row)
+    for (const year of Object.keys(grouped)) {
+      grouped[year].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'pl'))
+      if (limit) grouped[year] = grouped[year].slice(0, limit)
+    }
+    return grouped
+  }
+
+  const mapEntries = <T,>(grouped: Record<string, StatRow[]>, toEntry: (row: StatRow) => T) =>
+    Object.fromEntries(Object.entries(grouped).map(([year, rows]) => [year, rows.map(toEntry)]))
+
+  return {
+    matches: payload.matches ?? [],
+    yearStats: {
+      coaches: mapEntries(groupByYear(payload.coaches), (r) => ({ personId: r.personId, name: r.name, matchCount: r.count })),
+      topAppearances: mapEntries(groupByYear(payload.topAppearances, 2), (r) => ({ personId: r.personId, name: r.name, matchCount: r.count })),
+      topScorers: mapEntries(groupByYear(payload.topScorers, 3), (r) => ({ personId: r.personId, name: r.name, goalCount: r.count })),
+    },
+  }
+}
+
+export async function getPublicMatchesList(): Promise<{ matches: AdminMatch[]; yearStats: MatchYearStatsData }> {
+  const cacheKey = await getPublicCacheKey('public-matches', 'list')
   return unstable_cache(
-    () => getAdminMatches(options),
-    [`admin-matches-${key}`],
-    { revalidate: 30 }
+    () => getAdminMatchesList(),
+    cacheKey,
+    { revalidate: 3600, tags: ['public-matches'] }
   )()
 }
 
@@ -1480,78 +1501,6 @@ export async function getAdminPlayerYearStats(personId: string): Promise<Record<
   return result
 }
 
-export async function getAdminMatchYearBounds(): Promise<AdminMatchYearBounds | null> {
-  const supabase = createServiceRoleClient()
-
-  const [{ data: earliest, error: earliestError }, { data: latest, error: latestError }] = await Promise.all([
-    supabase.from('tbl_Matches').select('match_date').order('match_date', { ascending: true }).limit(1),
-    supabase.from('tbl_Matches').select('match_date').order('match_date', { ascending: false }).limit(1),
-  ])
-
-  if (earliestError) throw new Error(`tbl_Matches (earliest): ${earliestError.message}`)
-  if (latestError) throw new Error(`tbl_Matches (latest): ${latestError.message}`)
-
-  const minDate = earliest?.[0]?.match_date as string | undefined
-  const maxDate = latest?.[0]?.match_date as string | undefined
-  if (!minDate || !maxDate) {
-    return null
-  }
-
-  return {
-    minYear: Number(minDate.slice(0, 4)),
-    maxYear: Number(maxDate.slice(0, 4)),
-  }
-}
-
-/**
- * Cached version of getAdminMatchYearBounds — revalidates every 5 minutes.
- * The year range changes rarely; no need to hit the DB on every page load.
- */
-export const getCachedAdminMatchYearBounds = unstable_cache(
-  getAdminMatchYearBounds,
-  ['admin-match-year-bounds'],
-  { revalidate: 300 }
-)
-
-/**
- * Same as above for the public site — 1 h TTL since public data changes infrequently.
- */
-export async function getCachedPublicMatchYearBounds(): Promise<AdminMatchYearBounds | null> {
-  const cacheKey = await getPublicCacheKey('public-match-year-bounds')
-  return unstable_cache(
-    getAdminMatchYearBounds,
-    cacheKey,
-    { revalidate: 3600 }
-  )()
-}
-
-export async function getAdminMatchesPage(
-  page: number,
-  pageSize: number
-): Promise<PaginatedDbResult<AdminMatch>> {
-  const supabase = createServiceRoleClient()
-  const { from, to } = getPageRange(page, pageSize)
-
-  const { data: matches, error: matchError, count } = await supabase
-    .from('tbl_Matches')
-    .select(
-      'id, match_date, match_time, match_status, result_type, walkover_winner_team_id, attendance, editorial_status, competition_id, home_team_id, away_team_id, home_goals, away_goals, home_goals_ht, away_goals_ht, home_shootout_goals, away_shootout_goals',
-      { count: 'exact' }
-    )
-    .order('match_date', { ascending: false })
-    .order('match_time', { ascending: false })
-    .order('id', { ascending: false })
-    .range(from, to)
-
-  if (matchError) throw new Error(`tbl_Matches: ${matchError.message}`)
-  if (!matches?.length) {
-    return { items: [], total: count ?? 0 }
-  }
-
-  const items = await mapAdminMatches(supabase, matches as unknown as MatchListRow[])
-  return { items, total: count ?? 0 }
-}
-
 async function mapAdminMatches(
   supabase: ReturnType<typeof createServiceRoleClient>,
   matches: MatchListRow[]
@@ -1908,6 +1857,7 @@ export async function getPublicMatchParticipants(match: Pick<AdminMatchDetails, 
       team_id: participant.team_id,
       person_id: participant.person_id,
       person_name: buildPersonDisplayName(person),
+      has_nickname: Boolean(person.nickname?.trim()),
       birth_date: person.birth_date,
       role: participant.role,
       is_starting: participant.is_starting,
@@ -2294,6 +2244,7 @@ export async function getAdminMatchParticipants(match: Pick<AdminMatchDetails, '
       team_id: participant.team_id,
       person_id: participant.person_id,
       person_name: personNameMap.get(participant.person_id) ?? '—',
+      has_nickname: Boolean(peopleRows.find((person) => person.id === participant.person_id)?.nickname?.trim()),
       birth_date: peopleRows.find((person) => person.id === participant.person_id)?.birth_date ?? null,
       role: participant.role,
       is_starting: participant.is_starting,
@@ -2751,286 +2702,4 @@ export async function getPlayerSuggestionsNearDate(
     position: best?.position ?? null,
     clubTeamId: best?.clubTeamId ?? null,
   }
-}
-
-export async function getMatchesYearStats(
-  matchesInput: { id: string; match_date: string }[]
-): Promise<MatchYearStatsData> {
-  const empty: MatchYearStatsData = { coaches: {}, topAppearances: {}, topScorers: {} }
-  if (!matchesInput.length) return empty
-
-  const supabase = createServiceRoleClient()
-  const CHUNK_SIZE = 80
-  const PAGE_SIZE = 1000
-  const inputMatchIds = matchesInput.map((m) => m.id)
-
-  const nonWalkoverMatchIds = new Set<string>()
-  for (let i = 0; i < inputMatchIds.length; i += CHUNK_SIZE) {
-    const batch = inputMatchIds.slice(i, i + CHUNK_SIZE)
-    const { data, error } = await supabase
-      .from('tbl_Matches')
-      .select('id, result_type')
-      .in('id', batch)
-
-    if (error) return empty
-    for (const row of (data ?? []) as Array<{ id: string; result_type: string | null }>) {
-      if (row.result_type !== 'WALKOVER') {
-        nonWalkoverMatchIds.add(row.id)
-      }
-    }
-  }
-
-  const matchIds = [...nonWalkoverMatchIds]
-  if (!matchIds.length) return empty
-  const yearByMatchId = new Map(
-    matchesInput
-      .filter((m) => nonWalkoverMatchIds.has(m.id))
-      .map((m) => [m.id, m.match_date.slice(0, 4)])
-  )
-
-  // 1. Find Poland country in a deterministic way
-  const { data: polandCountryByCode } = await supabase
-    .from('tbl_Countries')
-    .select('id')
-    .eq('fifa_code', 'POL')
-    .maybeSingle()
-
-  const { data: polandCountryByName } = polandCountryByCode
-    ? { data: null }
-    : await supabase
-    .from('tbl_Countries')
-    .select('id')
-    .ilike('name', 'Polska')
-    .maybeSingle()
-
-  const polandCountry = polandCountryByCode ?? polandCountryByName
-  if (!polandCountry) return empty
-
-  // 2. Resolve Poland team IDs actually used by the analyzed matches
-  const polandCountryId = polandCountry.id as string
-  const teamIdsInMatches = new Set<string>()
-
-  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
-    const batch = matchIds.slice(i, i + CHUNK_SIZE)
-    const { data, error } = await supabase
-      .from('tbl_Matches')
-      .select('home_team_id, away_team_id')
-      .in('id', batch)
-
-    if (error) return empty
-    for (const match of (data ?? []) as Array<{ home_team_id: string; away_team_id: string }>) {
-      if (match.home_team_id) teamIdsInMatches.add(match.home_team_id)
-      if (match.away_team_id) teamIdsInMatches.add(match.away_team_id)
-    }
-  }
-
-  const teamIds = [...teamIdsInMatches]
-  if (!teamIds.length) return empty
-
-  const polandTeamIdsSet = new Set<string>()
-  for (let i = 0; i < teamIds.length; i += CHUNK_SIZE) {
-    const batch = teamIds.slice(i, i + CHUNK_SIZE)
-    const { data, error } = await supabase
-      .from('tbl_Teams')
-      .select('id, country_id')
-      .in('id', batch)
-
-    if (error) return empty
-    for (const team of (data ?? []) as Array<{ id: string; country_id: string | null }>) {
-      if (team.country_id === polandCountryId) {
-        polandTeamIdsSet.add(team.id)
-      }
-    }
-  }
-
-  const polandTeamIds = [...polandTeamIdsSet]
-  if (!polandTeamIds.length) return empty
-
-  // 3. Get all Poland participants for these matches in chunks
-  const participants: Array<{ match_id: string; person_id: string; role: string; is_starting: boolean | null }> = []
-  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
-    const batch = matchIds.slice(i, i + CHUNK_SIZE)
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase
-        .from('tbl_Match_Participants')
-        .select('id, match_id, person_id, role, is_starting')
-        .in('match_id', batch)
-        .in('team_id', polandTeamIds)
-        .order('id', { ascending: true })
-        .range(from, from + PAGE_SIZE - 1)
-
-      if (error) return empty
-      const rows = (data ?? []) as Array<{ id: string; match_id: string; person_id: string; role: string; is_starting: boolean | null }>
-      participants.push(...rows.map(({ match_id, person_id, role, is_starting }) => ({ match_id, person_id, role, is_starting })))
-      if (rows.length < PAGE_SIZE) break
-      from += PAGE_SIZE
-    }
-  }
-
-  if (!participants.length) return empty
-
-  // 4. Get substitution events to find players who came on from the bench (chunks)
-  const subEvents: Array<{ match_id: string; secondary_person_id: string }> = []
-  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
-    const batch = matchIds.slice(i, i + CHUNK_SIZE)
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase
-        .from('tbl_Match_Events')
-        .select('id, match_id, secondary_person_id')
-        .in('match_id', batch)
-        .eq('event_type', 'SUBSTITUTION')
-        .not('secondary_person_id', 'is', null)
-        .order('id', { ascending: true })
-        .range(from, from + PAGE_SIZE - 1)
-
-      if (error) return empty
-      const rows = (data ?? []) as Array<{ id: string; match_id: string; secondary_person_id: string }>
-      subEvents.push(...rows.map(({ match_id, secondary_person_id }) => ({ match_id, secondary_person_id })))
-      if (rows.length < PAGE_SIZE) break
-      from += PAGE_SIZE
-    }
-  }
-
-  const substitutedInByMatch = new Map<string, Set<string>>()
-  for (const ev of subEvents) {
-    if (!substitutedInByMatch.has(ev.match_id)) substitutedInByMatch.set(ev.match_id, new Set())
-    substitutedInByMatch.get(ev.match_id)!.add(ev.secondary_person_id)
-  }
-
-  // 5. Get person names (chunks)
-  const personIds = [...new Set(participants.map((p) => p.person_id))]
-  const people: Array<{ id: string; first_name: string | null; last_name: string | null; nickname: string | null }> = []
-  for (let i = 0; i < personIds.length; i += CHUNK_SIZE) {
-    const batch = personIds.slice(i, i + CHUNK_SIZE)
-    const { data, error } = await supabase
-      .from('tbl_People')
-      .select('id, first_name, last_name, nickname')
-      .in('id', batch)
-
-    if (error) return empty
-    people.push(...((data ?? []) as Array<{ id: string; first_name: string | null; last_name: string | null; nickname: string | null }>))
-  }
-
-  const personNameMap = new Map<string, string>()
-  for (const person of people) {
-    const first = person.first_name?.trim() ?? ''
-    const last = person.last_name?.trim() ?? ''
-    const nickname = person.nickname?.trim() ?? ''
-    personNameMap.set(person.id, `${first} ${last}`.trim() || nickname || '—')
-  }
-
-  // 6. Aggregate coaches and appearances per year
-  const coachYearMap = new Map<string, Map<string, number>>()
-  const appearanceYearMap = new Map<string, Map<string, number>>()
-  const polandPlayersByMatch = new Map<string, Set<string>>()
-
-  for (const p of participants) {
-    const year = yearByMatchId.get(p.match_id)
-    if (!year) continue
-
-    if (p.role === 'COACH') {
-      if (!coachYearMap.has(year)) coachYearMap.set(year, new Map())
-      const m = coachYearMap.get(year)!
-      m.set(p.person_id, (m.get(p.person_id) ?? 0) + 1)
-    } else if (p.role === 'PLAYER') {
-      const playedInMatch = p.is_starting === true || substitutedInByMatch.get(p.match_id)?.has(p.person_id) === true
-      if (playedInMatch) {
-        if (!appearanceYearMap.has(year)) appearanceYearMap.set(year, new Map())
-        const m = appearanceYearMap.get(year)!
-        m.set(p.person_id, (m.get(p.person_id) ?? 0) + 1)
-      }
-
-      if (!polandPlayersByMatch.has(p.match_id)) polandPlayersByMatch.set(p.match_id, new Set())
-      polandPlayersByMatch.get(p.match_id)!.add(p.person_id)
-    }
-  }
-
-  // 7. Get goal events for these matches (chunks)
-  const goalEvents: Array<{ match_id: string; primary_person_id: string; event_type: string }> = []
-  for (let i = 0; i < matchIds.length; i += CHUNK_SIZE) {
-    const batch = matchIds.slice(i, i + CHUNK_SIZE)
-    let from = 0
-    while (true) {
-      const { data, error } = await supabase
-        .from('tbl_Match_Events')
-        .select('id, match_id, primary_person_id, event_type')
-        .in('match_id', batch)
-        .in('event_type', ['GOAL', 'PENALTY_GOAL'])
-        .not('primary_person_id', 'is', null)
-        .order('id', { ascending: true })
-        .range(from, from + PAGE_SIZE - 1)
-
-      if (error) return empty
-      const rows = (data ?? []) as Array<{ id: string; match_id: string; primary_person_id: string; event_type: string }>
-      goalEvents.push(...rows.map(({ match_id, primary_person_id, event_type }) => ({ match_id, primary_person_id, event_type })))
-      if (rows.length < PAGE_SIZE) break
-      from += PAGE_SIZE
-    }
-  }
-
-  const goalYearMap = new Map<string, Map<string, number>>()
-
-  for (const event of goalEvents) {
-    const year = yearByMatchId.get(event.match_id)
-    if (!year) continue
-    if (!polandPlayersByMatch.get(event.match_id)?.has(event.primary_person_id)) continue
-    if (!goalYearMap.has(year)) goalYearMap.set(year, new Map())
-    const m = goalYearMap.get(year)!
-    m.set(event.primary_person_id, (m.get(event.primary_person_id) ?? 0) + 1)
-  }
-
-  // 8. Convert to sorted result arrays
-  const coaches: Record<string, YearCoachEntry[]> = {}
-  for (const [year, countMap] of coachYearMap) {
-    coaches[year] = [...countMap.entries()]
-      .map(([personId, matchCount]) => ({ personId, name: personNameMap.get(personId) ?? '—', matchCount }))
-      .sort((a, b) => b.matchCount - a.matchCount || a.name.localeCompare(b.name, 'pl'))
-  }
-
-  const topAppearances: Record<string, YearAppearanceEntry[]> = {}
-  for (const [year, countMap] of appearanceYearMap) {
-    topAppearances[year] = [...countMap.entries()]
-      .map(([personId, matchCount]) => ({ personId, name: personNameMap.get(personId) ?? '—', matchCount }))
-      .sort((a, b) => b.matchCount - a.matchCount || a.name.localeCompare(b.name, 'pl'))
-      .slice(0, 2)
-  }
-
-  const topScorers: Record<string, YearGoalEntry[]> = {}
-  for (const [year, countMap] of goalYearMap) {
-    topScorers[year] = [...countMap.entries()]
-      .map(([personId, goalCount]) => ({ personId, name: personNameMap.get(personId) ?? '—', goalCount }))
-      .sort((a, b) => b.goalCount - a.goalCount || a.name.localeCompare(b.name, 'pl'))
-      .slice(0, 3)
-  }
-
-  return { coaches, topAppearances, topScorers }
-}
-
-/**
- * Public-side cache wrapper for getMatchesYearStats.
- * Wynik zależy wyłącznie od zbioru meczów + danych powiązanych w bazie.
- * Wszystkie tabele wpływające na wynik (tbl_Matches, tbl_Match_Participants,
- * tbl_Match_Events, tbl_Teams, tbl_Countries, tbl_People) mają trigger
- * bump_public_cache_version, więc wpięcie do `getPublicCacheKey('public-matches-year-stats')`
- * + tag 'public-matches' wystarcza do automatycznej inwalidacji.
- *
- * Klucz cache zawiera dodatkowo skrót zbioru wejściowego (count + skrajne ID),
- * żeby różne wywołania (np. na podzbiorze) trafiały w osobne sloty cache.
- */
-export async function getCachedPublicMatchesYearStats(
-  matchesInput: { id: string; match_date: string }[]
-): Promise<MatchYearStatsData> {
-  if (!matchesInput.length) {
-    return { coaches: {}, topAppearances: {}, topScorers: {} }
-  }
-  const sortedIds = matchesInput.map((m) => m.id).sort()
-  const inputKey = `${sortedIds.length}:${sortedIds[0]}:${sortedIds[sortedIds.length - 1]}`
-  const cacheKey = await getPublicCacheKey('public-matches-year-stats', inputKey)
-  return unstable_cache(
-    () => getMatchesYearStats(matchesInput),
-    cacheKey,
-    { revalidate: 1800, tags: ['public-matches'] }
-  )()
 }
